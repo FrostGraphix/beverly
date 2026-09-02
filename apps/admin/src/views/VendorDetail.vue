@@ -16,7 +16,9 @@
 import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
@@ -134,6 +136,10 @@ const staff        = ref<any[]>([]);
 const analytics    = ref<any>(null);
 const analyticsPeriod = ref<'7d'|'30d'|'90d'|'all'>('30d');
 const tabLoading   = ref(false);
+const detailSearch = ref('');
+const detailPage = ref(1);
+const detailPageSize = ref(10);
+const detailView = ref<'table' | 'list'>('table');
 
 const detailExportRows = computed<any[]>(() => {
     if (tab.value === 'wallet') return wallet.value?.entries ?? [];
@@ -174,6 +180,17 @@ const detailExportColumns = computed<WalletExportColumn<any>[]>(() => {
         { key: 'created_at', header: 'Joined', value: (row) => shortDate(row.created_at) },
     ];
 });
+const detailFilteredRows = computed(() => {
+    const query = detailSearch.value.trim().toLowerCase();
+    if (!query) return detailExportRows.value;
+    return detailExportRows.value.filter((row) => detailExportColumns.value.some((column) => String(column.value(row) ?? '').toLowerCase().includes(query)));
+});
+const detailPagedRows = computed(() => {
+    const start = (detailPage.value - 1) * detailPageSize.value;
+    return detailFilteredRows.value.slice(start, start + detailPageSize.value);
+});
+const detailStatusOptions = computed(() => [...new Set(detailExportRows.value.map((row) => String(row.status ?? '')).filter(Boolean))]
+    .map((value) => ({ value, label: value.replace(/_/g, ' ') })));
 
 async function loadDetail() {
     loading.value = true;
@@ -221,6 +238,8 @@ async function loadDetail() {
 
 async function switchTab(t: Tab) {
     tab.value = t;
+    detailSearch.value = '';
+    detailPage.value = 1;
     if (t === 'wallet' && !wallet.value) {
         tabLoading.value = true;
         try { wallet.value = await api.get<any>(`/api/v1/admin/vendors/${id}/wallet`); }
@@ -443,14 +462,29 @@ onMounted(loadDetail);
           <p class="stat-sub">Available {{ naira(detail.available_minor) }}</p>
         </div>
         <div class="stat-tile">
+          <p class="stat-label">Paystack funded</p>
+          <p class="stat-value">{{ naira(detail.stats?.paystackFundingValueMinor ?? 0) }}</p>
+          <p class="stat-sub">{{ detail.stats?.paystackFundingCount ?? 0 }} top-ups</p>
+        </div>
+        <div class="stat-tile">
           <p class="stat-label">Total funded</p>
           <p class="stat-value">{{ naira(detail.stats?.fundingValueMinor ?? 0) }}</p>
           <p class="stat-sub">{{ detail.stats?.fundingCount ?? 0 }} top-ups</p>
         </div>
         <div class="stat-tile">
-          <p class="stat-label">Total vended</p>
+          <p class="stat-label">Bank transfer funded</p>
+          <p class="stat-value">{{ naira(detail.stats?.bankFundingValueMinor ?? 0) }}</p>
+          <p class="stat-sub">{{ detail.stats?.bankFundingCount ?? 0 }} approvals</p>
+        </div>
+        <div class="stat-tile">
+          <p class="stat-label">Successful vends</p>
           <p class="stat-value">{{ naira(detail.stats?.vendingValueMinor ?? 0) }}</p>
           <p class="stat-sub">{{ detail.stats?.vendingCount ?? 0 }} transactions</p>
+        </div>
+        <div class="stat-tile danger-stat">
+          <p class="stat-label">Failed vends</p>
+          <p class="stat-value">{{ detail.stats?.failedVendingCount ?? 0 }}</p>
+          <p class="stat-sub">{{ naira(detail.stats?.failedVendingValueMinor ?? 0) }} attempted</p>
         </div>
         <div class="stat-tile">
           <p class="stat-label">Assigned stations</p>
@@ -467,14 +501,24 @@ onMounted(loadDetail);
           :class="['tab', { active: tab === t }]"
           @click="switchTab(t)"
         >{{ t }}</button>
-        <WalletExportMenu
-          :rows="detailExportRows"
+        <WalletExportWizard
+          :rows="detailFilteredRows"
           :columns="detailExportColumns"
           :filename="`beverly-admin-vendor-${tab}`"
           :title="`Vendor ${tab}`"
           :subtitle="detail?.trading_name || detail?.legal_name || 'Vendor record'"
           :loading="loading || tabLoading"
+          :status-options="detailStatusOptions"
+          :station-options="detail?.vendor?.station_id ? [{ value: detail.vendor.station_id, label: detail.vendor.station_id }] : []"
+          :date-value="(row: any) => row.created_at"
+          :status-value="(row: any) => row.status"
+          :station-value="(row: any) => row.station_id || row.station"
         />
+      </div>
+
+      <div v-if="['wallet','transactions','funding','staff'].includes(tab)" class="vendor-table-toolbar">
+        <input v-model="detailSearch" class="bw-input" :placeholder="`Search ${tab}`" :aria-label="`Search ${tab}`" @input="detailPage = 1" />
+        <WalletDataViewSwitch v-model="detailView" :label="`${tab} display view`" />
       </div>
 
       <!-- ── Overview ────────────────────────────────────────── -->
@@ -568,7 +612,7 @@ onMounted(loadDetail);
             <router-link v-if="canViewWallets" to="/wallets" class="bw-btn sm" style="text-decoration: none">All wallets →</router-link>
           </div>
           <ul class="ledger-list">
-            <li v-for="e in wallet.entries" :key="e.id" class="ledger-row">
+            <li v-for="e in detailPagedRows" :key="e.id" class="ledger-row">
               <span class="bw-mono ledger-when">{{ shortDate(e.created_at) }}</span>
               <span class="bw-mono ledger-type">{{ (e.entry_type ?? e.type ?? '').replace(/_/g, ' ') }}</span>
               <span class="bw-money ledger-amt" :class="e.direction">{{ dirSign(e.direction) }}{{ naira(e.amount_minor) }}</span>
@@ -590,6 +634,7 @@ onMounted(loadDetail);
                 <th>When</th>
                 <th>Meter</th>
                 <th>Station</th>
+                <th>Vended By</th>
                 <th style="text-align:right">Paid</th>
                 <th style="text-align:right">Energy</th>
                 <th style="text-align:right">VAT</th>
@@ -597,17 +642,18 @@ onMounted(loadDetail);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="tx in transactions" :key="tx.id">
+              <tr v-for="tx in detailPagedRows" :key="tx.id">
                 <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(tx.created_at) }}</td>
                 <td class="bw-mono">{{ tx.meter_id ?? tx.meter_number ?? '—' }}</td>
                 <td class="bw-mono bw-muted">{{ tx.station_id ?? tx.station ?? '—' }}</td>
+                <td>{{ tx.vended_by || '—' }}</td>
                 <td class="bw-money" style="text-align:right">{{ naira(tx.amount_minor ?? tx.amount) }}</td>
                 <td class="bw-money" style="text-align:right">{{ naira(tx.energy_amount_minor ?? tx.amount_minor ?? tx.amount) }}</td>
                 <td class="bw-money" style="text-align:right">{{ naira(tx.vat_amount_minor ?? 0) }}</td>
                 <td><span :class="['bw-badge', txBadge(tx.status)]">{{ tx.status }}</span></td>
               </tr>
               <tr v-if="!transactions.length">
-                <td colspan="7" class="bw-muted empty">No transactions yet.</td>
+                <td colspan="8" class="bw-muted empty">No transactions yet.</td>
               </tr>
             </tbody>
           </table>
@@ -629,7 +675,7 @@ onMounted(loadDetail);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in funding" :key="f.id">
+              <tr v-for="f in detailPagedRows" :key="f.id">
                 <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(f.created_at) }}</td>
                 <td class="bw-mono" style="font-size: var(--t-xs)">{{ f.gateway_reference ?? f.reference ?? '—' }}</td>
                 <td><span class="bw-badge neutral">{{ f.gateway ?? f.channel ?? '—' }}</span></td>
@@ -659,7 +705,7 @@ onMounted(loadDetail);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="u in staff" :key="u.id">
+              <tr v-for="u in detailPagedRows" :key="u.id">
                 <td style="font-weight: 600">{{ u.full_name ?? u.name ?? '—' }}</td>
                 <td class="bw-mono" style="font-size: var(--t-xs)">{{ u.email ?? u.username ?? '—' }}</td>
                 <td><span class="bw-badge neutral">{{ u.role ?? u.role_key ?? 'vendor' }}</span></td>
@@ -673,6 +719,15 @@ onMounted(loadDetail);
           </table>
         </div>
       </div>
+
+      <WalletTablePagination
+        v-if="['wallet','transactions','funding','staff'].includes(tab)"
+        v-model:page="detailPage"
+        v-model:pageSize="detailPageSize"
+        :total-items="detailFilteredRows.length"
+        :item-label="tab"
+        :loading="tabLoading"
+      />
 
       <!-- ── Analytics ────────────────────────────────────── -->
       <div v-else-if="tab === 'analytics'">
@@ -898,7 +953,10 @@ onMounted(loadDetail);
 .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
 .stat-value { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-lg); margin: 0; }
 .stat-tile.brand .stat-value { color: var(--brand); }
+.danger-stat .stat-value { color: var(--danger); }
 .stat-sub { font-size: var(--t-xs); color: var(--text-muted); margin: 4px 0 0; }
+.vendor-table-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--s-3); padding:var(--s-3) var(--s-4); border:1px solid var(--border); border-bottom:0; border-radius:var(--r-lg) var(--r-lg) 0 0; background:var(--surface-2); }
+.vendor-table-toolbar .bw-input { width:min(340px, 100%); }
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: var(--s-2); margin-bottom: var(--s-3); border-bottom: 1px solid var(--border); }
@@ -907,7 +965,7 @@ onMounted(loadDetail);
 .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 
 /* ── Overview dl ── */
-.ov-dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px var(--s-3); margin: 0; font-size: var(--t-sm); }
+.ov-dl { display:grid; grid-template-columns:120px minmax(0,1fr) 120px minmax(0,1fr); gap:8px var(--s-3); margin:0; font-size:var(--t-sm); }
 .ov-dl dt { color: var(--text-muted); }
 .ov-dl dd { margin: 0; word-break: break-word; }
 .overview-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
@@ -990,8 +1048,8 @@ onMounted(loadDetail);
   .head-card   { flex-direction: column; }
   .head-actions { width: 100%; justify-content: flex-end; }
   .head-action-buttons { display: none; }
-  .ov-dl       { grid-template-columns: 1fr; }
-  .ov-dl dt    { font-weight: 700; margin-top: var(--s-2); }
+  .ov-dl       { grid-template-columns: minmax(88px, auto) minmax(0, 1fr); }
+  .ov-dl dt    { font-weight: 700; }
   .vendor-edit-form { grid-template-columns: 1fr; }
   .vendor-edit-form .wide { grid-column: auto; }
   .ledger-row  { grid-template-columns: 1fr auto; }

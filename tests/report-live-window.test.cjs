@@ -11,6 +11,15 @@ process.env.LIVE_API_BASE_URL = "https://live.example.test";
 process.env.LIVE_API_BEARER_TOKEN = "test-token";
 global.fetch = async (url, options) => {
   requests.push({ url: String(url), options });
+  if (String(url).endsWith("/api/station/read")) {
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { result: { data: ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"].map((stationId) => ({ stationId })) } };
+      }
+    };
+  }
   return {
     ok: true,
     status: 200,
@@ -51,11 +60,13 @@ const { revenueReport, transactionReport } = require("../backend/src/services/re
     const revenue = await revenueReport(dateRange);
     const transactions = await transactionReport(dateRange);
 
-    assert.equal(requests.length, 10);
-    assert.match(requests[0].url, /\/api\/token\/creditTokenRecord\/readMore\?/);
-    assert.match(requests[0].url, /FROM=2026-07-06T00%3A00%3A00\.000Z/);
+    assert.equal(requests.length, 12);
+    const tokenRequests = requests.filter(({ url }) => url.includes("/api/token/creditTokenRecord/readMore"));
+    assert.equal(tokenRequests.length, 10);
+    assert.match(tokenRequests[0].url, /\/api\/token\/creditTokenRecord\/readMore\?/);
+    assert.match(tokenRequests[0].url, /FROM=2026-07-06T00%3A00%3A00\.000Z/);
     assert.deepEqual(
-      [...new Set(requests.map(({ url }) => new URL(url).searchParams.get("SITE_ID")))].sort(),
+      [...new Set(tokenRequests.map(({ url }) => new URL(url).searchParams.get("SITE_ID")))].sort(),
       ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"]
     );
     assert.equal(revenue.rows.length, 1);
@@ -72,7 +83,7 @@ const { revenueReport, transactionReport } = require("../backend/src/services/re
     assert.equal(transactions.rows[0].kwh, 7.5);
 
     const stationRevenue = await revenueReport(dateRange, { stationId: "OGUFA" });
-    assert.equal(requests.length, 11);
+    assert.equal(requests.length, 13);
     assert.equal(new URL(requests.at(-1).url).searchParams.get("SITE_ID"), "OGUFA");
     assert.equal(stationRevenue.summary.meters, 2);
     assert.equal(stationRevenue.summary.activeStations, 1);

@@ -969,6 +969,76 @@
 .bw-export-panel button span,
 .bw-export-count { color: var(--text-muted); font-size: var(--t-xs); }
 .bw-export-count { padding: var(--s-2) var(--s-3) var(--s-1); border-top: 1px solid var(--border); }
+
+.bw-export-wizard-root { position: relative; display: inline-flex; }
+.bw-export-wizard-trigger { position: relative; min-width: 82px; }
+.bw-export-scope-count { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--brand); color:var(--on-brand); font-size:9px; font-weight:800; }
+.bw-export-hover-card { position:absolute; z-index:50; right:0; top:calc(100% + 8px); width:230px; display:grid; gap:3px; padding:12px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-1); box-shadow:var(--shadow-lg); color:var(--text); opacity:0; visibility:hidden; transform:translateY(-4px); pointer-events:none; transition:opacity .16s ease, transform .16s ease, visibility .16s ease; }
+.bw-export-hover-card span { color:var(--text-muted); font-size:var(--t-xs); }
+@media (hover:hover) { .bw-export-wizard-root:hover .bw-export-hover-card, .bw-export-wizard-root:focus-within .bw-export-hover-card { opacity:1; visibility:visible; transform:none; } }
+.bw-export-scrim { position:fixed; z-index:1000; inset:0; display:grid; place-items:center; padding:20px; background:oklch(0% 0 0 / .68); backdrop-filter:blur(8px); }
+.bw-export-dialog { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto auto; width:min(680px, 100%); max-height:min(680px, calc(100vh - 32px)); overflow:hidden; border:1px solid var(--border-strong); border-radius:var(--r-xl); background:var(--surface-1); box-shadow:0 28px 80px rgb(0 0 0 / .48); }
+.bw-export-dialog-head { display:flex; justify-content:space-between; gap:16px; padding:16px 18px 14px; border-bottom:1px solid var(--border); background:linear-gradient(125deg, oklch(from var(--brand) l c h / .13), transparent 58%); }
+.bw-export-dialog-head h2 { margin:2px 0 2px; font-size:var(--t-lg); }
+.bw-export-dialog-head p { margin:0; color:var(--text-muted); font-size:var(--t-sm); }
+.bw-export-kicker { color:var(--brand); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+.bw-export-close { align-self:flex-start; width:34px; height:34px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); color:var(--text-muted); font-size:20px; cursor:pointer; }
+.bw-export-close:hover, .bw-export-close:focus-visible { color:var(--text); border-color:var(--brand); outline:none; }
+.bw-export-steps { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:0; padding:10px 18px; list-style:none; border-bottom:1px solid var(--border); }
+.bw-export-steps li { display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:var(--t-xs); font-weight:700; }
+.bw-export-steps li span { display:grid; place-items:center; width:24px; height:24px; border:1px solid var(--border); border-radius:999px; font:800 10px var(--font-mono); }
+.bw-export-steps li.active { color:var(--text); }
+.bw-export-steps li.active span, .bw-export-steps li.done span { border-color:var(--brand); background:var(--brand); color:var(--on-brand); }
+.bw-export-step-panel { min-height:0; overflow:auto; padding:16px 18px; }
+.bw-export-step-panel h3 { margin:0 0 12px; font-size:var(--t-md); }
+.bw-export-form-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+.bw-export-form-grid label { display:grid; gap:5px; color:var(--text-muted); font-size:var(--t-xs); font-weight:700; }
+.bw-export-form-grid .bw-input, .bw-export-form-grid .bw-select { min-height:40px; padding-block:8px; }
+.bw-export-form-grid .wide { grid-column:1 / -1; }
+.bw-export-step-title { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.bw-export-step-title h3 { margin:0 0 3px; }
+.bw-export-step-title p { margin:0; color:var(--text-muted); font-size:var(--t-xs); }
+.bw-export-inline-actions { display:flex; gap:6px; }
+.bw-export-field-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:9px; }
+.bw-export-field-grid label { display:flex; align-items:center; gap:9px; min-height:40px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); cursor:pointer; }
+.bw-export-field-grid label:hover { border-color:var(--border-strong); }
+.bw-export-field-grid label.selected { border-color:oklch(from var(--brand) l c h / .48); background:oklch(from var(--brand) l c h / .1); }
+.bw-export-field-grid input { accent-color:var(--brand); }
+.bw-export-format-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+.bw-export-format-grid button { display:grid; gap:4px; min-height:84px; padding:14px; text-align:left; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface-2); color:var(--text); font:inherit; cursor:pointer; }
+.bw-export-format-grid button:hover { transform:translateY(-1px); border-color:var(--border-strong); }
+.bw-export-format-grid button.selected { border-color:var(--brand); background:oklch(from var(--brand) l c h / .11); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .18); }
+.bw-export-format-grid span { color:var(--text-muted); font-size:var(--t-xs); }
+.bw-export-review { display:grid; gap:0; margin:18px 0 0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; }
+.bw-export-review div { display:grid; grid-template-columns:110px 1fr; gap:12px; padding:10px 12px; border-top:1px solid var(--border); }
+.bw-export-review div:first-child { border-top:0; }
+.bw-export-review dt { color:var(--text-muted); font-size:var(--t-xs); }
+.bw-export-review dd { margin:0; font-size:var(--t-sm); }
+.bw-export-message { margin:0 24px 12px; color:var(--danger); font-size:var(--t-sm); }
+.bw-export-dialog-actions { display:flex; justify-content:flex-end; gap:9px; padding:12px 18px; border-top:1px solid var(--border); background:var(--surface-2); }
+.bw-export-modal-enter-active, .bw-export-modal-leave-active { transition:opacity .18s ease; }
+.bw-export-modal-enter-from, .bw-export-modal-leave-to { opacity:0; }
+@media (max-width:640px) {
+  .bw-export-scrim { align-items:end; padding:8px; }
+  .bw-export-dialog { width:100%; max-height:calc(100dvh - 16px); border-radius:18px; }
+  .bw-export-dialog-head { padding:13px 14px 11px; }
+  .bw-export-dialog-head p { font-size:var(--t-xs); }
+  .bw-export-step-panel { padding:13px 14px; }
+  .bw-export-steps { padding:8px 14px; }
+  .bw-export-steps li { gap:5px; }
+  .bw-export-steps li span { width:22px; height:22px; }
+  .bw-export-form-grid, .bw-export-field-grid { grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
+  .bw-export-format-grid { grid-template-columns:1fr; }
+  .bw-export-form-grid .wide { grid-column:auto; }
+  .bw-export-form-grid label { min-width:0; }
+  .bw-export-dialog-actions { padding:10px 14px; }
+  .bw-export-dialog-actions .bw-btn { flex:1; }
+  .bw-export-hover-card { display:none; }
+}
+@media (max-width:420px) {
+  .bw-export-form-grid, .bw-export-field-grid { grid-template-columns:1fr; }
+  .bw-export-form-grid .wide { grid-column:auto; }
+}
 .bw-sr-only {
   position: absolute;
   width: 1px;
@@ -2142,6 +2212,18 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
   }
   .bw-table-head-bar > .bw-data-view-switch { grid-column: 1 / -1; }
   .bw-table-head-bar > .bw-spacer { display: none; }
+  .bw-table-head-bar > :is(.bw-table-actions, .recent-actions, .vending-toolbar-actions) {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .bw-table-head-bar > :is(.bw-table-actions, .recent-actions, .vending-toolbar-actions) > * {
+    min-width: 42px;
+    min-height: 42px;
+  }
   .bw-data-region[data-view="table"] :is(.bw-t-wrap, .bw-table-wrap, .bw-table-wrapper) { display: block; }
   .bw-data-region[data-view="table"] .bw-t-cards { display: none; }
   .bw-data-region[data-view="list"] :is(.bw-t-wrap, .bw-table-wrap, .bw-table-wrapper) { display: none; }

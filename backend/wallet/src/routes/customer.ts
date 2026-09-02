@@ -664,6 +664,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/wallet/fund', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        if (!env.PAYSTACK_PAYMENTS_ENABLED) {
+            return reply.code(503).send({
+                error: 'paystack_temporarily_unavailable',
+                message: 'Paystack is temporarily unavailable. Kindly use bank transfer.',
+            });
+        }
         let idempotencyKey: string;
         try { idempotencyKey = assertClientIdempotencyKey(req.headers['idempotency-key']); }
         catch (error) {
@@ -1031,6 +1037,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        if (!env.PAYSTACK_PAYMENTS_ENABLED) {
+            return reply.code(503).send({
+                error: 'paystack_temporarily_unavailable',
+                message: 'Paystack is temporarily unavailable. Kindly use bank transfer.',
+            });
+        }
         const schema = z.object({
             meter_type: z.enum(['single_phase', 'three_phase']),
             property_category: z.enum(['residential', 'commercial']).optional(),

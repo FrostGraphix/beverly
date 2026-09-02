@@ -4,6 +4,8 @@ import AppShell from '../components/AppShell.vue';
 import { api, idempotencyHeaders, newIdempotencyKey, redirectToPayment } from '../lib/api';
 import { naira } from '../lib/format';
 
+const PAYSTACK_AVAILABLE = import.meta.env.VITE_PAYSTACK_PAYMENTS_ENABLED === 'true';
+
 const amountRaw = ref('');
 const quickAmts = [100_00, 500_00, 1000_00, 2000_00, 5000_00, 10000_00];
 const loading   = ref(false);
@@ -77,6 +79,10 @@ async function checkPendingTopup() {
 }
 
 async function fund() {
+    if (!PAYSTACK_AVAILABLE) {
+        error.value = 'Paystack is temporarily unavailable. Kindly use bank transfer.';
+        return;
+    }
     const amt = amountMinor();
     if (amt < 50000) { error.value = 'Minimum top-up is ₦500.'; return; }
     loading.value = true; error.value = null;
@@ -123,8 +129,14 @@ onMounted(async () => {
     <div class="bw-card">
       <p class="bw-page-title" style="margin-bottom: var(--s-1)">Add money</p>
       <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-5)">
-        Fund your wallet via card, bank transfer, or USSD
+        Add money securely.
       </p>
+
+      <div v-if="!PAYSTACK_AVAILABLE" class="bw-alert warn" role="status" style="margin-bottom: var(--s-4); display:grid; gap:var(--s-2)">
+        <strong>Paystack temporarily unavailable.</strong>
+        <span>Kindly use bank transfer.</span>
+        <a class="bw-btn primary" href="mailto:support@acoblighting.com?subject=Customer%20wallet%20bank%20transfer" style="justify-content:center">Request bank transfer</a>
+      </div>
 
       <label class="bw-label">Amount (₦)</label>
       <input class="bw-input bw-mono" v-model="amountRaw" type="number" min="500"
@@ -154,12 +166,12 @@ onMounted(async () => {
       <div v-if="success" class="bw-alert success" style="font-size: var(--t-sm); margin-bottom: var(--s-3)">{{ success }}</div>
 
       <button class="bw-btn primary lg" style="width:100%; justify-content:center"
-              :disabled="loading || amountMinor() < 50000" @click="fund">
+              :disabled="loading || amountMinor() < 50000 || !PAYSTACK_AVAILABLE" @click="fund">
         {{ loading ? 'Redirecting…' : `Pay ${amountRaw ? naira(amountMinor()) : ''}` }}
       </button>
 
       <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-4)">
-        Secured by Paystack · Card, bank transfer, USSD
+        Paystack remains paused.
       </p>
     </div>
   </AppShell>

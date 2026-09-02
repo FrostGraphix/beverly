@@ -5,6 +5,7 @@ import { api, idempotencyHeaders, newIdempotencyKey, redirectToPayment } from '.
 import { naira } from '../lib/format';
 
 type Mode = 'paystack' | 'bank';
+const PAYSTACK_AVAILABLE = import.meta.env.VITE_PAYSTACK_PAYMENTS_ENABLED === 'true';
 
 interface FundingRequest {
     id: string;
@@ -17,7 +18,7 @@ interface FundingRequest {
     created_at: string;
 }
 
-const mode = ref<Mode>('paystack');
+const mode = ref<Mode>('bank');
 const amountNaira = ref(50000);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -99,6 +100,11 @@ async function loadFunding() {
 
 function selectMode(nextMode: Mode) {
     if (loading.value) return;
+    if (nextMode === 'paystack' && !PAYSTACK_AVAILABLE) {
+        error.value = 'Paystack is temporarily unavailable. Kindly use bank transfer.';
+        mode.value = 'bank';
+        return;
+    }
     mode.value = nextMode;
     error.value = null;
     success.value = null;
@@ -134,6 +140,11 @@ const paystackIntentKey = ref(newIdempotencyKey());
 const paystackIntentAmount = ref<number | null>(null);
 
 async function payNow() {
+    if (!PAYSTACK_AVAILABLE) {
+        error.value = 'Paystack is temporarily unavailable. Kindly use bank transfer.';
+        mode.value = 'bank';
+        return;
+    }
     if (!amountValid.value) {
         error.value = amountHelp.value;
         return;
@@ -231,12 +242,17 @@ onMounted(async () => {
 
         <div class="bw-row" style="margin-top: var(--s-4); gap: var(--s-2)" aria-label="Funding method">
           <button type="button" :class="['bw-btn', mode === 'paystack' ? 'primary' : '']"
-                  :aria-pressed="mode === 'paystack'" :disabled="loading"
+                  :aria-pressed="mode === 'paystack'" :disabled="loading || !PAYSTACK_AVAILABLE"
                   style="flex: 1; justify-content: center" @click="selectMode('paystack')">Paystack</button>
           <button type="button" :class="['bw-btn', mode === 'bank' ? 'primary' : '']"
                   :aria-pressed="mode === 'bank'" :disabled="loading"
                   style="flex: 1; justify-content: center" @click="selectMode('bank')">Bank transfer</button>
         </div>
+      </div>
+
+      <div v-if="!PAYSTACK_AVAILABLE" class="bw-alert warn paystack-unavailable" role="status">
+        <div><strong>Paystack temporarily unavailable.</strong><span>Kindly use bank transfer.</span></div>
+        <button type="button" class="bw-btn primary" @click="mode = 'bank'">Use bank transfer</button>
       </div>
 
       <div v-if="mode === 'paystack'" class="bw-card">
@@ -397,6 +413,22 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.paystack-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.paystack-unavailable > div {
+  display: grid;
+  gap: 2px;
+}
+@media (max-width: 480px) {
+  .paystack-unavailable {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 .bank-details-box {
   background: var(--surface-2, rgba(255, 255, 255, 0.03));
   border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));

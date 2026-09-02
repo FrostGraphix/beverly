@@ -71,6 +71,7 @@ export declare function paginate<T>(rows: T[], page: number, pageSize?: number):
 export declare function pageRange(page: number, total: number, pageSize?: number): { first: number; last: number };
 
 export * from './wallet-export';
+export * from './wallet-export-wizard';
 
 export declare function isInstallDismissed(): boolean;
 export declare function dismissInstallPrompt(days?: number): void;

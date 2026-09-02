@@ -46,7 +46,7 @@ const requiredExportSurfaces = [
 
 for (const relativePath of requiredExportSurfaces) {
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
-  assert.match(source, /WalletExportMenu|exportCsv|downloadAuthedCsv|printPdf/, `${relativePath} must expose a working export path.`);
+  assert.match(source, /WalletExportMenu|WalletExportWizard|exportCsv|downloadAuthedCsv|printPdf/, `${relativePath} must expose a working export path.`);
 }
 
 const menu = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportMenu.vue'), 'utf8');
@@ -54,5 +54,23 @@ assert.match(menu, /aria-haspopup="menu"/);
 assert.match(menu, /aria-live="polite"/);
 assert.match(menu, /@click="run\('csv'\)"/);
 assert.match(menu, /@click="run\('pdf'\)"/);
+
+const wizard = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportWizard.vue'), 'utf8');
+assert.match(wizard, /Choose record scope/);
+assert.match(wizard, /Choose exported fields/);
+assert.match(wizard, /Choose export format/);
+assert.match(wizard, /resolveRows/);
+assert.match(wizard, /All stations/);
+assert.match(wizard, /All statuses/);
+
+const purchases = fs.readFileSync(path.join(root, 'apps/admin/src/views/Purchases.vue'), 'utf8');
+assert.match(purchases, /purchase-filter-button/);
+assert.match(purchases, /aria-controls="purchase-filters"/);
+assert.match(purchases, /WalletTablePagination/);
+assert.doesNotMatch(purchases, /class="bw-card filter-card"/);
+
+const walletCss = fs.readFileSync(path.join(root, 'packages/tokens/wallet.css'), 'utf8');
+assert.match(walletCss, /max-height:calc\(100dvh - 16px\)/);
+assert.match(walletCss, /grid-template-columns:repeat\(2, minmax\(0,1fr\)\)/);
 
 console.log('wallet export experience passed');

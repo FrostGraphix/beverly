@@ -3,8 +3,6 @@
  * Each builder returns { subject, html, text } ready for the Resend adapter.
  * Inline-styled, table-based HTML for broad email-client support (Outlook/Gmail/Apple Mail).
  */
-import { env } from '../config/env.js';
-
 const BRAND = '#059669';       // emerald-600 — primary accent
 const BRAND_DARK = '#047857';  // emerald-700 — button hover / emphasis
 const BRAND_TINT = '#ECFDF5';  // emerald-50 — highlight box fill
@@ -30,16 +28,66 @@ function esc(value: string): string {
     return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/**
- * Absolute URL for the official Beverly lockup PNG, served by this backend at
- * /assets/beverly-logo.png (see routes/assets.ts). Email clients cannot use the
- * SPA's relative /brand/* paths, so this needs EMAIL_ASSET_BASE_URL configured
- * once the backend is deployed. Returns null (text-only header) until then —
- * never a broken-image icon.
- */
-function logoUrl(): string | null {
-    const base = env.EMAIL_ASSET_BASE_URL?.trim().replace(/\/+$/, '');
-    return base ? `${base}/assets/beverly-logo.png` : null;
+function logoUrl(): string {
+    return 'cid:beverly-logo';
+}
+
+function normalizeAnnouncementBody(value: string): string {
+    let text = String(value ?? '').replace(/\r\n?/g, '\n').trim();
+    text = text.replace(/(?:\n\s*){0,2}(?:warm\s+regards|kind\s+regards|regards|best\s+regards),?[\s,]+(?:—\s*)?the\s+beverly\s+team\s*$/i, '');
+    text = text.replace(/(?:\n\s*){1,2}(?:—\s*)?the\s+beverly\s+team\s*$/i, '');
+
+    const numberedItems = text.match(/(?:^|\s)\d+\.\s+[^\n]+?(?=(?:\s+\d+\.\s+)|$)/g);
+    if ((numberedItems?.length ?? 0) >= 2) {
+        text = text.replace(/\s+(?=\d+\.\s+)/g, '\n');
+    }
+    return text.trim();
+}
+
+function formatAnnouncementBody(value: string): { html: string; text: string } {
+    const normalized = normalizeAnnouncementBody(value);
+    const lines = normalized.split('\n');
+    const blocks: string[] = [];
+    const plain: string[] = [];
+    let paragraph: string[] = [];
+    let items: string[] = [];
+
+    const flushParagraph = () => {
+        const content = paragraph.join(' ').trim();
+        if (content) {
+            blocks.push(`<p style="margin:0 0 18px;">${esc(content)}</p>`);
+            plain.push(content);
+        }
+        paragraph = [];
+    };
+    const flushItems = () => {
+        if (items.length) {
+            blocks.push(`<ol style="margin:0 0 18px;padding-left:22px;">${items.map((item) => `<li style="margin:0 0 8px;">${esc(item)}</li>`).join('')}</ol>`);
+            plain.push(items.map((item, index) => `${index + 1}. ${item}`).join('\n'));
+        }
+        items = [];
+    };
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        const numbered = line.match(/^\d+\.\s+(.+)$/);
+        if (numbered) {
+            flushParagraph();
+            items.push(numbered[1]);
+            continue;
+        }
+        if (!line) {
+            flushParagraph();
+            flushItems();
+            continue;
+        }
+        flushItems();
+        paragraph.push(line);
+    }
+    flushParagraph();
+    flushItems();
+
+    return { html: blocks.join(''), text: plain.join('\n\n') };
 }
 
 interface LayoutOpts {
@@ -82,38 +130,55 @@ function layout(opts: LayoutOpts): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>${esc(opts.heading)}</title>
+<style>
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  @media (prefers-color-scheme: dark) {
+    .beverly-email-page { background:#071218 !important; }
+    .beverly-email-card { background:#0C1922 !important; border-color:#263845 !important; }
+    .beverly-email-heading, .beverly-email-body { color:#F8FAFC !important; }
+    .beverly-email-muted { color:#CBD5E1 !important; }
+    .beverly-email-rule { background:#263845 !important; }
+  }
+  @media only screen and (max-width: 560px) {
+    .beverly-email-page { padding:24px 10px !important; }
+    .beverly-email-content { padding-left:24px !important; padding-right:24px !important; }
+  }
+</style>
 </head>
-<body style="margin:0;padding:0;background:${BG};font-family:${FONT};-webkit-font-smoothing:antialiased;">
+<body class="beverly-email-page" style="margin:0;padding:0;background:${BG};font-family:${FONT};-webkit-font-smoothing:antialiased;">
   <div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(opts.preheader)}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BG};padding:40px 16px;">
+  <table class="beverly-email-page" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BG};padding:40px 16px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
 
-        <!-- wordmark (official Beverly lockup — falls back to text if not yet deployed) -->
+        <!-- official Beverly lockup, embedded inline for reliable email delivery -->
         <tr><td style="padding:0 4px 20px;">
-          ${logoUrl()
-            ? `<img src="${logoUrl()}" width="120" height="52" alt="Beverly" style="display:block;border:0;outline:none;text-decoration:none;">`
-            : `<span style="color:${INK};font-size:18px;font-weight:800;letter-spacing:-0.2px;">Beverly</span>`}
+          <span class="beverly-logo-shell" style="display:inline-block;background:#ffffff;padding:8px 12px;border-radius:12px;">
+            <img src="${logoUrl()}" width="120" height="52" alt="Beverly" style="display:block;border:0;outline:none;text-decoration:none;width:120px;height:auto;">
+          </span>
         </td></tr>
 
         <!-- card -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ${BORDER};border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.04);">
-          <tr><td style="padding:36px 40px 4px;">
+        <tr><td>
+        <table class="beverly-email-card" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ${BORDER};border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.04);">
+          <tr><td class="beverly-email-content" style="padding:36px 40px 4px;">
             <span style="display:block;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND_DARK};margin-bottom:10px;">${esc(opts.eyebrow)}</span>
-            <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${INK};font-weight:700;">${opts.heading}</h1>
-            <div style="font-size:15px;line-height:1.65;color:${INK};">${opts.bodyHtml}</div>
+            <h1 class="beverly-email-heading" style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${INK};font-weight:700;">${opts.heading}</h1>
+            <div class="beverly-email-body" style="font-size:15px;line-height:1.65;color:${INK};">${opts.bodyHtml}</div>
           </td></tr>
           ${highlight}
           ${caution}
           ${cta}
-          <tr><td style="padding:28px 40px 32px;">
-            <div style="height:1px;background:${BORDER};margin-bottom:20px;"></div>
-            <p style="margin:0 0 4px;font-size:13px;color:${MUTED};">— The Beverly Team</p>
+          <tr><td class="beverly-email-content" style="padding:28px 40px 32px;">
+            <div class="beverly-email-rule" style="height:1px;background:${BORDER};margin-bottom:20px;"></div>
+            <p class="beverly-email-muted" style="margin:0 0 4px;font-size:13px;color:${MUTED};">— The Beverly Team</p>
             ${opts.footerNote ? `<p style="margin:12px 0 0;font-size:12px;line-height:1.6;color:${FAINT};">${opts.footerNote}</p>` : ''}
           </td></tr>
         </table>
+        </td></tr>
 
         <!-- footer -->
         <tr><td style="padding:24px 4px 0;">
@@ -348,15 +413,16 @@ export function genericEmail(opts: { fullName: string; title: string; body: stri
 
 export function adminAnnouncementEmail(opts: { name: string; title: string; body: string }): EmailContent {
     const name = firstName(opts.name);
+    const formatted = formatAnnouncementBody(opts.body);
     return {
         subject: opts.title,
         html: layout({
             eyebrow: 'Announcement',
             heading: esc(opts.title),
-            preheader: opts.body,
-            bodyHtml: `<p>Hi ${esc(name)},</p><p>${esc(opts.body)}</p>`,
+            preheader: formatted.text,
+            bodyHtml: `<p style="margin:0 0 18px;">Hi ${esc(name)},</p>${formatted.html}`,
         }),
-        text: `Hi ${name},\n\n${opts.body}\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+        text: `Hi ${name},\n\n${formatted.text}\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
     };
 }
 

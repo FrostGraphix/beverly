@@ -23,7 +23,13 @@ function main() {
   const customerPage = read("apps/customer/src/views/Notifications.vue");
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
   const notificationService = read("backend/wallet/src/services/notifications.ts");
+  const adminNotificationService = read("backend/wallet/src/services/admin-notifications.ts");
+  const emailTemplates = read("backend/wallet/src/emails/templates.ts");
+  const resendAdapter = read("backend/wallet/src/adapters/resend.ts");
+  const webhookRoutes = read("backend/wallet/src/routes/webhooks.ts");
+  const envConfig = read("backend/wallet/src/config/env.ts");
   const migration = read("supabase/migrations/20260617120000_wallet_admin_announcements.sql");
+  const emailDeliveryMigration = read("supabase/migrations/20260902113000_announcement_email_delivery.sql");
   const compatibilityMigration = read("supabase/migrations/20260714120000_notifications_legacy_compatibility.sql");
 
   for (const route of [
@@ -50,6 +56,8 @@ function main() {
   assert(adminRoutes.includes("announcement_delivery_failed"), "Delivery failures need a stable API error.");
   assert(adminRoutes.includes("notificationCleanupError") && adminRoutes.includes(".eq('announcement_id', announcement.id)"), "Failed sends must remove partial notifications.");
   assert(adminRoutes.includes(".from('admin_announcements').delete().eq('id', announcement.id)"), "Failed sends must remove orphan announcements.");
+  assert(adminRoutes.includes('isLegacyAnnouncementSchemaError'), 'Announcement sends must tolerate delayed schema-cache refreshes.');
+  assert(adminRoutes.includes('tracking_deferred: legacyAnnouncementSchema'), 'Legacy announcement sends must disclose deferred tracking.');
   assert(adminRoutes.includes("countAnnouncementRecipients"), "Recipient totals must come from backend counts.");
   assert(adminRoutes.includes(".from('wallets')"), "Customer recipients must come from wallet registration.");
   assert(adminRoutes.includes(".eq('owner_type', 'customer')"), "Announcement customer counts must use customer wallets.");
@@ -62,6 +70,15 @@ function main() {
   assert(adminRoutes.includes("vendor_organization_id: r.type === 'vendor' ? r.id : null"), "Vendor notification delivery missing.");
   assert(adminRoutes.includes("customer_id: r.type === 'customer' ? r.id : null"), "Customer notification delivery missing.");
   assert(adminRoutes.includes("admin.announcement.sent"), "Announcement sends must be audit logged.");
+  assert(adminRoutes.includes("requireIdempotencyKey(req, reply)"), "Announcement sends must be idempotent.");
+  assert(adminRoutes.includes("request_key: requestKey"), "Announcement request keys must persist.");
+  assert(adminRoutes.includes("announcement_email_failed"), "Resend failures need a stable API error.");
+  assert(adminRoutes.includes("email_sent_count"), "Announcement email totals must persist.");
+  assert(adminRoutes.includes("storeAnnouncementEmailMessages"), "Resend message IDs must persist.");
+  assert(adminRoutes.includes("next_offset"), "Announcement exports must support complete pagination.");
+  assert(adminRoutes.includes("query.audience"), "Announcement exports must filter audiences.");
+  assert(adminRoutes.includes(".not('email', 'is', null)"), "Customers must have reachable emails.");
+  assert(adminRoutes.includes(".not('contact_email', 'is', null)"), "Vendors must have reachable emails.");
 
   assert(adminRouter.includes("path: '/announcements'"), "Admin route missing.");
   assert(adminRouter.includes("wallet.announcements.manage"), "Admin route must require announcement permission.");
@@ -69,7 +86,12 @@ function main() {
   assert(adminShell.includes("wallet.announcements.manage"), "Admin sidebar must use announcement permission.");
   assert(adminPage.includes("/api/v1/admin/announcements/recipients"), "Admin page must load recipients.");
   assert(adminPage.includes("/api/v1/admin/announcements'"), "Admin page must send announcements.");
-  assert(adminPage.includes("System wide"), "System-wide checkbox missing.");
+  assert(adminPage.includes("Everyone"), "Everyone audience option missing.");
+  assert(adminPage.includes("an-steps"), "Announcement multi-step flow missing.");
+  assert(adminPage.includes("Choose email recipients"), "Audience step missing.");
+  assert(adminPage.includes("Write announcement"), "Message step missing.");
+  assert(adminPage.includes("Review broadcast"), "Review step missing.");
+  assert(adminPage.includes("Broadcast emails cannot be recalled."), "Send warning missing.");
   assert(adminPage.includes("recipient_keys"), "Selected-recipient payload missing.");
   assert(adminPage.includes("summary.value.total"), "Admin page must use backend recipient totals.");
   assert(adminPage.includes("audienceTotals.value.customers"), "Customer stat must use all-audience totals.");
@@ -85,6 +107,12 @@ function main() {
   assert(adminPage.includes("}, 8000);"), "Success hover must remain visible long enough for review.");
   assert(adminPage.includes("Message history refreshed."), "Success feedback must confirm history refresh.");
   assert(adminPage.includes("Date.now()"), "History refresh must bypass stale cached responses.");
+  assert(adminPage.includes("WalletExportWizard"), "History must use the multi-step export flow.");
+  assert(adminPage.includes("Delivery status"), "History export must filter delivery states.");
+  assert(adminPage.includes("Every audience"), "History export must filter audiences.");
+  assert(adminPage.includes("resolveAnnouncementExport"), "History exports must load every matching page.");
+  assert(adminPage.includes('beverly-lockup.png'), "Previews need the official Beverly wordmark.");
+  assert(adminPage.includes('background: #fff'), "The preview logo needs a stable theme-safe surface.");
   assert(successHover.includes(":role=\"tone === 'error' ? 'alert' : 'status'\""), "Feedback semantics must match its tone.");
   assert(successHover.includes("tone?: 'success' | 'error'"), "Feedback component must support errors.");
   assert(successHover.includes("message-error-hover"), "Error feedback must be testable.");
@@ -116,6 +144,22 @@ function main() {
   assert(migration.includes("vendor_organization_id uuid"), "Vendor notification column migration missing.");
   assert(migration.includes("recipient_type text"), "Recipient type migration missing.");
   assert(compatibilityMigration.includes("alter column message drop not null"), "Legacy message constraint normalization missing.");
+  assert(emailDeliveryMigration.includes("email_recipient_count"), "Email recipient totals migration missing.");
+  assert(emailDeliveryMigration.includes("admin_announcements_request_key_uidx"), "Announcement idempotency index missing.");
+  assert(emailDeliveryMigration.includes("email_message_id"), "Resend message tracking migration missing.");
+  assert(adminNotificationService.includes("uniqueRecipients"), "Duplicate email addresses must be removed.");
+  assert(adminNotificationService.includes("isResendConfigured"), "Resend configuration must be checked.");
+  assert(resendAdapter.includes("EmailBatchError"), "Partial Resend failures must retain sent counts.");
+  assert(resendAdapter.includes("idempotencyKey"), "Resend batches must use idempotency keys.");
+  assert(emailTemplates.includes('alt="Beverly"'), "Announcement emails must carry the Beverly logo.");
+  assert(emailTemplates.includes('cid:beverly-logo'), "Announcement logos must be embedded for reliable delivery.");
+  assert(emailTemplates.includes('@media (prefers-color-scheme: dark)'), "Announcement emails must support dark mode.");
+  assert(emailTemplates.includes('formatAnnouncementBody'), "Announcement emails must preserve message formatting.");
+  assert(resendAdapter.includes("inlineContentId: 'beverly-logo'"), "Resend must attach the Beverly logo inline.");
+  assert(webhookRoutes.includes("verifyResendSignature"), "Resend webhooks must verify signatures.");
+  assert(webhookRoutes.includes("email_message_id"), "Resend webhooks must update tracked deliveries.");
+  assert(webhookRoutes.includes("email.suppressed"), "Suppressed email delivery must be tracked.");
+  assert(envConfig.includes("RESEND_WEBHOOK_SECRET"), "Resend webhook secrets must be configured.");
 
   console.log(JSON.stringify({
     status: "admin announcements flow contract passed",

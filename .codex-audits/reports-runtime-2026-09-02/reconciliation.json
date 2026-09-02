@@ -1,0 +1,77 @@
+{
+  "totals": {
+    "total_count": 736,
+    "delivered_count": 488,
+    "failed_count": 121,
+    "revenue_minor": "91020600",
+    "units_kwh": "2419.1454",
+    "distinct_ids": 736,
+    "null_status": 0,
+    "null_amount": 0,
+    "missing_station": 0,
+    "missing_actor": 0
+  },
+  "statuses": [
+    {
+      "status": "delivered",
+      "count": 488
+    },
+    {
+      "status": "hold_active",
+      "count": 126
+    },
+    {
+      "status": "failed",
+      "count": 121
+    },
+    {
+      "status": "delivery_pending_review",
+      "count": 1
+    }
+  ],
+  "daily": {
+    "daily_total": 736
+  },
+  "vendorRaw": {
+    "purchase_count": 734,
+    "delivered_count": 487,
+    "failed_count": 120,
+    "revenue_minor": "90970600"
+  },
+  "breakdown": {
+    "purchase_count": 734,
+    "delivered_count": 487,
+    "failed_count": 120,
+    "revenue_minor": "90970600"
+  },
+  "successful": {
+    "purchase_count": 487,
+    "delivered_count": 487,
+    "failed_count": 0
+  },
+  "failed": {
+    "purchase_count": 120,
+    "delivered_count": 0,
+    "failed_count": 120
+  },
+  "orphan": {
+    "orphan_vendor_rows": 0
+  },
+  "schema": {
+    "required_columns": 10
+  },
+  "migrations": [
+    {
+      "version": "20260901120000"
+    },
+    {
+      "version": "20260901143000"
+    },
+    {
+      "version": "20260901144500"
+    },
+    {
+      "version": "20260902113000"
+    }
+  ]
+}

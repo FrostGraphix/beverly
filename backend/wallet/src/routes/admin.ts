@@ -67,6 +67,62 @@ function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
 }
 
+async function enrichPurchaseRows(inputRows: any[]): Promise<any[]> {
+    if (!inputRows.length) return [];
+    const vendorIds = [...new Set(inputRows.filter((row) => row.actor_type === 'vendor').map((row) => String(row.actor_id ?? '')).filter(Boolean))];
+    const customerIds = [...new Set(inputRows.filter((row) => row.actor_type === 'customer').map((row) => String(row.actor_id ?? '')).filter(Boolean))];
+    const creatorIds = [...new Set(inputRows.map((row) => String(row.created_by ?? '')).filter(Boolean))];
+
+    const [vendorResult, customerResult, vendorUsersByAuthResult, vendorUsersByIdResult] = await Promise.all([
+        vendorIds.length
+            ? adminClient.from('vendor_organizations').select('id, legal_name, trading_name, station_id').in('id', vendorIds)
+            : Promise.resolve({ data: [] as any[] }),
+        customerIds.length
+            ? adminClient.from('customers').select('id, full_name').in('id', customerIds)
+            : Promise.resolve({ data: [] as any[] }),
+        creatorIds.length
+            ? adminClient.from('vendor_users').select('id, auth_user_id, vendor_organization_id, full_name').in('auth_user_id', creatorIds)
+            : Promise.resolve({ data: [] as any[] }),
+        creatorIds.length
+            ? adminClient.from('vendor_users').select('id, auth_user_id, vendor_organization_id, full_name').in('id', creatorIds)
+            : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const vendors = new Map((vendorResult.data ?? []).map((row: any) => [String(row.id), row]));
+    const customers = new Map((customerResult.data ?? []).map((row: any) => [String(row.id), row]));
+    const vendorUsers = new Map<string, any>();
+    for (const row of [...(vendorUsersByAuthResult.data ?? []), ...(vendorUsersByIdResult.data ?? [])] as any[]) {
+        vendorUsers.set(String(row.auth_user_id), row);
+        vendorUsers.set(String(row.id), row);
+    }
+
+    return inputRows.map((row) => {
+        const vendor = vendors.get(String(row.actor_id ?? ''));
+        const customer = customers.get(String(row.actor_id ?? ''));
+        const operator = vendorUsers.get(String(row.created_by ?? ''));
+        const businessName = vendor?.trading_name || vendor?.legal_name || null;
+        const operatorName = row.actor_type === 'vendor'
+            ? operator?.full_name || null
+            : customer?.full_name || row.customer_name || null;
+        const stationId = row.station_id || vendor?.station_id || null;
+        const resolvedVendedBy = row.actor_type === 'vendor'
+            ? [operatorName, businessName].filter(Boolean).join(' — ') || businessName || 'Vendor operator'
+            : operatorName ? `Customer Self-Vend — ${operatorName}` : 'Customer Self-Vend';
+        const purchaseWay = row.purchase_mode === 'remote_send'
+            ? row.actor_type === 'vendor' ? 'Vendor Portal Remote Send' : 'Customer Portal Remote Send'
+            : row.actor_type === 'vendor' ? 'Vendor Portal Vending' : 'Customer Portal Self-Vend';
+        return {
+            ...row,
+            station_id: stationId,
+            vended_by_name: operatorName,
+            vendor_business_name: businessName,
+            vended_by: `${resolvedVendedBy}${stationId ? ` (${stationId})` : ''}`,
+            purchase_way: purchaseWay,
+            wallet_name: businessName || customer?.full_name || row.customer_name || 'Wallet owner',
+        };
+    });
+}
+
 function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string | null {
     try {
         return assertClientIdempotencyKey(req.headers['idempotency-key']);
@@ -78,6 +134,13 @@ function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string
 }
 
 type AnnouncementRecipientType = 'customer' | 'vendor';
+
+function isLegacyAnnouncementSchemaError(error: any): boolean {
+    const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+    return /admin_announcements|admin_announcement_deliveries/i.test(text)
+        && /request_key|delivery_status|email_(recipient|sent|failed|message|status)/i.test(text)
+        && /column|schema cache|could not find/i.test(text);
+}
 
 interface AnnouncementRecipient {
     key: string;
@@ -158,6 +221,8 @@ async function listAnnouncementRecipients(opts: {
                 .from('customers')
                 .select('id, full_name, email, phone, status')
                 .in('id', walletCustomerIds)
+                .not('email', 'is', null)
+                .neq('email', '')
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
@@ -175,6 +240,8 @@ async function listAnnouncementRecipients(opts: {
                 .from('vendor_organizations')
                 .select('id, legal_name, trading_name, contact_email, contact_phone, status')
                 .in('id', walletVendorIds)
+                .not('contact_email', 'is', null)
+                .neq('contact_email', '')
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
@@ -195,7 +262,7 @@ async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipi
     if (opts.audiences.includes('customer')) {
         const walletCustomerIds = await listWalletCustomerIds();
         if (walletCustomerIds.length) {
-            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).neq('status', 'deleted');
+            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).not('email', 'is', null).neq('email', '').neq('status', 'deleted');
             if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
             const { count, error } = await query;
             if (error) throw error;
@@ -205,7 +272,7 @@ async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipi
     if (opts.audiences.includes('vendor')) {
         const walletVendorIds = await listWalletVendorIds();
         if (walletVendorIds.length) {
-            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).neq('status', 'deleted');
+            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).not('contact_email', 'is', null).neq('contact_email', '').neq('status', 'deleted');
             if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
             const { count, error } = await query;
             if (error) throw error;
@@ -253,11 +320,61 @@ async function insertAnnouncementNotifications(rows: any[]) {
 async function insertAnnouncementDeliveries(rows: any[]) {
     const chunkSize = 500;
     for (let i = 0; i < rows.length; i += chunkSize) {
-        const { error } = await adminClient
+        let { error } = await adminClient
             .from('admin_announcement_deliveries')
             .insert(rows.slice(i, i + chunkSize));
+        if (isLegacyAnnouncementSchemaError(error)) {
+            const legacyRows = rows.slice(i, i + chunkSize).map(({ email: _email, email_status: _emailStatus, ...row }) => row);
+            ({ error } = await adminClient.from('admin_announcement_deliveries').insert(legacyRows));
+        }
         if (error) throw error;
     }
+}
+
+async function updateAnnouncementEmailState(
+    announcementId: string,
+    state: { sent: number; failed: number; status: 'sent' | 'partial' | 'failed' },
+) {
+    const [announcementResult, deliveryResult] = await Promise.all([
+        adminClient.from('admin_announcements').update({
+            email_sent_count: state.sent,
+            email_failed_count: state.failed,
+            delivery_status: state.status,
+        }).eq('id', announcementId),
+        adminClient.from('admin_announcement_deliveries')
+            .update({ status: state.status === 'sent' ? 'email_sent' : state.status === 'partial' ? 'email_partial' : 'email_failed' })
+            .eq('announcement_id', announcementId),
+    ]);
+    if (announcementResult.error) throw announcementResult.error;
+    if (deliveryResult.error) throw deliveryResult.error;
+}
+
+async function storeAnnouncementEmailMessages(
+    announcementId: string,
+    recipients: AnnouncementRecipient[],
+    messages: Array<{ email: string; messageId: string }>,
+) {
+    const messageByEmail = new Map(messages.map((message) => [message.email.toLowerCase(), message.messageId]));
+    const rows = recipients.flatMap((recipient) => {
+        const email = recipient.email?.trim().toLowerCase();
+        const messageId = email ? messageByEmail.get(email) : undefined;
+        return email && messageId ? [{
+            announcement_id: announcementId,
+            recipient_type: recipient.type,
+            recipient_id: recipient.id,
+            customer_id: recipient.type === 'customer' ? recipient.id : null,
+            vendor_organization_id: recipient.type === 'vendor' ? recipient.id : null,
+            email,
+            email_message_id: messageId,
+            email_status: 'sent',
+            status: 'email_sent',
+        }] : [];
+    });
+    if (!rows.length) return;
+    const { error } = await adminClient.from('admin_announcement_deliveries').upsert(rows, {
+        onConflict: 'announcement_id,recipient_type,recipient_id',
+    });
+    if (error) throw error;
 }
 
 
@@ -293,6 +410,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
+    'PATCH /vendor-applications/:id/status': 'wallet.vendors.manage',
     'DELETE /vendor-applications/:id': 'wallet.vendors.manage',
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
@@ -308,6 +426,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vendors/:id/transactions': 'wallet.vending.monitor',
     'GET /vendors/:id/funding': 'wallet.funding.view',
     'GET /vendors/:id/staff': 'wallet.vendors.review',
+    'GET /vendors/:id/analytics': 'wallet.vendors.review',
     'GET /funding/pending': 'wallet.funding.view',
     'GET /funding/history': 'wallet.funding.view',
     'GET /payments/requires-review': 'wallet.funding.view',
@@ -1313,6 +1432,34 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true, id };
     });
 
+    fastify.patch('/vendor-applications/:id/status', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const body = z.object({
+            status: z.enum(['submitted', 'contacted', 'rejected', 'converted']),
+            note: z.string().trim().max(1000).optional(),
+        }).parse(req.body);
+        const { data: before } = await adminClient.from('vendor_applications').select('*').eq('id', id).maybeSingle();
+        if (!before) return reply.code(404).send({ error: 'application_not_found', message: 'Application not found.' });
+        const { data, error } = await adminClient.from('vendor_applications').update({
+            status: body.status,
+            notes: body.note ? [before.notes, body.note].filter(Boolean).join('\n') : before.notes,
+            reviewed_by: req.actor!.userId,
+            reviewed_at: new Date().toISOString(),
+        }).eq('id', id).select('*').single();
+        if (error) return reply.code(400).send({ error: 'application_update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: `vendor_application.${body.status}`,
+            targetType: 'vendor_application',
+            targetId: id,
+            before: { status: before.status },
+            after: { status: body.status, note: body.note ?? null },
+        });
+        return { ok: true, application: data };
+    });
+
     // ── create vendor organization ──
     fastify.post('/vendors', async (req) => {
         const schema = z.object({
@@ -1598,12 +1745,17 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('wallets').select('*').eq('owner_type', 'vendor').eq('owner_id', id).maybeSingle();
         const balance = wallet ? await getBalance((wallet as any).id).catch(() => null) : null;
 
-        const [vendingAgg, fundingAgg] = await Promise.all([
+        const [vendingAgg, failedVendingAgg, paystackFundingAgg, bankFundingAgg] = await Promise.all([
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' })
-                .eq('actor_type', 'vendor').eq('actor_id', id),
+                .eq('actor_type', 'vendor').eq('actor_id', id).eq('status', 'delivered'),
+            adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' })
+                .eq('actor_type', 'vendor').eq('actor_id', id).eq('status', 'failed'),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
                 .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
+                .eq('gateway', 'paystack')
                 .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
+            adminClient.from('funding_requests').select('amount_minor', { count: 'exact' })
+                .eq('vendor_organization_id', id).eq('channel', 'bank_transfer').eq('status', 'approved'),
         ]);
         const sum = (arr: any[] | null | undefined) =>
             (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
@@ -1619,8 +1771,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             stats: {
                 vendingCount:      vendingAgg.count ?? 0,
                 vendingValueMinor: sum(vendingAgg.data),
-                fundingCount:      fundingAgg.count ?? 0,
-                fundingValueMinor: sum(fundingAgg.data),
+                failedVendingCount: failedVendingAgg.count ?? 0,
+                failedVendingValueMinor: sum(failedVendingAgg.data),
+                fundingCount:      (paystackFundingAgg.count ?? 0) + (bankFundingAgg.count ?? 0),
+                fundingValueMinor: sum(paystackFundingAgg.data) + sum(bankFundingAgg.data),
+                paystackFundingCount: paystackFundingAgg.count ?? 0,
+                paystackFundingValueMinor: sum(paystackFundingAgg.data),
+                bankFundingCount: bankFundingAgg.count ?? 0,
+                bankFundingValueMinor: sum(bankFundingAgg.data),
                 stationCount,
             },
         };
@@ -1697,7 +1855,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .limit(Math.min(Number(limit ?? 50), 200));
         if (cursor) query = query.lt('created_at', cursor);
         const { data } = await query;
-        const rows = data ?? [];
+        const rows = await enrichPurchaseRows(data ?? []);
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { transactions: rows, nextCursor };
     });
@@ -2434,7 +2592,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/purchases', async (req) => {
         const {
-            status, station, actorType, meterType, q, since, until, limit, cursor,
+            status, station, actorType, actorId, meterType, q, since, until, limit, cursor,
         } = req.query as Record<string, string | undefined>;
 
         let query = adminClient.from('purchase_orders').select('*')
@@ -2445,6 +2603,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (assignedStations) query = query.in('station_id', assignedStations);
         else if (station) query = query.eq('station_id', station);
         if (actorType) query = query.eq('actor_type', actorType);
+        if (actorId) query = query.eq('actor_id', actorId);
         if (meterType) query = query.eq('meter_type', meterType);
         if (since)     query = query.gte('created_at', since);
         if (until)     query = query.lte('created_at', until);
@@ -2459,7 +2618,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         const { data, error } = await query;
         if (error) return { purchases: [], error: error.message };
-        const rows = data ?? [];
+        const rows = await enrichPurchaseRows(data ?? []);
         const nextCursor = rows.length === Math.min(Number(limit ?? 100), 500)
             ? rows[rows.length - 1].created_at : null;
         return { purchases: rows, nextCursor };
@@ -2493,59 +2652,84 @@ const route: FastifyPluginAsync = async (fastify) => {
                 error: error.message,
             };
         }
-        const rows = data ?? [];
+        const rows = await enrichPurchaseRows(data ?? []);
         const nextCursor = rows.length === Math.min(Number(limit ?? 200), 500)
             ? rows[rows.length - 1].created_at
             : null;
         return { purchases: rows, nextCursor };
     });
 
-    // KPI summary for purchases dashboard.
+    // KPI summary for purchases dashboard. It deliberately uses the same
+    // filters as the list endpoint so the cards and table cannot disagree.
     fastify.get('/purchases/summary', async (req) => {
-        const now = new Date();
-        const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-        const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
-
+        const { status, station, actorType, actorId, meterType, q, since, until } = req.query as Record<string, string | undefined>;
         const assignedStations = staffStations(req);
-        const scope = (query: any) => scopeStations(query, assignedStations);
-        const [todayOrdersRes, last24h, failed24hRes, refunded, succeededFunding] = await Promise.all([
-            scope(adminClient.from('purchase_orders').select('id, amount_minor, units_kwh, status, actor_type').gte('created_at', sod)),
-            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo)),
-            scope(adminClient.from('purchase_orders').select('id, actor_type').gte('created_at', dayAgo).eq('status', 'failed')),
-            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded')),
-            adminClient.from('payment_transactions').select('id', { count: 'exact', head: true })
-                .eq('purpose', 'wallet_funding')
-                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
-        ]);
+        const pageSize = 1000;
+        const rows: any[] = [];
+        for (let offset = 0; ; offset += pageSize) {
+            let query = adminClient.from('purchase_orders')
+                .select('id, amount_minor, units_kwh, status, actor_type, created_at')
+                .order('created_at', { ascending: false })
+                .range(offset, offset + pageSize - 1);
+            if (status) query = query.eq('status', status);
+            if (assignedStations) query = query.in('station_id', assignedStations);
+            else if (station) query = query.eq('station_id', station);
+            if (actorType) query = query.eq('actor_type', actorType);
+            if (actorId) query = query.eq('actor_id', actorId);
+            if (meterType) query = query.eq('meter_type', meterType);
+            if (since) query = query.gte('created_at', since);
+            if (until) query = query.lte('created_at', until);
+            if (q) {
+                const safeQ = cleanSearchTerm(q);
+                if (safeQ) {
+                    const filters = [`meter_id.ilike.%${safeQ}%`, `customer_name.ilike.%${safeQ}%`];
+                    if (isUuid(safeQ)) filters.push(`id.eq.${safeQ}`);
+                    query = query.or(filters.join(','));
+                }
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            rows.push(...(data ?? []));
+            if ((data?.length ?? 0) < pageSize) break;
+        }
 
-        const sumMinor = (arr: any[] | null | undefined) =>
-            (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
-
-        const todayRows = (todayOrdersRes.data ?? []) as any[];
-        const deliveredToday = todayRows.filter((r) => r.status === 'delivered');
-        const todayDeliveredKwh = deliveredToday.reduce((sum, r) => sum + Number(r.units_kwh ?? 0), 0);
-        const todayDeliveredValueMinor = deliveredToday.reduce((sum, r) => sum + Number(r.amount_minor ?? 0), 0);
-        const todayDeliveredCount = deliveredToday.length;
+        const sumMinor = (input: any[]) => input.reduce((sum, row) => sum + Number(row.amount_minor ?? 0), 0);
+        const successfulRows = rows.filter((row) => row.status === 'delivered' || row.status === 'completed');
+        const failedRows = rows.filter((row) => row.status === 'failed');
+        const refundedRows = rows.filter((row) => row.status === 'refunded');
+        const now = new Date();
+        const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const dayAgo = new Date(now.getTime() - 24 * 3600_000);
+        const todayRows = rows.filter((row) => new Date(row.created_at) >= sod);
+        const last24hRows = rows.filter((row) => new Date(row.created_at) >= dayAgo);
+        const deliveredToday = todayRows.filter((row) => row.status === 'delivered' || row.status === 'completed');
+        const failed24hRows = last24hRows.filter((row) => row.status === 'failed');
+        const todayDeliveredKwh = deliveredToday.reduce((sum, row) => sum + Number(row.units_kwh ?? 0), 0);
+        const todayDeliveredValueMinor = sumMinor(deliveredToday);
 
         const isVendorActor = (actorType?: string) => actorType === 'vendor' || actorType === 'vendor_staff';
-        const vendorDelivered = deliveredToday.filter((r) => isVendorActor(r.actor_type));
-        const customerDelivered = deliveredToday.filter((r) => !isVendorActor(r.actor_type));
-
-        const failedRows = (failed24hRes.data ?? []) as any[];
+        const vendorDelivered = successfulRows.filter((row) => isVendorActor(row.actor_type));
+        const customerDelivered = successfulRows.filter((row) => !isVendorActor(row.actor_type));
         const vendorFailedCount = failedRows.filter((r) => isVendorActor(r.actor_type)).length;
         const customerFailedCount = failedRows.filter((r) => !isVendorActor(r.actor_type)).length;
 
         return {
+            totalCount:               rows.length,
+            totalValueMinor:          sumMinor(rows),
+            successCount:             successfulRows.length,
+            successValueMinor:        sumMinor(successfulRows),
+            failedCount:              failedRows.length,
+            failedValueMinor:         sumMinor(failedRows),
+            refundedValueMinor:       sumMinor(refundedRows),
             todayCount:               todayRows.length,
             todayValueMinor:          sumMinor(todayRows),
-            todayDeliveredCount,
+            todayDeliveredCount:      deliveredToday.length,
             todayDeliveredValueMinor,
             todayDeliveredKwh,
-            last24hCount:             last24h.count ?? 0,
-            last24hValueMinor:        sumMinor(last24h.data),
-            failed24hCount:           failedRows.length,
-            refundedCount:            refunded.count ?? 0,
-            succeededFundingCount:    succeededFunding.count ?? 0,
+            last24hCount:             last24hRows.length,
+            last24hValueMinor:        sumMinor(last24hRows),
+            failed24hCount:           failed24hRows.length,
+            refundedCount:            refundedRows.length,
             vendorStats: {
                 successCount:      vendorDelivered.length,
                 successValueMinor: sumMinor(vendorDelivered),
@@ -2579,7 +2763,8 @@ const route: FastifyPluginAsync = async (fastify) => {
                 : Promise.resolve(null),
         ]);
 
-        return { purchase: po, hold, ledger_entries: entries, receipt };
+        const [purchase] = await enrichPurchaseRows([po]);
+        return { purchase, hold, ledger_entries: entries, receipt };
     });
 
     // Resend the token SMS via Twilio. Audit + security event.
@@ -3320,18 +3505,47 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/announcements', async (req) => {
         const query = z.object({
-            limit: z.coerce.number().int().min(1).max(200).optional(),
+            limit: z.coerce.number().int().min(1).max(1000).optional(),
+            offset: z.coerce.number().int().min(0).optional(),
+            since: z.string().datetime().optional(),
+            until: z.string().datetime().optional(),
+            status: z.enum(['unknown', 'sending', 'sent', 'partial', 'failed']).optional(),
+            audience: z.enum(['customers', 'vendors', 'system']).optional(),
         }).parse(req.query);
-        const { data, error } = await adminClient
+        const limit = query.limit ?? 50;
+        const offset = query.offset ?? 0;
+        let announcementQuery = adminClient
             .from('admin_announcements')
             .select('*')
             .order('created_at', { ascending: false })
-            .limit(query.limit ?? 50);
+            .range(offset, offset + limit - 1);
+        if (query.since) announcementQuery = announcementQuery.gte('created_at', query.since);
+        if (query.until) announcementQuery = announcementQuery.lte('created_at', query.until);
+        if (query.status) announcementQuery = announcementQuery.eq('delivery_status', query.status);
+        if (query.audience) announcementQuery = announcementQuery.eq('audience', query.audience);
+        let { data, error } = await announcementQuery;
+        if (isLegacyAnnouncementSchemaError(error)) {
+            let legacyQuery = adminClient.from('admin_announcements').select('*')
+                .order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+            if (query.since) legacyQuery = legacyQuery.gte('created_at', query.since);
+            if (query.until) legacyQuery = legacyQuery.lte('created_at', query.until);
+            if (query.audience) legacyQuery = legacyQuery.eq('audience', query.audience);
+            ({ data, error } = await legacyQuery);
+            data = (data ?? []).map((row: any) => ({
+                ...row,
+                delivery_status: 'unknown',
+                email_recipient_count: 0,
+                email_sent_count: 0,
+                email_failed_count: 0,
+            }));
+        }
         if (error) throw error;
-        return { announcements: data ?? [] };
+        return { announcements: data ?? [], next_offset: (data?.length ?? 0) === limit ? offset + limit : null };
     });
 
     fastify.post('/announcements', async (req, reply) => {
+        const requestKey = requireIdempotencyKey(req, reply);
+        if (!requestKey) return reply;
         const schema = z.object({
             title: z.string().trim().min(3).max(120),
             body: z.string().trim().min(5).max(2000),
@@ -3340,6 +3554,28 @@ const route: FastifyPluginAsync = async (fastify) => {
             recipient_keys: z.array(z.string().regex(/^(customer|vendor):[0-9a-f-]{36}$/i)).optional(),
         });
         const body = schema.parse(req.body ?? {});
+        const { data: existingAnnouncement, error: existingError } = await adminClient
+            .from('admin_announcements')
+            .select('*')
+            .eq('request_key', requestKey)
+            .maybeSingle();
+        const legacyAnnouncementSchema = isLegacyAnnouncementSchemaError(existingError);
+        if (existingError && !legacyAnnouncementSchema) throw existingError;
+        if (existingAnnouncement) {
+            if (existingAnnouncement.delivery_status !== 'sent') {
+                return reply.code(409).send({
+                    error: 'announcement_retry_requires_review',
+                    message: 'This broadcast already started. Review its delivery history before creating another send.',
+                    details: { announcement_id: existingAnnouncement.id, sent: existingAnnouncement.email_sent_count ?? 0 },
+                });
+            }
+            return reply.code(200).send({
+                ok: true,
+                announcement: existingAnnouncement,
+                delivered: existingAnnouncement.email_sent_count ?? 0,
+                replayed: true,
+            });
+        }
         const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : 'vendor'))) as AnnouncementRecipientType[];
         const requestedKeys = new Set(body.recipient_keys ?? []);
         let recipients = body.send_to_all
@@ -3349,19 +3585,37 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!recipients.length) return reply.code(400).send({ error: 'no_recipients', message: 'Select at least one recipient.' });
 
         const audienceLabel = audiences.length === 2 ? 'system' : audiences[0] === 'customer' ? 'customers' : 'vendors';
-        const { data: announcement, error: annError } = await adminClient
+        let { data: announcement, error: annError } = await adminClient
             .from('admin_announcements')
             .insert({
                 title: body.title,
                 body: body.body,
                 audience: audienceLabel,
                 target_mode: body.send_to_all ? 'all' : 'selected',
-                channel: 'in_app',
+                channel: 'email,in_app',
+                request_key: requestKey,
                 created_by_staff_id: req.actor!.userId,
                 recipient_count: recipients.length,
+                email_recipient_count: new Set(recipients.map((recipient) => recipient.email?.trim().toLowerCase()).filter(Boolean)).size,
+                delivery_status: 'sending',
             })
             .select('*')
             .single();
+        if (legacyAnnouncementSchema && isLegacyAnnouncementSchemaError(annError)) {
+            ({ data: announcement, error: annError } = await adminClient
+                .from('admin_announcements')
+                .insert({
+                    title: body.title,
+                    body: body.body,
+                    audience: audienceLabel,
+                    target_mode: body.send_to_all ? 'all' : 'selected',
+                    channel: 'email,in_app',
+                    created_by_staff_id: req.actor!.userId,
+                    recipient_count: recipients.length,
+                })
+                .select('*')
+                .single());
+        }
         if (annError) throw annError;
 
         const notificationRows = recipients.map((r) => ({
@@ -3391,12 +3645,12 @@ const route: FastifyPluginAsync = async (fastify) => {
                     customer_id: r.type === 'customer' ? r.id : null,
                     vendor_organization_id: r.type === 'vendor' ? r.id : null,
                     notification_id: notification?.id ?? null,
+                    email: r.email?.trim().toLowerCase() ?? null,
+                    email_status: 'queued',
                     status: notification?.id ? 'delivered' : 'queued',
                 };
             });
             await insertAnnouncementDeliveries(deliveryRows);
-
-            await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, (emailError) => req.log.error({ emailError }, 'Announcement email fan-out failed'));
         } catch (deliveryError) {
             const { error: notificationCleanupError } = await adminClient
                 .from('notifications')
@@ -3415,6 +3669,53 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
+        let emailResult: { sent: number; recipients: number; messages: Array<{ email: string; messageId: string }> };
+        try {
+            emailResult = await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, requestKey);
+        } catch (emailError: any) {
+            const sentCount = Number(emailError?.sentCount ?? 0);
+            const emailRecipientCount = Number(announcement.email_recipient_count ?? recipients.length);
+            await updateAnnouncementEmailState(announcement.id, {
+                sent: sentCount,
+                failed: Math.max(0, emailRecipientCount - sentCount),
+                status: sentCount ? 'partial' : 'failed',
+            }).catch((trackingError) => req.log.error({ trackingError, announcementId: announcement.id }, 'Announcement email state update failed'));
+            req.log.error({ emailError, announcementId: announcement.id, sentCount }, 'Announcement email fan-out failed');
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'admin.announcement.email_failed',
+                targetType: 'admin_announcement',
+                targetId: announcement.id,
+                after: { audience: audienceLabel, recipient_count: recipients.length, email_sent_count: sentCount },
+            }).catch(() => undefined);
+            return reply.code(502).send({
+                error: 'announcement_email_failed',
+                message: sentCount
+                    ? `${sentCount} emails sent before delivery stopped. Review history before retrying.`
+                    : 'Email delivery failed. Check Resend configuration and retry.',
+                details: { announcement_id: announcement.id, sent: sentCount, total: emailRecipientCount },
+            });
+        }
+        try {
+            if (!legacyAnnouncementSchema) {
+                await storeAnnouncementEmailMessages(announcement.id, recipients, emailResult.messages);
+                await updateAnnouncementEmailState(announcement.id, {
+                    sent: emailResult.sent,
+                    failed: Math.max(0, emailResult.recipients - emailResult.sent),
+                    status: emailResult.sent === emailResult.recipients ? 'sent' : 'partial',
+                });
+            }
+        } catch (trackingError) {
+            req.log.error({ trackingError, announcementId: announcement.id }, 'Announcement email tracking failed');
+            return reply.code(503).send({
+                error: 'announcement_tracking_failed',
+                message: 'Emails were accepted, but delivery tracking needs administrator review.',
+                details: { announcement_id: announcement.id, sent: emailResult.sent, total: emailResult.recipients },
+            });
+        }
+
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'staff',
@@ -3422,10 +3723,20 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'admin.announcement.sent',
             targetType: 'admin_announcement',
             targetId: announcement.id,
-            after: { audience: audienceLabel, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length },
+            after: { audience: audienceLabel, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length, email_sent_count: emailResult.sent },
         }).catch(() => undefined);
 
-        return reply.code(201).send({ ok: true, announcement, delivered: recipients.length });
+        return reply.code(201).send({
+            ok: true,
+            announcement: {
+                ...announcement,
+                delivery_status: legacyAnnouncementSchema ? 'sent' : announcement.delivery_status,
+                email_sent_count: emailResult.sent,
+                email_failed_count: Math.max(0, emailResult.recipients - emailResult.sent),
+            },
+            delivered: emailResult.sent,
+            tracking_deferred: legacyAnnouncementSchema,
+        });
     });
 
     // ── refunds ──

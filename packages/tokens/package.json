@@ -30,6 +30,9 @@
     "WalletRowActions.vue.d.ts",
     "WalletExportMenu.vue",
     "WalletExportMenu.vue.d.ts",
+    "WalletExportWizard.vue",
+    "WalletExportWizard.vue.d.ts",
+    "wallet-export-wizard.ts",
     "wallet-export.js",
     "wallet-export.d.ts",
     "PwaUpdateToast.vue",
@@ -91,6 +94,14 @@
     "./WalletExportMenu.vue": {
       "types": "./WalletExportMenu.vue.d.ts",
       "import": "./WalletExportMenu.vue"
+    },
+    "./WalletExportWizard.vue": {
+      "types": "./WalletExportWizard.vue.d.ts",
+      "import": "./WalletExportWizard.vue"
+    },
+    "./wallet-export-wizard": {
+      "types": "./wallet-export-wizard.ts",
+      "import": "./wallet-export-wizard.ts"
     },
     "./wallet-export": {
       "types": "./wallet-export.d.ts",

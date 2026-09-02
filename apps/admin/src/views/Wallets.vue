@@ -316,7 +316,7 @@ watch([fOwnerType, fStatus], () => loadList());
     <transition name="banner">
       <div v-if="banner" :class="['bw-banner', banner.tone]" role="status">
         {{ banner.text }}
-        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">Ã—</button>
+        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
       </div>
     </transition>
 
@@ -495,7 +495,7 @@ watch([fOwnerType, fStatus], () => loadList());
                 <h2 class="drawer-title">{{ detail.owner?.legal_name ?? detail.owner?.trading_name ?? detail.owner?.full_name ?? detail.wallet.owner_id.slice(0, 8) }}</h2>
                 <p class="bw-mono drawer-id">{{ detail.wallet.id }}</p>
               </div>
-              <button class="drawer-x" @click="closeDetail" aria-label="Close">Ã—</button>
+              <button class="drawer-x" @click="closeDetail" aria-label="Close wallet details">×</button>
             </header>
 
             <!-- Balance tile -->

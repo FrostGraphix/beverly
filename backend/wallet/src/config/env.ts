@@ -62,6 +62,7 @@ const schema = z.object({
     PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
     PAYSTACK_PUBLIC_KEY: z.string().regex(/^pk_(test|live)_[A-Za-z0-9]+$/).optional(),
     PAYSTACK_WEBHOOK_URL: z.string().url().optional(),
+    PAYSTACK_PAYMENTS_ENABLED: envBoolean.default(false),
 
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
@@ -81,6 +82,7 @@ const schema = z.object({
 
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM: z.string().default('Beverly <noreply@acoblighting.com>'),
+    RESEND_WEBHOOK_SECRET: z.string().optional(),
     VAPID_PUBLIC_KEY: z.string().min(40).optional(),
     VAPID_PRIVATE_KEY: z.string().min(20).optional(),
     VAPID_SUBJECT: z.string().default('mailto:wallet@acoblighting.com'),
@@ -166,6 +168,13 @@ const schema = z.object({
             code: z.ZodIssueCode.custom,
             path: ['APP_ENCRYPTION_KEY'],
             message: 'Required in production.',
+        });
+    }
+    if (values.NODE_ENV === 'production' && values.RESEND_API_KEY && !values.RESEND_WEBHOOK_SECRET) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['RESEND_WEBHOOK_SECRET'],
+            message: 'Required when production Resend delivery is enabled.',
         });
     }
     if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {

@@ -7,12 +7,15 @@ import { downloadReportPdf, type ReportFamily } from '../lib/report-pdf';
 
 type ReportAudience = 'all' | 'vendor' | 'customer';
 type ReportGrouping = 'site' | 'vendor' | 'customer';
-interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
+type ReportMetric = 'revenueMinor' | 'purchaseCount' | 'fundingMinor' | 'newCustomers' | 'refundMinor' | 'auditLogsCount' | 'securityEventsCount';
+interface DailyPoint { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount: number; securityEventsCount: number; }
 interface CountRow { key: string; count: number; pct: number; }
 interface MoneyRow { key: string; minor: number; pct: number; }
 interface StationOption { stationId: string; name: string; }
+interface EntityOption { id: string; name: string; }
 interface EntityPerformanceRow {
     siteId: string; groupType: ReportGrouping; entityId: string; entityName: string;
+    vendorName: string; vendorBusinessName: string; customerName: string;
     purchaseCount: number; deliveredCount: number; failedCount: number; customerCount: number;
     directPurchaseCount: number; vendorPurchaseCount: number; revenueMinor: number;
     energyRevenueMinor: number; vatMinor: number; unitsKwh: number; averagePurchaseMinor: number;
@@ -32,6 +35,7 @@ interface ReportOverview {
         ledgerNetMinor?: number; ledgerCreditMinor?: number; ledgerDebitMinor?: number; ledgerEntryCount?: number;
         activeHoldsMinor?: number; activeHoldsCount?: number;
         reconciliationRunCount?: number; reconciliationMismatches?: number; reconciliationMismatchMinor?: number;
+        unitsKwh?: number;
     };
     series: { daily: DailyPoint[] };
     breakdowns: {
@@ -50,6 +54,14 @@ interface ReportOverview {
         entityPerformance: EntityPerformanceRow[];
     };
     sources?: Record<string, number>;
+    quality?: {
+        purchaseGrain: string;
+        purchaseStationScope: string;
+        relatedFinancialStationScope: string;
+        activeHoldsSnapshotAt: string;
+        auditScope: string;
+        reconciliationScope: string;
+    };
 }
 
 const PRESETS = [
@@ -58,19 +70,27 @@ const PRESETS = [
     { key: '90d', label: '90 days', days: 90 },
 ];
 
-const loading = ref(true);
+const loading = ref(false);
 const error = ref('');
 const rangeError = ref('');
 const report = ref<ReportOverview | null>(null);
 const activePreset = ref('30d');
 const since = ref('');
 const until = ref('');
-const metric = ref<'revenueMinor' | 'purchaseCount' | 'fundingMinor' | 'newCustomers'>('revenueMinor');
+const metric = ref<ReportMetric>('revenueMinor');
 const selectedFamily = ref<ReportFamily>('financial');
 const audience = ref<ReportAudience>('all');
 const groupBy = ref<ReportGrouping>('site');
 const siteId = ref('');
 const stations = ref<StationOption[]>([]);
+const vendors = ref<EntityOption[]>([]);
+const customers = ref<EntityOption[]>([]);
+const stationError = ref('');
+const entityError = ref('');
+const transactionStatus = ref<'all' | 'successful' | 'failed'>('all');
+const entityId = ref('');
+const wizardStep = ref(1);
+const hasGenerated = ref(false);
 const breakdownSearch = ref('');
 const breakdownPage = ref(1);
 const BREAKDOWN_PAGE_SIZE = 25;
@@ -82,6 +102,11 @@ const AUDIENCES: { key: ReportAudience; label: string; description: string }[] =
     { key: 'customer', label: 'Customers', description: 'Customer-owned activity' },
 ];
 const audienceLabel = computed(() => AUDIENCES.find((item) => item.key === audience.value)?.label ?? 'Combined');
+const selectedEntityLabel = computed(() => {
+    if (!entityId.value) return groupBy.value === 'vendor' ? 'All vendors' : groupBy.value === 'customer' ? 'All customers' : 'All entities';
+    const options = groupBy.value === 'vendor' ? vendors.value : customers.value;
+    return options.find((item) => item.id === entityId.value)?.name ?? entityId.value;
+});
 
 const GROUPINGS: { key: ReportGrouping; label: string; description: string }[] = [
     { key: 'site', label: 'SiteID', description: 'One row per site' },
@@ -90,7 +115,7 @@ const GROUPINGS: { key: ReportGrouping; label: string; description: string }[] =
 ];
 const groupingLabel = computed(() => GROUPINGS.find((item) => item.key === groupBy.value)?.label ?? 'SiteID');
 
-const REPORT_TEMPLATES: { id: ReportFamily; title: string; description: string; metric: typeof metric.value; icon: string }[] = [
+const REPORT_TEMPLATES: { id: ReportFamily; title: string; description: string; metric: ReportMetric; icon: string }[] = [
     { id: 'financial', title: 'Financial report', description: 'Revenue, funding, settlements', metric: 'revenueMinor', icon: '01' },
     { id: 'transactions', title: 'Transaction report', description: 'Vends, outcomes, volumes', metric: 'purchaseCount', icon: '02' },
     { id: 'vendors-wallets', title: 'Vendors and wallets', description: 'Channels, balances, inflows', metric: 'fundingMinor', icon: '03' },
@@ -100,12 +125,25 @@ const REPORT_TEMPLATES: { id: ReportFamily; title: string; description: string; 
 ];
 const selectedTemplate = computed(() => REPORT_TEMPLATES.find((item) => item.id === selectedFamily.value) ?? REPORT_TEMPLATES[0]);
 
-const METRIC_META: Record<string, { label: string; money: boolean; color: string }> = {
+const METRIC_META: Record<ReportMetric, { label: string; money: boolean; color: string }> = {
     revenueMinor: { label: 'Revenue', money: true, color: '#34d399' },
     purchaseCount: { label: 'Purchases', money: false, color: '#60a5fa' },
     fundingMinor: { label: 'Funding inflow', money: true, color: '#fbbf24' },
     newCustomers: { label: 'New customers', money: false, color: '#a78bfa' },
+    refundMinor: { label: 'Approved refunds', money: true, color: '#f87171' },
+    auditLogsCount: { label: 'Audit events', money: false, color: '#60a5fa' },
+    securityEventsCount: { label: 'Security events', money: false, color: '#f87171' },
 };
+
+const FAMILY_METRICS: Record<ReportFamily, ReportMetric[]> = {
+    financial: ['revenueMinor', 'fundingMinor', 'refundMinor'],
+    transactions: ['purchaseCount', 'revenueMinor'],
+    'vendors-wallets': ['fundingMinor', 'revenueMinor'],
+    audit: ['auditLogsCount', 'securityEventsCount'],
+    disputes: ['refundMinor', 'purchaseCount'],
+    general: ['revenueMinor', 'purchaseCount', 'fundingMinor', 'newCustomers'],
+};
+const metricOptions = computed(() => FAMILY_METRICS[selectedFamily.value].map((key) => ({ key, ...METRIC_META[key] })));
 
 function isoDay(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -115,7 +153,6 @@ function applyPreset(days: number, key: string) {
     const now = new Date();
     until.value = isoDay(now);
     since.value = isoDay(new Date(now.getTime() - (days - 1) * 86400_000));
-    void load();
 }
 
 function applyCustom() {
@@ -129,7 +166,14 @@ function applyCustom() {
         return;
     }
     activePreset.value = 'custom';
-    void load();
+}
+
+async function generateReport() {
+    rangeError.value = '';
+    if (!since.value || !until.value) { rangeError.value = 'Choose both dates.'; return; }
+    if (since.value > until.value) { rangeError.value = 'Start date must precede end date.'; return; }
+    await load();
+    if (!error.value) { hasGenerated.value = true; wizardStep.value = 5; }
 }
 
 async function load() {
@@ -143,6 +187,8 @@ async function load() {
         q.set('family', selectedFamily.value);
         q.set('group_by', groupBy.value);
         if (siteId.value) q.set('site_id', siteId.value);
+        q.set('transaction_status', transactionStatus.value);
+        if (entityId.value) q.set('entity_id', entityId.value);
         const nextReport = await api.get<ReportOverview>(`/api/v1/admin/reports/overview?${q.toString()}`);
         if (requestId === loadSequence) {
             report.value = nextReport;
@@ -159,7 +205,7 @@ function selectAudience(next: ReportAudience) {
     if (audience.value === next) return;
     audience.value = next;
     if (next === 'customer' && groupBy.value === 'vendor') groupBy.value = 'customer';
-    void load();
+    entityId.value = '';
 }
 
 function selectGrouping(next: ReportGrouping) {
@@ -168,23 +214,47 @@ function selectGrouping(next: ReportGrouping) {
     if (next === 'vendor' && audience.value === 'customer') audience.value = 'vendor';
     breakdownSearch.value = '';
     breakdownPage.value = 1;
-    void load();
+    entityId.value = '';
 }
 
 function selectSite() {
     breakdownPage.value = 1;
-    void load();
+}
+
+function selectEntity() {
+    breakdownPage.value = 1;
+    if (!entityId.value) return;
+    audience.value = groupBy.value === 'vendor' ? 'vendor' : 'all';
 }
 
 async function loadStations() {
+    stationError.value = '';
     try {
         const response = await api.get<{ stations: StationOption[] }>('/api/v1/admin/stations');
         stations.value = (response.stations ?? [])
             .map((station) => ({ stationId: String(station.stationId), name: String(station.name || station.stationId) }))
             .sort((a, b) => a.name.localeCompare(b.name));
+        if (!stations.value.length) stationError.value = 'No stations are currently available.';
     } catch {
         stations.value = [];
+        stationError.value = 'Station directory unavailable.';
     }
+}
+
+async function loadEntities() {
+    entityError.value = '';
+    const [vendorResult, customerResult] = await Promise.allSettled([
+        api.get<{ vendors: any[] }>('/api/v1/admin/vendors?limit=500'),
+        api.get<{ customers: any[] }>('/api/v1/admin/customers?limit=500'),
+    ]);
+    vendors.value = vendorResult.status === 'fulfilled' ? (vendorResult.value.vendors ?? []).map((row) => {
+        const legalName = String(row.legal_name || row.trading_name || row.id);
+        const businessName = String(row.trading_name || row.legal_name || row.id);
+        const identity = legalName === businessName ? legalName : `${legalName} — ${businessName}`;
+        return { id: row.id, name: `${identity} · ${String(row.id).slice(0, 8)}` };
+    }) : [];
+    customers.value = customerResult.status === 'fulfilled' ? (customerResult.value.customers ?? []).map((row) => ({ id: row.id, name: row.full_name || row.email || row.id })) : [];
+    if (vendorResult.status === 'rejected' || customerResult.status === 'rejected') entityError.value = 'Some owner directories are unavailable.';
 }
 
 const k = computed(() => report.value?.kpis);
@@ -271,6 +341,13 @@ const ledgerTypeRows = computed(() => {
 });
 
 const reconciliationStatusRows = computed(() => countRows(report.value?.breakdowns.reconciliationByStatus));
+const auditActionRows = computed(() => countRows(report.value?.breakdowns.auditActionsBreakdown));
+const securitySeverityRows = computed(() => countRows(report.value?.breakdowns.securitySeveritiesBreakdown));
+const fundingChannelRows = computed(() => moneyRows(report.value?.breakdowns.fundingByChannel));
+const fundingStatusRows = computed(() => countRows(report.value?.breakdowns.fundingRequestsByStatus));
+const disputeStatusRows = computed(() => countRows(report.value?.breakdowns.disputesByStatus));
+const refundStatusRows = computed(() => countRows(report.value?.breakdowns.refundsByStatus));
+const settlementStatusRows = computed(() => countRows(report.value?.breakdowns.settlementByStatus));
 
 const actorRows = computed(() => {
     const obj = report.value?.breakdowns.revenueByActorType ?? {};
@@ -278,6 +355,60 @@ const actorRows = computed(() => {
     return Object.entries(obj)
         .sort((a, b) => b[1] - a[1])
         .map(([key, minor]) => ({ key, minor, pct: Math.round((minor / total) * 100) }));
+});
+
+type DisplayKpi = { label: string; value: string; note: string; hero?: boolean };
+const reportKpiCards = computed<DisplayKpi[]>(() => {
+    const kp = k.value;
+    if (!kp) return [];
+    const cards: Record<ReportFamily, DisplayKpi[]> = {
+        financial: [
+            { label: 'Delivered revenue', value: fmtMoney(kp.revenueMinor), note: `${fmtNum(kp.deliveredCount)} delivered`, hero: true },
+            { label: 'Energy value', value: fmtMoney(kp.energyRevenueMinor), note: 'Delivered token value' },
+            { label: 'VAT collected', value: fmtMoney(kp.vatMinor), note: 'Delivered purchases only' },
+            { label: 'Funding inflow', value: fmtMoney(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} successful top-ups` },
+            { label: 'Settled net', value: fmtMoney(kp.settlementNetMinor), note: `${fmtNum(kp.settlementBatches)} settled batches` },
+            { label: 'Settlement fees', value: fmtMoney(kp.feeMinor), note: 'Settled batches only' },
+            { label: 'Approved refunds', value: fmtMoney(kp.refundApprovedMinor), note: `${fmtNum(kp.refundCount)} total requests` },
+        ],
+        transactions: [
+            { label: 'Transactions', value: fmtNum(kp.purchaseCount), note: 'Selected statuses only', hero: true },
+            { label: 'Delivered', value: fmtNum(kp.deliveredCount), note: fmtMoney(kp.revenueMinor) },
+            { label: 'Failed', value: fmtNum(kp.failedCount), note: 'Failed purchases only' },
+            { label: 'Success rate', value: `${kp.successRate}%`, note: 'Delivered versus processed' },
+            { label: 'Average purchase', value: fmtMoney(kp.avgOrderValueMinor), note: 'Delivered purchases only' },
+            { label: 'Energy delivered', value: `${Number(kp.unitsKwh ?? 0).toLocaleString('en-NG', { maximumFractionDigits: 2 })} kWh`, note: 'Delivered purchases only' },
+        ],
+        'vendors-wallets': [
+            { label: 'Funding inflow', value: fmtMoney(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} successful top-ups`, hero: true },
+            { label: 'Ledger credits', value: fmtMoney(kp.ledgerCreditMinor ?? 0), note: 'Selected period' },
+            { label: 'Ledger debits', value: fmtMoney(kp.ledgerDebitMinor ?? 0), note: 'Selected period' },
+            { label: 'Ledger net flow', value: fmtMoney(kp.ledgerNetMinor ?? 0), note: `${fmtNum(kp.ledgerEntryCount ?? 0)} entries` },
+            { label: 'Active holds', value: fmtMoney(kp.activeHoldsMinor ?? 0), note: `${fmtNum(kp.activeHoldsCount ?? 0)} current holds` },
+            { label: 'New vendors', value: fmtNum(kp.newVendors), note: 'Created during period' },
+        ],
+        audit: [
+            { label: 'Audit events', value: fmtNum(kp.auditLogsCount ?? 0), note: 'Recorded control actions', hero: true },
+            { label: 'Security events', value: fmtNum(kp.securityEventsCount ?? 0), note: 'Recorded security activity' },
+            { label: 'High alerts', value: fmtNum(kp.securityAlertsHigh ?? 0), note: 'High and critical' },
+        ],
+        disputes: [
+            { label: 'Disputes opened', value: fmtNum(kp.disputesOpened), note: 'Created during period', hero: true },
+            { label: 'Refund requests', value: fmtNum(kp.refundCount), note: 'Created during period' },
+            { label: 'Approved refunds', value: fmtMoney(kp.refundApprovedMinor), note: 'Actual approved amounts' },
+        ],
+        general: [
+            { label: 'Delivered revenue', value: fmtMoney(kp.revenueMinor), note: `${fmtNum(kp.deliveredCount)} delivered`, hero: true },
+            { label: 'Transactions', value: fmtNum(kp.purchaseCount), note: `${fmtNum(kp.failedCount)} failed` },
+            { label: 'Success rate', value: `${kp.successRate}%`, note: 'Delivered versus processed' },
+            { label: 'Funding inflow', value: fmtMoney(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} successful top-ups` },
+            { label: 'Settled net', value: fmtMoney(kp.settlementNetMinor), note: `${fmtNum(kp.settlementBatches)} settled batches` },
+            { label: 'Approved refunds', value: fmtMoney(kp.refundApprovedMinor), note: `${fmtNum(kp.refundCount)} requests` },
+            { label: 'Ledger net flow', value: fmtMoney(kp.ledgerNetMinor ?? 0), note: `${fmtNum(kp.ledgerEntryCount ?? 0)} entries` },
+            { label: 'Reconciliation mismatches', value: fmtNum(kp.reconciliationMismatches ?? 0), note: `${fmtNum(kp.reconciliationRunCount ?? 0)} runs` },
+        ],
+    };
+    return cards[selectedFamily.value];
 });
 
 const STATION_NAMES: Record<string, string> = {};
@@ -289,6 +420,9 @@ async function exportCsv() {
     q.set('audience', audience.value);
     q.set('family', selectedFamily.value);
     q.set('group_by', groupBy.value);
+    q.set('transaction_status', transactionStatus.value);
+    if (entityId.value) q.set('entity_id', entityId.value);
+    if (siteId.value) q.set('site_id', siteId.value);
     try { await downloadAuthedCsv(`/api/v1/admin/reports/export.csv?${q.toString()}`, 'beverly-report'); }
     catch (e: any) { error.value = e?.message ?? 'CSV export failed.'; }
 }
@@ -299,12 +433,14 @@ async function exportPowerBi() {
     if (until.value) q.set('until', until.value);
     q.set('audience', audience.value);
     q.set('group_by', groupBy.value);
+    q.set('transaction_status', transactionStatus.value);
+    if (entityId.value) q.set('entity_id', entityId.value);
     if (siteId.value) q.set('site_id', siteId.value);
     try { await downloadAuthedCsv(`/api/v1/admin/reports/power-bi.csv?${q.toString()}`, 'beverly-power-bi'); }
     catch (e: any) { error.value = e?.message ?? 'Power BI export failed.'; }
 }
 
-function exportPdf() {
+async function exportPdf() {
     if (!report.value) return;
     const kp = report.value.kpis;
     const auditObj = report.value.breakdowns.auditActionsBreakdown || {};
@@ -323,28 +459,12 @@ function exportPdf() {
         pct: Math.round((Number(count) / secTotal) * 100)
     })).sort((a, b) => b.count - a.count);
 
-    downloadReportPdf({
+    await downloadReportPdf({
         family: selectedFamily.value,
         title: `${audienceLabel.value} ${selectedTemplate.value.title}`,
         period: `${report.value.range.since.slice(0, 10)} to ${report.value.range.until.slice(0, 10)} | ${report.value.range.days} days`,
-        generatedBy: `Beverly Wallet Admin · ${audienceLabel.value}`,
-        kpis: selectedFamily.value === 'audit' ? [
-            { label: 'Audit Logs', value: fmtNum(kp.auditLogsCount || 0), note: 'Total events recorded' },
-            { label: 'Security Events', value: fmtNum(kp.securityEventsCount || 0), note: 'Auth & abuse events' },
-            { label: 'High Alerts', value: fmtNum(kp.securityAlertsHigh || 0), note: 'High & critical severity' },
-            { label: 'Success rate', value: `${kp.successRate}%`, note: `${fmtNum(kp.failedCount)} failed vends` },
-            { label: 'Funding inflow', value: naira(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} top-ups` },
-            { label: 'Disputes opened', value: fmtNum(kp.disputesOpened), note: `${fmtNum(kp.refundCount)} refunds` },
-        ] : [
-            { label: 'Revenue', value: naira(kp.revenueMinor), note: `${fmtNum(kp.deliveredCount)} delivered` },
-            { label: 'Energy value', value: naira(kp.energyRevenueMinor), note: 'Token value' },
-            { label: 'Funding inflow', value: naira(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} top-ups` },
-            { label: 'Success rate', value: `${kp.successRate}%`, note: `${fmtNum(kp.failedCount)} failed` },
-            { label: 'Settlement net', value: naira(kp.settlementNetMinor), note: `${fmtNum(kp.settlementBatches)} batches` },
-            { label: 'Disputes opened', value: fmtNum(kp.disputesOpened), note: `${fmtNum(kp.refundCount)} refunds` },
-            { label: 'Ledger net flow', value: naira(kp.ledgerNetMinor ?? 0), note: `${fmtNum(kp.ledgerEntryCount ?? 0)} entries` },
-            { label: 'Active holds', value: naira(kp.activeHoldsMinor ?? 0), note: `${fmtNum(kp.activeHoldsCount ?? 0)} open` },
-        ],
+        generatedBy: `Beverly Wallet Admin · ${audienceLabel.value} · ${siteId.value || 'All stations'} · ${selectedEntityLabel.value}`,
+        kpis: reportKpiCards.value,
         series: report.value.series.daily,
         statusRows: statusRows.value,
         actorRows: actorRows.value,
@@ -368,23 +488,62 @@ function reportInsights(kp: ReportOverview['kpis']): string[] {
     const success = Number(kp.successRate ?? 0).toFixed(1);
     const refundRate = kp.purchaseCount ? ((kp.refundCount / kp.purchaseCount) * 100).toFixed(1) : '0.0';
     const primaryStation = report.value?.breakdowns.topStations[0];
-    return [
-        `Delivery success reached ${success}% across the selected period.`,
-        `Funding inflow totalled ${naira(kp.fundingApprovedMinor)}.`,
-        `Refund volume represented ${refundRate}% of purchases.`,
-        primaryStation ? `${primaryStation.station_id} generated the highest station revenue.` : 'No station ranking was available.',
-    ];
+    const insights: Record<ReportFamily, string[]> = {
+        financial: [
+            `Delivered revenue totalled ${naira(kp.revenueMinor)}.`,
+            `Successful funding totalled ${naira(kp.fundingApprovedMinor)}.`,
+            `Settled net value totalled ${naira(kp.settlementNetMinor)}.`,
+            `Approved refunds totalled ${naira(kp.refundApprovedMinor)}.`,
+        ],
+        transactions: [
+            `Delivery success reached ${success}% across processed purchases.`,
+            `${fmtNum(kp.deliveredCount)} purchases were delivered.`,
+            `${fmtNum(kp.failedCount)} purchases failed.`,
+            primaryStation ? `${primaryStation.station_id} generated the highest delivered revenue.` : 'No station ranking was available.',
+        ],
+        'vendors-wallets': [
+            `Successful funding totalled ${naira(kp.fundingApprovedMinor)}.`,
+            `Ledger net flow totalled ${naira(kp.ledgerNetMinor ?? 0)}.`,
+            `Current active holds totalled ${naira(kp.activeHoldsMinor ?? 0)}.`,
+            `${fmtNum(kp.newVendors)} vendors joined during the period.`,
+        ],
+        audit: [
+            `${fmtNum(kp.auditLogsCount ?? 0)} audit events were recorded.`,
+            `${fmtNum(kp.securityEventsCount ?? 0)} security events were recorded.`,
+            `${fmtNum(kp.securityAlertsHigh ?? 0)} high-priority alerts were recorded.`,
+        ],
+        disputes: [
+            `${fmtNum(kp.disputesOpened)} disputes opened during the period.`,
+            `${fmtNum(kp.refundCount)} refund requests were created.`,
+            `Approved refunds totalled ${naira(kp.refundApprovedMinor)}.`,
+            `Refund requests represented ${refundRate}% of purchases.`,
+        ],
+        general: [
+            `Delivery success reached ${success}% across processed purchases.`,
+            `Successful funding totalled ${naira(kp.fundingApprovedMinor)}.`,
+            `Approved refunds totalled ${naira(kp.refundApprovedMinor)}.`,
+            primaryStation ? `${primaryStation.station_id} generated the highest delivered revenue.` : 'No station ranking was available.',
+        ],
+    };
+    return insights[selectedFamily.value];
 }
 
 function selectTemplate(id: ReportFamily) {
-    if (selectedFamily.value === id) return;
     selectedFamily.value = id;
-    metric.value = REPORT_TEMPLATES.find((item) => item.id === id)?.metric ?? 'revenueMinor';
-    void load();
+    metric.value = FAMILY_METRICS[id][0];
+    if (id === 'audit') {
+        audience.value = 'all';
+        groupBy.value = 'site';
+        entityId.value = '';
+        siteId.value = '';
+    }
+    hasGenerated.value = false;
+    wizardStep.value = id === 'audit' ? 4 : 2;
 }
 
 onMounted(() => {
     void loadStations();
+    void loadEntities();
     applyPreset(30, '30d');
 });
 </script>
@@ -398,13 +557,13 @@ onMounted(() => {
         <p>Select a report, confirm dates, then export.</p>
       </div>
       <div class="rp-download-note">
-        <strong>{{ loading ? 'Loading data' : 'Export ready' }}</strong>
-        <span>{{ selectedTemplate.title }} selected.</span>
+        <strong>{{ loading && hasGenerated ? 'Loading data' : `Step ${wizardStep} of 5` }}</strong>
+        <span>{{ hasGenerated ? 'Report generated.' : 'Choose exact report contents.' }}</span>
       </div>
     </section>
 
-    <p class="rp-step-label">Step 1 · Select report</p>
-    <section class="rp-templates" aria-label="Report templates">
+    <p v-if="wizardStep === 1" class="rp-step-label">Step 1 · Select report</p>
+    <section v-if="wizardStep === 1" class="rp-templates" aria-label="Report templates">
       <button
         v-for="template in REPORT_TEMPLATES"
         :key="template.id"
@@ -418,22 +577,22 @@ onMounted(() => {
         <em>{{ selectedFamily === template.id ? 'Selected' : 'Select report' }}</em>
       </button>
     </section>
-    <p class="rp-step-label">Step 2 · Choose ownership</p>
-    <section class="rp-audiences" aria-label="Report ownership">
+    <p v-if="wizardStep === 2" class="rp-step-label">Step 2 · Choose ownership</p>
+    <section v-if="wizardStep === 2" class="rp-audiences" aria-label="Report ownership">
       <button
         v-for="item in AUDIENCES"
         :key="item.key"
         :class="['rp-audience', audience === item.key && 'selected']"
         :aria-pressed="audience === item.key"
         :disabled="loading"
-        @click="selectAudience(item.key)"
+        @click="selectAudience(item.key); wizardStep = 3"
       >
         <strong>{{ item.label }}</strong>
         <span>{{ item.description }}</span>
       </button>
     </section>
-    <p class="rp-step-label">Step 3 · Group performance</p>
-    <section class="rp-segmentation" aria-label="Performance grouping">
+    <p v-if="wizardStep === 3" class="rp-step-label">Step 3 · Group performance</p>
+    <section v-if="wizardStep === 3" class="rp-segmentation" aria-label="Performance grouping">
       <div class="rp-groupings">
         <button
           v-for="item in GROUPINGS"
@@ -456,11 +615,30 @@ onMounted(() => {
           </option>
         </select>
       </label>
-      <p class="rp-scope-note">Grouping changes the detailed table. Ownership filters sales channels.</p>
+      <div v-if="stationError" class="bw-error-banner rp-scope-error" role="alert">
+        <span>{{ stationError }}</span>
+        <button class="bw-btn bw-btn-sm" @click="loadStations">Retry stations</button>
+      </div>
+      <label v-if="groupBy !== 'site'" class="rp-site-filter">
+        <span>{{ groupBy === 'vendor' ? 'Vendor' : 'Customer' }}</span>
+        <select v-model="entityId" class="bw-input" @change="selectEntity">
+          <option value="">All {{ groupBy === 'vendor' ? 'vendors' : 'customers' }}</option>
+          <option v-for="item in (groupBy === 'vendor' ? vendors : customers)" :key="item.id" :value="item.id">{{ item.name }}</option>
+        </select>
+      </label>
+      <div v-if="entityError && groupBy !== 'site'" class="bw-error-banner rp-scope-error" role="alert">
+        <span>{{ entityError }}</span>
+        <button class="bw-btn bw-btn-sm" @click="loadEntities">Retry owners</button>
+      </div>
+      <p class="rp-scope-note">Grouping changes the detailed table. SiteID limits performance scope.</p>
+      <div class="rp-wizard-actions"><button class="bw-btn" @click="wizardStep = 2">Back</button><button class="bw-btn primary" @click="wizardStep = 4">Continue</button></div>
     </section>
 <!-- Controls -->
-    <div class="rp-controls" :aria-busy="loading">
-      <p class="rp-step-label">Step 4 · Confirm reporting period</p>
+    <div v-if="wizardStep === 4" class="rp-controls" :aria-busy="loading">
+      <p class="rp-step-label">Step 4 · Status and period</p>
+      <div class="rp-status-choice">
+        <button v-for="item in [{ value:'all', label:'All transactions' }, { value:'successful', label:'Successful only' }, { value:'failed', label:'Failed only' }]" :key="item.value" :class="['rp-chip', transactionStatus === item.value && 'on']" @click="transactionStatus = item.value as any">{{ item.label }}</button>
+      </div>
       <div class="rp-presets">
         <button
           v-for="p in PRESETS" :key="p.key"
@@ -473,14 +651,23 @@ onMounted(() => {
         <span class="rp-range-sep">-</span>
         <input v-model="until" type="date" class="bw-input bw-input-sm" aria-label="Report end date" />
         <div class="rp-actions">
-          <button class="bw-btn bw-btn-sm bw-btn-ghost" :disabled="loading" @click="applyCustom">Apply dates</button>
-          <button class="bw-btn bw-btn-sm" :disabled="!report || loading" @click="exportCsv">Daily CSV</button>
-          <button class="bw-btn bw-btn-sm" :disabled="!report || loading || !entityRows.length" @click="exportPowerBi">Power BI CSV</button>
-          <button class="bw-btn bw-btn-sm rp-generate" :disabled="!report || loading" @click="exportPdf">Export PDF</button>
+          <button class="bw-btn bw-btn-sm" :disabled="loading" @click="wizardStep = 3">Back</button>
+          <button class="bw-btn bw-btn-sm rp-generate" :disabled="loading" @click="generateReport">{{ loading ? 'Generating…' : 'Generate report' }}</button>
         </div>
       </div>
       <p v-if="rangeError" class="rp-range-error" role="alert">{{ rangeError }}</p>
+      <div v-if="error" class="bw-error-banner rp-error" role="alert">
+        <span>{{ error }}</span>
+        <button class="bw-btn bw-btn-sm" :disabled="loading" @click="generateReport">Retry</button>
+      </div>
     </div>
+
+    <section v-if="wizardStep === 5 && hasGenerated" class="bw-card rp-review">
+      <div><p class="rp-step-label">Step 5 · Review and export</p><h2>{{ selectedTemplate.title }}</h2><p>{{ audienceLabel }} · {{ groupingLabel }} · {{ transactionStatus }} · {{ siteId || 'All stations' }} · {{ selectedEntityLabel }}</p></div>
+      <div class="rp-actions"><button class="bw-btn" @click="wizardStep = 1; hasGenerated = false">Build another</button><button class="bw-btn" @click="exportCsv">Daily CSV</button><button v-if="selectedFamily !== 'audit' && selectedFamily !== 'disputes'" class="bw-btn" :disabled="!entityRows.length" @click="exportPowerBi">Power BI CSV</button><button class="bw-btn rp-generate" @click="exportPdf">Export PDF</button></div>
+    </section>
+
+    <template v-if="hasGenerated">
 
     <div v-if="error" class="bw-error-banner rp-error" role="alert">
       <span>{{ error }}</span>
@@ -489,61 +676,20 @@ onMounted(() => {
 
     <!-- KPI grid -->
     <div class="rp-kpis bw-mobile-kpi-grid">
-      <div class="rp-kpi rp-kpi--hero">
-        <span class="rp-kpi-label">{{ audience === 'customer' ? 'Customer purchases' : audience === 'vendor' ? 'Vendor revenue' : 'Total revenue' }}</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.deliveredCount ?? 0) }} delivered &middot; avg {{ fmtMoney(k?.avgOrderValueMinor ?? 0) }}</span>
+      <div v-for="card in reportKpiCards" :key="card.label" :class="['rp-kpi', card.hero && 'rp-kpi--hero']">
+        <span class="rp-kpi-label">{{ card.label }}</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : card.value }}</strong>
+        <span class="rp-kpi-sub">{{ card.note }}</span>
       </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">VAT collected</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.vatMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">energy {{ fmtMoney(k?.energyRevenueMinor ?? 0) }}</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Success rate</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : (k?.successRate ?? 0) + '%' }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.failedCount ?? 0) }} failed</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">{{ audience === 'vendor' ? 'Vendor funding' : audience === 'customer' ? 'Customer funding' : 'Funding inflow' }}</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.fundingCount ?? 0) }} top-ups</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">{{ audience === 'customer' ? 'Average purchase' : 'Settlement (net)' }}</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(audience === 'customer' ? (k?.avgOrderValueMinor ?? 0) : (k?.settlementNetMinor ?? 0)) }}</strong>
-        <span class="rp-kpi-sub">{{ audience === 'customer' ? fmtNum(k?.deliveredCount ?? 0) + ' delivered' : fmtNum(k?.settlementBatches ?? 0) + ' batches' }}</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Refunds approved</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.refundApprovedMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.refundCount ?? 0) }} requests</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Disputes</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.disputesOpened ?? 0) }}</strong>
-        <span class="rp-kpi-sub">opened in range</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">{{ audience === 'vendor' ? 'New vendors' : audience === 'customer' ? 'New customers' : 'New accounts' }}</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(audience === 'vendor' ? (k?.newVendors ?? 0) : audience === 'customer' ? (k?.newCustomers ?? 0) : (k?.newCustomers ?? 0) + (k?.newVendors ?? 0)) }}</strong>
-        <span class="rp-kpi-sub">in range</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Ledger net flow</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.ledgerNetMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.ledgerEntryCount ?? 0) }} ledger entries</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Active holds</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.activeHoldsMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.activeHoldsCount ?? 0) }} open</span>
-      </div>
-      <div class="rp-kpi">
-        <span class="rp-kpi-label">Reconciliation</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.reconciliationMismatches ?? 0) }}</strong>
-        <span class="rp-kpi-sub">mismatched of {{ fmtNum(k?.reconciliationRunCount ?? 0) }} runs</span>
-      </div>
+    </div>
+
+    <div v-if="report?.quality" class="rp-quality-note" role="note">
+      <strong>Reporting basis</strong>
+      <span>Purchases use recorded event StationIDs.</span>
+      <span v-if="siteId">Related financial activity uses current owner assignments.</span>
+      <span v-if="selectedFamily === 'vendors-wallets' || selectedFamily === 'general'">Active holds are a current snapshot.</span>
+      <span v-if="siteId && selectedFamily === 'audit'">Audit events lack StationID attribution.</span>
+      <span v-if="siteId && (selectedFamily === 'financial' || selectedFamily === 'general')">Reconciliation remains globally attributed.</span>
     </div>
 
     <!-- Trend chart -->
@@ -555,9 +701,9 @@ onMounted(() => {
         </div>
         <div class="rp-metric-toggle">
           <button
-            v-for="(m, key) in METRIC_META" :key="key"
-            :class="['rp-chip sm', metric === key && 'on']"
-            @click="metric = key as any"
+            v-for="m in metricOptions" :key="m.key"
+            :class="['rp-chip sm', metric === m.key && 'on']"
+            @click="metric = m.key"
           >{{ m.label }}</button>
         </div>
       </div>
@@ -587,7 +733,7 @@ onMounted(() => {
       </svg>
     </section>
 
-    <section class="bw-card rp-entity-card" aria-labelledby="entity-performance-heading">
+    <section v-if="selectedFamily !== 'audit' && selectedFamily !== 'disputes'" class="bw-card rp-entity-card" aria-labelledby="entity-performance-heading">
       <div class="rp-entity-head">
         <div>
           <p class="bw-label" style="color: var(--brand)">Performance breakdown</p>
@@ -626,7 +772,10 @@ onMounted(() => {
           <tbody>
             <tr v-for="row in pagedEntityRows" :key="`${row.siteId}:${row.groupType}:${row.entityId}`">
               <td class="bw-mono bw-text-sm">{{ row.siteId }}</td>
-              <td>{{ row.entityName }}</td>
+              <td>
+                <div>{{ row.vendorName || row.customerName || row.entityName }}</div>
+                <span v-if="row.vendorBusinessName && row.vendorBusinessName !== row.vendorName" class="bw-muted bw-text-sm">{{ row.vendorBusinessName }}</span>
+              </td>
               <td v-if="groupBy !== 'site'" class="bw-mono bw-text-sm">{{ row.entityId }}</td>
               <td>{{ fmtNum(row.purchaseCount) }}</td>
               <td>{{ fmtNum(row.deliveredCount) }}</td>
@@ -650,7 +799,7 @@ onMounted(() => {
 
     <!-- Breakdowns -->
     <div class="rp-breakdowns">
-      <section class="bw-card">
+      <section v-if="selectedFamily === 'transactions' || selectedFamily === 'general'" class="bw-card">
         <p class="bw-label" style="color: var(--brand)">Quality</p>
         <h2 class="bw-h2">Purchases by status</h2>
         <div v-if="!statusRows.length" class="bw-empty">No purchases.</div>
@@ -661,7 +810,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="bw-card">
+      <section v-if="selectedFamily === 'financial' || selectedFamily === 'transactions' || selectedFamily === 'general'" class="bw-card">
         <p class="bw-label" style="color: var(--brand)">Mix</p>
         <h2 class="bw-h2">Revenue by channel</h2>
         <div v-if="!actorRows.length" class="bw-empty">No revenue.</div>
@@ -672,7 +821,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="bw-card">
+      <section v-if="selectedFamily === 'vendors-wallets' || selectedFamily === 'general'" class="bw-card">
         <p class="bw-label" style="color: var(--brand)">Ledger</p>
         <h2 class="bw-h2">Movement by entry type</h2>
         <div v-if="!ledgerTypeRows.length" class="bw-empty">No ledger activity.</div>
@@ -687,7 +836,7 @@ onMounted(() => {
         </table>
       </section>
 
-      <section class="bw-card">
+      <section v-if="selectedFamily === 'financial' || selectedFamily === 'general'" class="bw-card">
         <p class="bw-label" style="color: var(--brand)">Integrity</p>
         <h2 class="bw-h2">Reconciliation runs</h2>
         <div v-if="!reconciliationStatusRows.length" class="bw-empty">No reconciliation runs in range.</div>
@@ -699,7 +848,7 @@ onMounted(() => {
         <p v-if="k?.reconciliationMismatchMinor" class="rp-kpi-sub" style="margin-top:8px">Total mismatch: {{ fmtMoney(k.reconciliationMismatchMinor) }}</p>
       </section>
 
-      <section class="bw-card">
+      <section v-if="selectedFamily === 'financial' || selectedFamily === 'transactions' || selectedFamily === 'general'" class="bw-card">
         <p class="bw-label" style="color: var(--brand)">Network</p>
         <h2 class="bw-h2">Top stations</h2>
         <div v-if="!(report?.breakdowns.topStations.length)" class="bw-empty">No station activity.</div>
@@ -714,7 +863,74 @@ onMounted(() => {
           </tbody>
         </table>
       </section>
+
+      <section v-if="selectedFamily === 'audit'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Controls</p>
+        <h2 class="bw-h2">Audit actions</h2>
+        <div v-if="!auditActionRows.length" class="bw-empty">No audit events.</div>
+        <div v-for="r in auditActionRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+      </section>
+
+      <section v-if="selectedFamily === 'audit'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Security</p>
+        <h2 class="bw-h2">Security severity</h2>
+        <div v-if="!securitySeverityRows.length" class="bw-empty">No security events.</div>
+        <div v-for="r in securitySeverityRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+      </section>
+
+      <section v-if="selectedFamily === 'vendors-wallets'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Funding</p>
+        <h2 class="bw-h2">Approved funding channels</h2>
+        <div v-if="!fundingChannelRows.length" class="bw-empty">No approved funding requests.</div>
+        <div v-for="r in fundingChannelRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtMoney(r.minor) }}</span>
+        </div>
+      </section>
+
+      <section v-if="selectedFamily === 'vendors-wallets'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Workflow</p>
+        <h2 class="bw-h2">Funding request states</h2>
+        <div v-if="!fundingStatusRows.length" class="bw-empty">No funding requests.</div>
+        <div v-for="r in fundingStatusRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+      </section>
+
+      <section v-if="selectedFamily === 'disputes'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Cases</p>
+        <h2 class="bw-h2">Dispute states</h2>
+        <div v-if="!disputeStatusRows.length" class="bw-empty">No disputes.</div>
+        <div v-for="r in disputeStatusRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+      </section>
+
+      <section v-if="selectedFamily === 'disputes'" class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Refunds</p>
+        <h2 class="bw-h2">Refund request states</h2>
+        <div v-if="!refundStatusRows.length" class="bw-empty">No refund requests.</div>
+        <div v-for="r in refundStatusRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+      </section>
     </div>
+    </template>
   </AppShell>
 </template>
 
@@ -726,6 +942,14 @@ onMounted(() => {
 .rp-groupings { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s-3); }
 .rp-site-filter, .rp-breakdown-search { display:grid; gap:6px; color:var(--text-muted); font-size:var(--t-xs); font-weight:700; }
 .rp-scope-note { grid-column:1 / -1; margin:0; color:var(--text-muted); font-size:var(--t-xs); }
+.rp-scope-error { grid-column:1 / -1; margin:0; }
+.rp-wizard-actions { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:var(--s-2); }
+.rp-status-choice { display:flex; flex-wrap:wrap; gap:var(--s-2); }
+.rp-review { display:flex; align-items:center; justify-content:space-between; gap:var(--s-4); margin-bottom:var(--s-4); border-color:oklch(from var(--brand) l c h / .35); }
+.rp-review h2 { margin:4px 0; }
+.rp-review p { margin:0; color:var(--text-muted); font-size:var(--t-sm); }
+.rp-quality-note { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 var(--s-4); padding:var(--s-3) var(--s-4); border:1px solid var(--border); border-radius:var(--r-md); color:var(--text-muted); background:var(--surface); font-size:var(--t-xs); }
+.rp-quality-note strong { color:var(--text); }
 .rp-audience { display:grid; gap:3px; padding:var(--s-3) var(--s-4); text-align:left; color:var(--text); font:inherit; cursor:pointer; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .rp-audience span { color:var(--text-muted); font-size:var(--t-xs); }
 .rp-audience.selected { border-color:var(--brand); background:oklch(from var(--brand) l c h / .12); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .18); }

@@ -24,9 +24,11 @@ import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, naira, shortDate, ApiError } from '../lib/api';
-import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 const remoteTrackerOpen = ref(false);
@@ -76,9 +78,21 @@ interface Purchase {
     delivery_state: string | null;
     failure_reason: string | null;
     created_at: string;
+    vended_by?: string | null;
+    vended_by_name?: string | null;
+    vendor_business_name?: string | null;
+    wallet_name?: string | null;
+    purchase_way?: string | null;
 }
 
 interface PurchaseSummary {
+    totalCount: number;
+    totalValueMinor: number;
+    successCount: number;
+    successValueMinor: number;
+    failedCount: number;
+    failedValueMinor: number;
+    refundedValueMinor: number;
     todayCount: number;
     todayValueMinor: number;
     last24hCount: number;
@@ -106,11 +120,12 @@ interface PurchaseDetail {
 // â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const summary = ref<PurchaseSummary | null>(null);
 const items = ref<Purchase[]>([]);
-const totalCount = computed(() => summary.value?.todayCount || items.value.length);
+const totalCount = computed(() => summary.value?.totalCount ?? items.value.length);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
+const filtersOpen = ref(false);
 
 const paginatedItems = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
@@ -126,7 +141,47 @@ const fMeterType = ref('');
 const fQ         = ref('');
 const fSince     = ref('');
 const fUntil     = ref('');
+const activeFilterCount = computed(() => [
+    fStatus.value,
+    fActorType.value,
+    fStation.value,
+    fMeterType.value,
+    fQ.value.trim(),
+    fSince.value,
+    fUntil.value,
+].filter(Boolean).length);
 const stationOptions = ref<{ stationId: string; name: string; oemName: string | null }[]>([]);
+const purchaseStatusOptions = [
+    { value: 'delivered', label: 'Successful transactions' },
+    { value: 'failed', label: 'Failed transactions' },
+    { value: 'hold_active', label: 'Hold active' },
+    { value: 'dispatching', label: 'Dispatching' },
+    { value: 'reversed', label: 'Reversed' },
+];
+const purchaseExportColumns: WalletExportColumn<Purchase>[] = [
+    { key: 'id', header: 'Transaction ID', value: (p) => p.id },
+    { key: 'created_at', header: 'When', value: (p) => p.created_at },
+    { key: 'vended_by', header: 'Vendor Name', value: (p) => p.vended_by_name ?? p.vended_by ?? '' },
+    { key: 'vendor_business', header: 'Vendor Business', value: (p) => p.vendor_business_name ?? '' },
+    { key: 'buyer', header: 'Customer', value: (p) => p.customer_name ?? '' },
+    { key: 'meter_id', header: 'Meter', value: (p) => p.meter_id },
+    { key: 'meter_type', header: 'Phase', value: (p) => meterTypeLabel(p.meter_type) },
+    { key: 'station_id', header: 'StationID', value: (p) => p.station_id ?? '' },
+    { key: 'purchase_way', header: 'Purchase Way', value: (p) => p.purchase_way ?? p.purchase_mode },
+    { key: 'wallet_name', header: 'Wallet', value: (p) => p.wallet_name ?? '' },
+    { key: 'amount', header: 'Amount (NGN)', value: (p) => (p.amount_minor ?? 0) / 100 },
+    { key: 'energy_amount', header: 'Energy Value (NGN)', value: (p) => (p.energy_amount_minor ?? 0) / 100 },
+    { key: 'vat_amount', header: 'VAT (NGN)', value: (p) => (p.vat_amount_minor ?? 0) / 100 },
+    { key: 'units_kwh', header: 'Units (kWh)', value: (p) => p.units_kwh ?? '' },
+    { key: 'status', header: 'Status', value: (p) => p.status },
+];
+const purchaseActorOptions = computed(() => {
+    const seen = new Map<string, string>();
+    for (const item of items.value) {
+        if (item.actor_id) seen.set(item.actor_id, item.vended_by || item.customer_name || item.actor_id);
+    }
+    return [...seen].map(([value, label]) => ({ value, label }));
+});
 
 async function loadStations() {
     try {
@@ -137,27 +192,34 @@ async function loadStations() {
     }
 }
 
+function purchaseFilterParams() {
+    const params = new URLSearchParams();
+    if (fStatus.value) params.set('status', fStatus.value);
+    if (fActorType.value) params.set('actorType', fActorType.value);
+    if (fStation.value) params.set('station', fStation.value);
+    if (fMeterType.value) params.set('meterType', fMeterType.value);
+    if (fQ.value.trim()) params.set('q', fQ.value.trim());
+    if (fSince.value) params.set('since', new Date(fSince.value).toISOString());
+    if (fUntil.value) params.set('until', new Date(fUntil.value).toISOString());
+    return params;
+}
+
 async function loadSummary() {
-    try { summary.value = await api.get<PurchaseSummary>('/api/v1/admin/purchases/summary'); }
+    try { summary.value = await api.get<PurchaseSummary>(`/api/v1/admin/purchases/summary?${purchaseFilterParams()}`); }
     catch { /* supplementary */ }
 }
 
 async function loadList(reset = true) {
     loading.value = true;
+    if (reset) currentPage.value = 1;
     try {
-        const p = new URLSearchParams();
-        if (fStatus.value)    p.set('status',    fStatus.value);
-        if (fActorType.value) p.set('actorType', fActorType.value);
-        if (fStation.value)   p.set('station',   fStation.value);
-        if (fMeterType.value) p.set('meterType', fMeterType.value);
-        if (fQ.value)         p.set('q',         fQ.value);
-        if (fSince.value)     p.set('since',     new Date(fSince.value).toISOString());
-        if (fUntil.value)     p.set('until',     new Date(fUntil.value).toISOString());
+        const p = purchaseFilterParams();
         p.set('limit', '100');
         if (!reset && cursor.value) p.set('cursor', cursor.value);
         const r = await api.get<{ purchases: Purchase[]; nextCursor: string | null }>(`/api/v1/admin/purchases?${p}`);
         items.value = reset ? r.purchases : [...items.value, ...r.purchases];
         cursor.value = r.nextCursor;
+        if (reset) await loadSummary();
     } catch (e: any) {
         banner.value = { tone: 'error', text: e?.message ?? 'Could not load purchases.' };
     } finally { loading.value = false; }
@@ -344,40 +406,24 @@ function buildPurchaseRowActions(p: Purchase): ActionItem[] {
     return actions;
 }
 
-function exportCsvRows() {
-    exportCsv('purchases', items.value, [
-        { key: 'id', header: 'ID', value: (p) => p.id },
-        { key: 'created_at', header: 'When', value: (p) => p.created_at },
-        { key: 'actor_type', header: 'Actor', value: (p) => p.actor_type },
-        { key: 'buyer', header: 'Buyer', value: (p) => p.customer_name ?? '' },
-        { key: 'meter_id', header: 'Meter', value: (p) => p.meter_id },
-        { key: 'meter_type', header: 'Phase', value: (p) => meterTypeLabel(p.meter_type) },
-        { key: 'station_id', header: 'Station', value: (p) => p.station_id ?? '' },
-        { key: 'amount', header: 'Amount (â‚¦)', value: (p) => (p.amount_minor ?? 0) / 100 },
-        { key: 'energy_amount', header: 'Energy Value (â‚¦)', value: (p) => (p.energy_amount_minor ?? 0) / 100 },
-        { key: 'vat_amount', header: 'VAT (â‚¦)', value: (p) => (p.vat_amount_minor ?? 0) / 100 },
-        { key: 'units_kwh', header: 'Units (kWh)', value: (p) => p.units_kwh ?? '' },
-        { key: 'status', header: 'Status', value: (p) => p.status },
-    ]);
-}
-
-function exportPdfDoc() {
-    printPdf({
-        title: 'Purchases',
-        subtitle: `${items.value.length} loaded purchases`,
-        meta: [
-            { label: 'Rows', value: String(items.value.length) },
-            { label: 'Total value', value: naira(items.value.reduce((s, p) => s + Number(p.amount_minor ?? 0), 0)) },
-            { label: 'VAT', value: naira(items.value.reduce((s, p) => s + Number(p.vat_amount_minor ?? 0), 0)) },
-        ],
-        tables: [{
-            title: 'Purchases',
-            columns: ['When', 'Buyer', 'Meter', 'Phase', 'Station', 'Amount', 'VAT', 'Status'],
-            rows: items.value.map((p) => [
-                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, meterTypeLabel(p.meter_type), p.station_id ?? 'â€”', naira(p.amount_minor), naira(p.vat_amount_minor ?? 0), p.status,
-            ]),
-        }],
-    });
+async function resolvePurchaseExportRows(selection: WalletExportSelection): Promise<Purchase[]> {
+    const result: Purchase[] = [];
+    let next: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+        const params = new URLSearchParams();
+        params.set('limit', '500');
+        if (selection.status) params.set('status', selection.status);
+        if (selection.station) params.set('station', selection.station);
+        if (selection.actor) params.set('actorId', selection.actor);
+        if (selection.since) params.set('since', new Date(`${selection.since}T00:00:00`).toISOString());
+        if (selection.until) params.set('until', new Date(`${selection.until}T23:59:59.999`).toISOString());
+        if (next) params.set('cursor', next);
+        const response = await api.get<{ purchases: Purchase[]; nextCursor: string | null }>(`/api/v1/admin/purchases?${params}`);
+        result.push(...(response.purchases ?? []));
+        next = response.nextCursor;
+        if (!next) break;
+    }
+    return result;
 }
 
 function viewPurchaseReceipt(p: Purchase | PurchaseDetail['purchase']) {
@@ -388,7 +434,7 @@ function printPurchaseReceipt(p: Purchase | PurchaseDetail['purchase']) {
     printReceipt(purchaseReceipt(p));
 }
 
-onMounted(() => { void loadStations(); void loadSummary(); void loadList(); });
+onMounted(() => { void loadStations(); void loadList(); });
 watch([fStatus, fActorType], () => loadList());
 </script>
 
@@ -397,93 +443,33 @@ watch([fStatus, fActorType], () => loadList());
 <transition name="banner">
       <div v-if="banner" :class="['bw-banner', banner.tone]" role="status">
         {{ banner.text }}
-        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">Ã—</button>
+        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
       </div>
     </transition>
 
     <!-- KPI strip -->
     <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
-        <p class="kpi-label">Today</p>
-        <p class="kpi-value">{{ naira(summary?.todayValueMinor) }}</p>
-        <p class="kpi-sub">{{ summary?.todayCount ?? 0 }} purchases</p>
+        <p class="kpi-label">All purchases</p>
+        <p class="kpi-value">{{ summary?.totalCount ?? 0 }}</p>
+        <p class="kpi-sub">{{ summary?.successCount ?? 0 }} successful</p>
       </div>
       <div class="kpi-tile">
-        <p class="kpi-label">Last 24h</p>
-        <p class="kpi-value">{{ naira(summary?.last24hValueMinor) }}</p>
-        <p class="kpi-sub">{{ summary?.last24hCount ?? 0 }} purchases</p>
+        <p class="kpi-label">Total amount</p>
+        <p class="kpi-value">{{ naira(summary?.totalValueMinor) }}</p>
+        <p class="kpi-sub">gross purchase value</p>
       </div>
       <div class="kpi-tile">
-        <p class="kpi-label">Failed 24h</p>
-        <p class="kpi-value" :style="{ color: (summary?.failed24hCount ?? 0) > 0 ? 'var(--danger)' : undefined }">
-          {{ summary?.failed24hCount ?? 0 }}
+        <p class="kpi-label">Failed</p>
+        <p class="kpi-value" :style="{ color: (summary?.failedCount ?? 0) > 0 ? 'var(--danger)' : undefined }">
+          {{ summary?.failedCount ?? 0 }}
         </p>
-        <p class="kpi-sub">needs review</p>
+        <p class="kpi-sub">{{ naira(summary?.failedValueMinor) }}</p>
       </div>
       <div class="kpi-tile">
         <p class="kpi-label">Refunded</p>
         <p class="kpi-value">{{ summary?.refundedCount ?? 0 }}</p>
-        <p class="kpi-sub">all time</p>
-      </div>
-    </div>
-
-    <!-- Filters -->
-    <div class="bw-card filter-card">
-      <div class="filter-grid">
-        <div>
-          <label class="bw-label">Status</label>
-          <select class="bw-input" v-model="fStatus">
-            <option value="">All</option>
-            <option value="created">Created</option>
-            <option value="hold_active">Hold active</option>
-            <option value="processing">Processing</option>
-            <option value="delivered">Delivered</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="refunded">Refunded</option>
-          </select>
-        </div>
-        <div>
-          <label class="bw-label">Actor</label>
-          <select class="bw-input" v-model="fActorType">
-            <option value="">All</option>
-            <option value="vendor">Vendor</option>
-            <option value="customer">Customer</option>
-          </select>
-        </div>
-        <div>
-          <label class="bw-label">Station</label>
-          <select class="bw-input bw-mono" v-model="fStation" @change="loadList()">
-            <option value="">All</option>
-            <option v-for="station in stationOptions" :key="station.stationId" :value="station.stationId">
-              {{ station.name || station.stationId }}{{ station.oemName ? ` · ${station.oemName}` : '' }}
-            </option>
-          </select>
-        </div>
-        <div>
-          <label class="bw-label">Phase</label>
-          <select class="bw-input" v-model="fMeterType">
-            <option value="">All</option>
-            <option value="single_phase">Single Phase</option>
-            <option value="three_phase">Three Phase</option>
-          </select>
-        </div>
-        <div>
-          <label class="bw-label">Search</label>
-          <input class="bw-input bw-mono" v-model="fQ" placeholder="meter / customer / id" @keyup.enter="loadList()" />
-        </div>
-        <div>
-          <label class="bw-label">Since</label>
-          <input class="bw-input" type="datetime-local" v-model="fSince" />
-        </div>
-        <div>
-          <label class="bw-label">Until</label>
-          <input class="bw-input" type="datetime-local" v-model="fUntil" />
-        </div>
-        <div class="filter-actions">
-          <button class="bw-btn" @click="resetFilters">Reset</button>
-          <button class="bw-btn primary" @click="loadList()">Apply</button>
-        </div>
+        <p class="kpi-sub">{{ naira(summary?.refundedValueMinor) }}</p>
       </div>
     </div>
 
@@ -499,9 +485,45 @@ watch([fStatus, fActorType], () => loadList());
           <div class="bw-card-sub">Electricity vending transactions and token generations</div>
         </div>
         <div class="bw-table-actions">
+          <button type="button" :class="['bw-btn', 'sm', 'purchase-filter-button', { active: filtersOpen || activeFilterCount }]" aria-label="Filter purchases" :aria-expanded="filtersOpen" aria-controls="purchase-filters" @click="filtersOpen = !filtersOpen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16l-6.5 7.4V19l-3 1v-7.6L4 5Z" /></svg>
+            <span>Filter</span>
+            <span v-if="activeFilterCount" class="purchase-filter-count">{{ activeFilterCount }}</span>
+          </button>
           <WalletDataViewSwitch v-model="cardView" label="Purchase display view" />
-          <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">Export CSV</button>
-          <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc">PDF</button>
+          <WalletExportWizard
+            :rows="items"
+            :columns="purchaseExportColumns"
+            filename="beverly-admin-purchases"
+            title="Token Purchases"
+            subtitle="Choose exact transaction contents."
+            :loading="loading"
+            :status-options="purchaseStatusOptions"
+            :station-options="stationOptions.map(item => ({ value: item.stationId, label: `${item.name || item.stationId} · ${item.stationId}` }))"
+            :actor-options="purchaseActorOptions"
+            :initial-status="fStatus"
+            :initial-station="fStation"
+            :initial-since="fSince ? fSince.slice(0, 10) : ''"
+            :initial-until="fUntil ? fUntil.slice(0, 10) : ''"
+            :date-value="(row: Purchase) => row.created_at"
+            :status-value="(row: Purchase) => row.status"
+            :station-value="(row: Purchase) => row.station_id"
+            :actor-value="(row: Purchase) => row.actor_id"
+            :resolve-rows="resolvePurchaseExportRows"
+          />
+        </div>
+      </div>
+
+      <div v-if="filtersOpen" id="purchase-filters" class="purchase-filter-panel">
+        <div class="filter-grid">
+          <div><label class="bw-label">Status</label><select class="bw-input" v-model="fStatus"><option value="">All</option><option value="created">Created</option><option value="hold_active">Hold active</option><option value="processing">Processing</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select></div>
+          <div><label class="bw-label">Actor</label><select class="bw-input" v-model="fActorType"><option value="">All</option><option value="vendor">Vendor</option><option value="customer">Customer</option></select></div>
+          <div><label class="bw-label">Station</label><select class="bw-input bw-mono" v-model="fStation"><option value="">All</option><option v-for="station in stationOptions" :key="station.stationId" :value="station.stationId">{{ station.name || station.stationId }}{{ station.oemName ? ` · ${station.oemName}` : '' }}</option></select></div>
+          <div><label class="bw-label">Phase</label><select class="bw-input" v-model="fMeterType"><option value="">All</option><option value="single_phase">Single Phase</option><option value="three_phase">Three Phase</option></select></div>
+          <div><label class="bw-label">Search</label><input class="bw-input bw-mono" v-model="fQ" placeholder="meter / customer / id" @keyup.enter="loadList()" /></div>
+          <div><label class="bw-label">Since</label><input class="bw-input" type="datetime-local" v-model="fSince" /></div>
+          <div><label class="bw-label">Until</label><input class="bw-input" type="datetime-local" v-model="fUntil" /></div>
+          <div class="filter-actions"><button class="bw-btn" @click="resetFilters">Reset</button><button class="bw-btn primary" @click="loadList()">Apply</button></div>
         </div>
       </div>
 
@@ -511,6 +533,7 @@ watch([fStatus, fActorType], () => loadList());
           <thead>
             <tr>
               <th>When</th>
+              <th>Vended By</th>
               <th>Buyer</th>
               <th>Meter</th>
               <th>Phase</th>
@@ -524,6 +547,10 @@ watch([fStatus, fActorType], () => loadList());
           <tbody>
             <tr v-for="p in paginatedItems" :key="p.id" @click="openDetail(p)" class="p-row">
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
+              <td>
+                <div class="bw-truncate" style="max-width: 220px">{{ p.vended_by_name || (p.actor_type === 'customer' ? p.customer_name : '—') }}</div>
+                <span class="bw-muted" style="font-size: 10px">{{ p.vendor_business_name || (p.actor_type === 'customer' ? 'Customer self-vend' : '—') }}</span>
+              </td>
               <td>
                 <div class="bw-truncate" style="max-width: 180px">{{ p.customer_name || '—' }}</div>
                 <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span>
@@ -547,7 +574,7 @@ watch([fStatus, fActorType], () => loadList());
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="10" class="bw-muted empty">No purchases match the filters.</td>
+              <td colspan="11" class="bw-muted empty">No purchases match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -558,15 +585,23 @@ watch([fStatus, fActorType], () => loadList());
         <div v-for="p in paginatedItems" :key="p.id" class="p-card" @click="openDetail(p)">
           <div class="pc-head">
             <div>
-              <div class="bw-money pc-amount">{{ naira(p.amount_minor) }}</div>
-              <div class="bw-muted pc-meta">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
+              <div class="pc-amount">{{ p.vended_by_name || (p.actor_type === 'customer' ? p.customer_name : 'Vendor operator') }}</div>
+              <div class="bw-muted pc-meta">{{ p.vendor_business_name || (p.actor_type === 'customer' ? 'Customer self-vend' : '—') }}</div>
               <div class="bw-mono pc-meta">{{ p.meter_id }} · {{ shortDate(p.created_at) }}</div>
             </div>
-            <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
+            <div style="display:grid; justify-items:end; gap:4px">
+              <div class="bw-money pc-amount">{{ naira(p.amount_minor) }}</div>
+              <div class="bw-muted pc-meta">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
+              <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
+            </div>
           </div>
           <div class="pc-row">
             <span class="pc-label">Buyer</span>
             <span>{{ p.customer_name || '—' }} <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span></span>
+          </div>
+          <div class="pc-row">
+            <span class="pc-label">Vended By</span>
+            <span>{{ p.vended_by || '—' }}</span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Station</span>
@@ -608,11 +643,11 @@ watch([fStatus, fActorType], () => loadList());
 
             <header class="drawer-head">
               <div>
-                <p class="drawer-eyebrow">Purchase Â· {{ detail.purchase.actor_type }}</p>
+                <p class="drawer-eyebrow">Purchase · {{ detail.purchase.actor_type }}</p>
                 <h2 class="drawer-title">{{ naira(detail.purchase.amount_minor) }}</h2>
                 <p class="bw-mono drawer-id">{{ detail.purchase.id }}</p>
               </div>
-              <button class="drawer-x" @click="closeDetail" aria-label="Close">Ã—</button>
+              <button class="drawer-x" @click="closeDetail" aria-label="Close purchase details">×</button>
             </header>
 
             <!-- Status + key facts -->
@@ -622,7 +657,7 @@ watch([fStatus, fActorType], () => loadList());
                 {{ meterTypeLabel(detail.purchase.meter_type) }}
               </span>
               <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(4) }} kWh</span>
-              <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || 'â€”' }}</span>
+              <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || '—' }}</span>
             </div>
 
             <!-- Token -->
@@ -630,7 +665,7 @@ watch([fStatus, fActorType], () => loadList());
               <p class="dr-token-label">Token</p>
               <div class="dr-token-row">
                 <span class="dr-token-value bw-mono">{{ detail.purchase.token }}</span>
-                <button class="bw-btn sm" @click="copyToken">{{ copied ? 'Copied âœ“' : 'Copy' }}</button>
+                <button class="bw-btn sm" @click="copyToken">{{ copied ? 'Copied ✓' : 'Copy' }}</button>
               </div>
             </div>
 
@@ -657,10 +692,12 @@ watch([fStatus, fActorType], () => loadList());
             <div class="dr-block">
               <p class="dr-block-title">Details</p>
               <dl class="dr-dl">
-                <dt>Buyer</dt><dd>{{ detail.purchase.customer_name || 'â€”' }}</dd>
+                <dt>Buyer</dt><dd>{{ detail.purchase.customer_name || '—' }}</dd>
+                <dt>Vended By</dt><dd>{{ detail.purchase.vended_by || '—' }}</dd>
+                <dt>Wallet</dt><dd>{{ detail.purchase.wallet_name || '—' }}</dd>
                 <dt>Meter</dt><dd class="bw-mono">{{ detail.purchase.meter_id }}</dd>
                 <dt>Phase</dt><dd>{{ meterTypeLabel(detail.purchase.meter_type) }}</dd>
-                <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || 'â€”' }}</dd>
+                <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || '—' }}</dd>
                 <dt>Mode</dt><dd>{{ detail.purchase.purchase_mode }}</dd>
                 <dt>Amount paid</dt><dd>{{ naira(detail.purchase.amount_minor) }}</dd>
                 <dt>Energy value</dt><dd>{{ naira(detail.purchase.energy_amount_minor ?? 0) }}</dd>
@@ -668,7 +705,7 @@ watch([fStatus, fActorType], () => loadList());
                 <dt>Receipt</dt>
                 <dd>
                   <span v-if="detail.receipt" class="bw-mono">#{{ String(detail.receipt.id).slice(0, 8) }}</span>
-                  <span v-else class="bw-muted">â€”</span>
+                  <span v-else class="bw-muted">—</span>
                 </dd>
                 <dt v-if="detail.purchase.failure_reason">Failure</dt>
                 <dd v-if="detail.purchase.failure_reason" style="color: var(--danger)">{{ detail.purchase.failure_reason }}</dd>
@@ -677,14 +714,14 @@ watch([fStatus, fActorType], () => loadList());
 
             <!-- Ledger -->
             <div class="dr-block">
-              <p class="dr-block-title">Ledger Â· {{ detail.ledger_entries.length }}</p>
+              <p class="dr-block-title">Ledger · {{ detail.ledger_entries.length }}</p>
               <div v-if="!detail.ledger_entries.length" class="bw-muted empty">No ledger movements.</div>
               <ul v-else class="ledger-list">
                 <li v-for="e in detail.ledger_entries" :key="e.id" class="ledger-row">
                   <span class="bw-mono ledger-when">{{ shortDate(e.created_at) }}</span>
                   <span class="bw-mono ledger-type">{{ e.entry_type.replace(/_/g, ' ') }}</span>
                   <span class="bw-money ledger-amt" :class="e.direction">
-                    {{ e.direction === 'credit' ? '+' : 'âˆ’' }}{{ naira(e.amount_minor) }}
+                    {{ e.direction === 'credit' ? '+' : '−' }}{{ naira(e.amount_minor) }}
                   </span>
                 </li>
               </ul>
@@ -858,7 +895,11 @@ watch([fStatus, fActorType], () => loadList());
 .kpi-tile.brand .kpi-value { color: var(--brand); }
 .kpi-sub { font-size: var(--t-xs); color: var(--text-muted); margin: 4px 0 0; }
 
-.filter-card { margin-bottom: var(--s-3); }
+.purchase-filter-panel { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); background: var(--surface-2); }
+.purchase-filter-button { gap: 7px; }
+.purchase-filter-button svg { width: 16px; height: 16px; }
+.purchase-filter-button.active { border-color: var(--brand); color: var(--brand); background: var(--brand-glow); }
+.purchase-filter-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: var(--on-brand); font-size: 9px; font-weight: 800; }
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -913,12 +954,12 @@ watch([fStatus, fActorType], () => loadList());
 
 /* Drawer */
 .drawer-scrim { position: fixed; inset: 0; background: oklch(0% 0 0 / 0.55); z-index: 200; display: flex; justify-content: flex-end; }
-.drawer { width: min(640px, 100%); height: 100%; background: var(--glass-bg-strong); border-left: 1px solid var(--glass-border); overflow-y: auto; padding: var(--s-5); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40); }
+.drawer { width: min(600px, 100%); height: 100%; background: var(--glass-bg-strong); border-left: 1px solid var(--glass-border); overflow-y: auto; padding: var(--s-4); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40); }
 .drawer-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--s-4); }
 .drawer-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--brand); margin: 0 0 2px; }
 .drawer-title { margin: 0 0 4px; font-size: var(--t-xl); font-family: var(--font-mono); }
 .drawer-id { font-size: 11px; color: var(--text-muted); margin: 0; }
-.drawer-x { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; padding: 4px 10px; border-radius: var(--r-sm); }
+.drawer-x { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; border-radius: var(--r-md); }
 .drawer-x:hover { color: var(--text); background: var(--surface-2); }
 
 .dr-facts { display: flex; gap: var(--s-3); align-items: center; margin-bottom: var(--s-4); font-size: var(--t-sm); flex-wrap: wrap; }
@@ -932,18 +973,17 @@ watch([fStatus, fActorType], () => loadList());
 .dr-token-row { display: flex; align-items: center; gap: var(--s-3); }
 .dr-token-value { font-size: var(--t-lg); font-weight: 700; letter-spacing: 0.08em; flex: 1; word-break: break-all; }
 
-.dr-block { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--s-4); margin-bottom: var(--s-3); }
-.dr-block-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 var(--s-3); }
-.dr-dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px var(--s-3); margin: 0; font-size: var(--t-sm); }
+.dr-block { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--s-3); margin-bottom: var(--s-2); }
+.dr-block-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 var(--s-2); }
+.dr-dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2) var(--s-4); margin: 0; font-size: var(--t-sm); }
 .dr-dl dt { color: var(--text-muted); }
-.dr-dl dd { margin: 0; word-break: break-word; }
+.dr-dl dd { margin: -4px 0 0; word-break: break-word; font-weight: 600; }
 
 /* Timeline */
-.timeline { list-style: none; margin: 0; padding: 0; }
-.tl-step { display: flex; gap: var(--s-3); position: relative; padding-bottom: var(--s-4); }
+.timeline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); list-style: none; margin: 0; padding: 0; }
+.tl-step { display: flex; gap: var(--s-2); position: relative; min-width: 0; padding: var(--s-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-1); }
 .tl-step:not(.last)::before {
-  content: ''; position: absolute; left: 9px; top: 20px; bottom: 0;
-  width: 2px; background: var(--border);
+  display: none;
 }
 .tl-step.done:not(.last)::before { background: oklch(from var(--brand) l c h / 0.40); }
 .tl-dot {
@@ -991,9 +1031,11 @@ watch([fStatus, fActorType], () => loadList());
 
 @media (max-width: 640px) {
   .filter-grid { grid-template-columns: 1fr; }
-  .drawer { width: 100%; padding: var(--s-4); }
-  .dr-dl { grid-template-columns: 1fr; }
-  .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }
+  .purchase-filter-panel { padding: var(--s-3); }
+  .purchase-filter-button span:not(.purchase-filter-count) { display: none; }
+  .drawer { width: 100%; padding: var(--s-3); }
+  .drawer-head { margin-bottom: var(--s-3); }
+  .dr-facts, .dr-token { margin-bottom: var(--s-3); }
 
   .purchase-layout-bar {
     display: flex;

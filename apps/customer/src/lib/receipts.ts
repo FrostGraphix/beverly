@@ -287,8 +287,12 @@ export function resolveTariffDetails(row: any): { tariffName: string; tariffPric
 }
 
 export function purchaseReceipt(row: any): ReceiptModel {
-  const vendedBy = row.vended_by
-    || row.vended_by_name
+  const vendorIdentity = [row.vended_by_name, row.vendor_business_name]
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(' — ');
+  const vendedBy = vendorIdentity
+    || row.vended_by
     || row.vendor_name
     || row.operator_name
     || row.created_by_name
@@ -311,7 +315,7 @@ export function purchaseReceipt(row: any): ReceiptModel {
       field('Vended By', vendedBy, { wide: true }),
       field('Meter ID', row.meter_id),
       field('Meter Type', row.meter_type || 'Prepaid Single Phase'),
-      field('Station', row.station_id || row.station_name || 'TUNGA'),
+      field('Station', row.station_id || row.station_name),
       field('Tariff', tariffName),
       field('Tariff Price', tariffPrice),
       field('Payment', row.payment_method || (row.mode === 'remote_send' ? 'Wallet & Wireless Remote' : 'Wallet Self-Vend')),

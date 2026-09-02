@@ -28,6 +28,9 @@ assert.match(reportPdf, /No estimated fields are used in this PDF\./);
 assert.match(reportPdf, /Power BI \+ Tableau \+ Grafana inspired/);
 assert.match(reportPdf, /Observability board/);
 assert.match(reportPdf, /Performance matrix/);
+assert.match(reportPdf, /\/brand\/beverly-lockup-light\.png/);
+assert.match(reportPdf, /\/Logo Do/);
+assert.match(reportPdf, /green: \[34, 197, 94\]/);
 assert.doesNotMatch(reportPdf, /Staff Logs|System Logs/);
 assert.doesNotMatch(reportPdf, /Math\.round\(total \* 0\.6\)/);
 
