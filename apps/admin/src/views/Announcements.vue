@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import MessageSuccessHover from '../components/MessageSuccessHover.vue';
 import { ApiError, api, shortDate } from '../lib/api';
@@ -8,6 +8,7 @@ import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
 
 type AudienceKey = 'customers' | 'vendors';
+type DeliveryMode = 'notification' | 'email' | 'both';
 
 interface Recipient {
     key: string;
@@ -25,6 +26,7 @@ interface Announcement {
     body: string;
     audience: string;
     target_mode: string;
+    channel?: string;
     recipient_count: number;
     email_recipient_count?: number;
     email_sent_count?: number;
@@ -40,8 +42,11 @@ interface RecipientSummary {
 }
 
 const audiences = ref<Record<AudienceKey, boolean>>({ customers: true, vendors: false });
+const deliveryMode = ref<DeliveryMode>('both');
 const summary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
 const audienceTotals = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
+const emailSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
+const notificationSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
 const systemWide = ref(false);
 const sendToAll = ref(true);
 const search = ref('');
@@ -50,6 +55,9 @@ const message = ref('');
 const recipients = ref<Recipient[]>([]);
 const selectedKeys = ref<string[]>([]);
 const history = ref<Announcement[]>([]);
+const activeTab = ref<'compose' | 'history'>('compose');
+const selectedHistory = ref<Announcement | null>(null);
+const historyDetailClose = ref<HTMLButtonElement | null>(null);
 const brandLogoLightUrl = `${import.meta.env.BASE_URL}brand/beverly-lockup.png`;
 const composeStep = ref(1);
 const stepLabels = ['Audience', 'Message', 'Review'];
@@ -70,6 +78,7 @@ const announcementExportColumns: WalletExportColumn<Announcement>[] = [
     { key: 'body', header: 'Message', value: (item) => item.body },
     { key: 'audience', header: 'Audience', value: (item) => item.audience },
     { key: 'target_mode', header: 'Target Mode', value: (item) => item.target_mode },
+    { key: 'channel', header: 'Medium', value: (item) => formatChannel(item.channel) },
     { key: 'recipient_count', header: 'Recipients', value: (item) => item.recipient_count },
     { key: 'email_recipient_count', header: 'Email Recipients', value: (item) => item.email_recipient_count ?? 'Untracked' },
     { key: 'email_sent_count', header: 'Emails Sent', value: (item) => item.email_sent_count ?? 'Untracked' },
@@ -91,6 +100,8 @@ const feedback = ref<{ id: number; open: boolean; tone: 'success' | 'error'; tit
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+let historyTrigger: HTMLElement | null = null;
+let previousBodyOverflow = '';
 
 const selectedAudiences = computed<AudienceKey[]>(() => {
     if (systemWide.value) return ['customers', 'vendors'];
@@ -103,12 +114,31 @@ const audienceParam = computed(() => {
 });
 
 const selectedCount = computed(() => sendToAll.value ? summary.value.total : selectedKeys.value.length);
+const selectedEmailCount = computed(() => {
+    if (deliveryMode.value === 'notification') return 0;
+    if (sendToAll.value) return emailSummary.value.total;
+    return new Set(recipients.value
+        .filter((recipient) => selectedKeys.value.includes(recipient.key))
+        .map((recipient) => recipient.email?.trim().toLowerCase())
+        .filter(Boolean)).size;
+});
+const selectedNotificationCount = computed(() => deliveryMode.value === 'email'
+    ? 0
+    : sendToAll.value ? notificationSummary.value.total : selectedCount.value);
 const composeCanContinue = computed(() => composeStep.value === 1
-    ? selectedAudiences.value.length > 0 && selectedCount.value > 0
+    ? !loadingRecipients.value && selectedAudiences.value.length > 0 && selectedCount.value > 0
     : title.value.trim().length >= 3 && message.value.trim().length >= 5);
 const audienceLabel = computed(() => systemWide.value
     ? 'Everyone'
     : selectedAudiences.value.map((item) => item === 'customers' ? 'Customers' : 'Vendors').join(' and '));
+const deliveryLabel = computed(() => deliveryMode.value === 'notification' ? 'In-app notification' : deliveryMode.value === 'email' ? 'Email' : 'Notification and email');
+const recipientGuidance = computed(() => deliveryMode.value === 'email'
+    ? 'Only reachable email addresses.'
+    : deliveryMode.value === 'notification'
+        ? 'Registered Beverly wallet accounts.'
+        : 'Notifications reach accounts. Emails require addresses.');
+const matchingLabel = computed(() => deliveryMode.value === 'email' ? 'email' : deliveryMode.value === 'notification' ? 'account' : 'recipient');
+const channelPayload = computed(() => deliveryMode.value === 'notification' ? ['in_app'] : deliveryMode.value === 'email' ? ['email'] : ['in_app', 'email']);
 const customerCount = computed(() => audienceTotals.value.customers);
 const vendorCount = computed(() => audienceTotals.value.vendors);
 const lastSent = computed(() => history.value[0] ? shortDate(history.value[0].created_at) : 'None');
@@ -145,6 +175,31 @@ function labelType(type: string) {
     return type === 'vendor' ? 'Vendor' : 'Customer';
 }
 
+function openHistoryDetail(item: Announcement, event: MouseEvent) {
+    historyTrigger = event.currentTarget as HTMLElement;
+    previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    selectedHistory.value = item;
+    void nextTick(() => historyDetailClose.value?.focus());
+}
+
+function closeHistoryDetail() {
+    selectedHistory.value = null;
+    document.body.style.overflow = previousBodyOverflow;
+    void nextTick(() => historyTrigger?.focus());
+}
+
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && selectedHistory.value) closeHistoryDetail();
+}
+
+function formatChannel(channel?: string) {
+    if (!channel) return 'Legacy';
+    const values = channel.split(',');
+    if (values.includes('in_app') && values.includes('email')) return 'Notification + email';
+    return values.includes('in_app') ? 'Notification' : 'Email';
+}
+
 function setAudiencePreset(value: 'customers' | 'vendors' | 'system') {
     systemWide.value = value === 'system';
     audiences.value = value === 'customers'
@@ -175,17 +230,19 @@ function toggleRecipient(key: string) {
 async function loadRecipients() {
     loadingRecipients.value = true;
     try {
-        const qs = new URLSearchParams({ audience: audienceParam.value, limit: '500' });
-        const totalsQs = new URLSearchParams({ audience: 'system', limit: '1' });
+        const qs = new URLSearchParams({ audience: audienceParam.value, delivery: deliveryMode.value, limit: '500' });
+        const totalsQs = new URLSearchParams({ audience: 'system', delivery: deliveryMode.value, limit: '1' });
         if (search.value.trim()) qs.set('search', search.value.trim());
         if (search.value.trim()) totalsQs.set('search', search.value.trim());
         const [response, totalsResponse] = await Promise.all([
-            api.get<{ recipients: Recipient[]; summary: RecipientSummary }>(`/api/v1/admin/announcements/recipients?${qs}`),
-            api.get<{ recipients: Recipient[]; summary: RecipientSummary }>(`/api/v1/admin/announcements/recipients?${totalsQs}`),
+            api.get<{ recipients: Recipient[]; summary: RecipientSummary; email_summary: RecipientSummary; notification_summary: RecipientSummary }>(`/api/v1/admin/announcements/recipients?${qs}`),
+            api.get<{ recipients: Recipient[]; summary: RecipientSummary; email_summary: RecipientSummary; notification_summary: RecipientSummary }>(`/api/v1/admin/announcements/recipients?${totalsQs}`),
         ]);
         recipients.value = response.recipients ?? [];
         summary.value = response.summary ?? { customers: 0, vendors: 0, total: recipients.value.length };
         audienceTotals.value = totalsResponse.summary ?? summary.value;
+        emailSummary.value = response.email_summary ?? summary.value;
+        notificationSummary.value = response.notification_summary ?? summary.value;
         selectedKeys.value = selectedKeys.value.filter((key) => recipients.value.some((r) => r.key === key));
     } catch (error: any) {
         banner.value = { tone: 'danger', text: error?.message ?? 'Recipients failed to load.' };
@@ -244,26 +301,35 @@ async function sendAnnouncement() {
     sending.value = true;
     banner.value = null;
     try {
-        const response = await api.post<{ delivered: number }>('/api/v1/admin/announcements', {
+        const response = await api.post<{ delivered: number; notification_delivered: number; email_delivered: number }>('/api/v1/admin/announcements', {
             title: title.value.trim(),
             body: message.value.trim(),
             audiences: selectedAudiences.value,
             send_to_all: sendToAll.value,
             recipient_keys: sendToAll.value ? [] : selectedKeys.value,
+            channels: channelPayload.value,
         }, { headers: { 'Idempotency-Key': broadcastRequestKey.value } });
-        const sentMessage = `${response.delivered} notifications sent. Message history refreshed.`;
+        const parts = [
+            response.notification_delivered ? `${response.notification_delivered} notifications` : '',
+            response.email_delivered ? `${response.email_delivered} emails` : '',
+        ].filter(Boolean);
+        const sentMessage = `${parts.join(' and ')} sent. Message history refreshed.`;
         banner.value = { tone: 'success', text: sentMessage };
         showFeedback('success', 'Message sent', sentMessage);
         title.value = '';
         message.value = '';
         selectedKeys.value = [];
         composeStep.value = 1;
+        activeTab.value = 'history';
         broadcastRequestKey.value = crypto.randomUUID();
         await loadHistory();
         await loadRecipients();
     } catch (error: any) {
         const errorMessage = error?.message ?? 'Announcement failed.';
-        if (error instanceof ApiError && error.code === 'announcement_email_failed' && Number((error.details as any)?.sent ?? 0) === 0) {
+        if (error instanceof ApiError
+            && error.code === 'announcement_email_failed'
+            && Number((error.details as any)?.sent ?? 0) === 0
+            && Number((error.details as any)?.notification_sent ?? 0) === 0) {
             broadcastRequestKey.value = crypto.randomUUID();
         }
         banner.value = { tone: 'danger', text: errorMessage };
@@ -273,7 +339,7 @@ async function sendAnnouncement() {
     }
 }
 
-watch([selectedAudiences, systemWide], () => {
+watch([selectedAudiences, systemWide, deliveryMode], () => {
     void loadRecipients();
 });
 
@@ -282,10 +348,20 @@ watch(search, () => {
     searchTimer = setTimeout(() => void loadRecipients(), 250);
 });
 
+watch(sendToAll, (enabled) => {
+    if (enabled) {
+        search.value = '';
+        selectedKeys.value = [];
+    }
+});
+
 onMounted(() => {
+    document.addEventListener('keydown', handleKeydown);
     void Promise.all([loadRecipients(), loadHistory()]);
 });
 onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleKeydown);
+    document.body.style.overflow = previousBodyOverflow;
     if (searchTimer) clearTimeout(searchTimer);
     if (feedbackTimer) clearTimeout(feedbackTimer);
 });
@@ -324,10 +400,19 @@ onBeforeUnmount(() => {
       </article>
     </section>
 
-    <section class="bw-card an-compose" aria-labelledby="announcement-builder-title">
+    <div class="an-page-tabs" role="tablist" aria-label="Announcement sections">
+      <button id="announcement-compose-tab" type="button" role="tab" :aria-selected="activeTab === 'compose'" aria-controls="announcement-compose-panel" :class="{ active: activeTab === 'compose' }" @click="activeTab = 'compose'">
+        New announcement
+      </button>
+      <button id="announcement-history-tab" type="button" role="tab" :aria-selected="activeTab === 'history'" aria-controls="announcement-history-panel" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
+        Message history <span>{{ history.length }}</span>
+      </button>
+    </div>
+
+    <section v-if="activeTab === 'compose'" id="announcement-compose-panel" class="bw-card an-compose" role="tabpanel" aria-labelledby="announcement-compose-tab announcement-builder-title">
       <div class="an-section-head">
         <div>
-          <p class="kicker">Email broadcast</p>
+          <p class="kicker">Announcement broadcast</p>
           <h2 id="announcement-builder-title">New announcement</h2>
         </div>
         <span class="bw-badge bw-badge-brand">{{ selectedCount }} reachable</span>
@@ -341,8 +426,23 @@ onBeforeUnmount(() => {
 
       <div v-if="composeStep === 1" class="an-step-panel">
         <div class="an-step-copy">
-          <h3>Choose email recipients</h3>
-          <p>Only reachable email addresses.</p>
+          <h3>Choose delivery medium</h3>
+          <p>Send a notification, email, or both.</p>
+        </div>
+        <div class="an-delivery-options" role="radiogroup" aria-label="Delivery medium">
+          <button type="button" role="radio" :aria-checked="deliveryMode === 'notification'" :class="{ selected: deliveryMode === 'notification' }" @click="deliveryMode = 'notification'">
+            <strong>Notification</strong><span>Inside Beverly</span>
+          </button>
+          <button type="button" role="radio" :aria-checked="deliveryMode === 'email'" :class="{ selected: deliveryMode === 'email' }" @click="deliveryMode = 'email'">
+            <strong>Email</strong><span>Via Resend</span>
+          </button>
+          <button type="button" role="radio" :aria-checked="deliveryMode === 'both'" :class="{ selected: deliveryMode === 'both' }" @click="deliveryMode = 'both'">
+            <strong>Both</strong><span>Maximum reach</span>
+          </button>
+        </div>
+        <div class="an-step-copy">
+          <h3>Choose recipients</h3>
+          <p>{{ recipientGuidance }}</p>
         </div>
         <div class="an-audience-options" role="radiogroup" aria-label="Broadcast audience">
           <button type="button" role="radio" :aria-checked="!systemWide && audiences.customers && !audiences.vendors" :class="{ selected: !systemWide && audiences.customers && !audiences.vendors }" @click="setAudiencePreset('customers')">
@@ -358,22 +458,22 @@ onBeforeUnmount(() => {
         <div class="an-scope">
           <label class="an-check">
             <input v-model="sendToAll" type="checkbox" />
-            <span>Include every matching email</span>
+            <span>Include every matching {{ matchingLabel }}</span>
           </label>
-          <input v-model="search" class="bw-input bw-input-sm" placeholder="Search names or emails" :disabled="sendToAll" aria-label="Search recipients" />
+          <input v-model="search" class="bw-input bw-input-sm" placeholder="Search names or contact details" :disabled="sendToAll" aria-label="Search recipients" />
         </div>
         <div v-if="!sendToAll" class="an-recipient-list" aria-label="Recipient checklist">
           <button v-for="recipient in recipients" :key="recipient.key" type="button" :class="['an-recipient', { selected: selectedKeys.includes(recipient.key) }]" @click="toggleRecipient(recipient.key)">
             <input type="checkbox" :checked="selectedKeys.includes(recipient.key)" tabindex="-1" readonly />
-            <span><strong>{{ recipient.name }}</strong><small>{{ labelType(recipient.type) }} · {{ recipient.email }}</small></span>
+            <span><strong>{{ recipient.name }}</strong><small>{{ labelType(recipient.type) }} · {{ recipient.email || recipient.phone || 'Beverly account' }}</small></span>
           </button>
-          <p v-if="!loadingRecipients && !recipients.length" class="bw-muted">No matching email recipients.</p>
+          <p v-if="!loadingRecipients && !recipients.length" class="bw-muted">No matching recipients.</p>
         </div>
       </div>
 
       <div v-else-if="composeStep === 2" class="an-step-panel">
-        <div class="an-step-copy"><h3>Write announcement</h3><p>Sent through Beverly email.</p></div>
-        <label class="an-field"><span>Email subject</span><input v-model="title" class="bw-input" maxlength="120" placeholder="Service update" /></label>
+        <div class="an-step-copy"><h3>Write announcement</h3><p>Delivered by {{ deliveryLabel.toLowerCase() }}.</p></div>
+        <label class="an-field"><span>{{ deliveryMode === 'email' ? 'Email subject' : 'Title' }}</span><input v-model="title" class="bw-input" maxlength="120" placeholder="Service update" /></label>
         <label class="an-field"><span>Message</span><textarea v-model="message" class="bw-input an-textarea" maxlength="2000" placeholder="Write the message recipients receive..." /></label>
         <div class="an-character-count">{{ message.length }} / 2000</div>
       </div>
@@ -383,31 +483,33 @@ onBeforeUnmount(() => {
           <div class="an-step-copy"><h3>Review broadcast</h3><p>Confirm before sending.</p></div>
           <dl class="an-review-list">
             <div><dt>Audience</dt><dd>{{ audienceLabel }}</dd></div>
-            <div><dt>Recipients</dt><dd>{{ selectedCount }} emails</dd></div>
-            <div><dt>Delivery</dt><dd>Resend and in-app</dd></div>
+            <div><dt>Recipients</dt><dd>{{ selectedCount }}</dd></div>
+            <div><dt>Delivery</dt><dd>{{ deliveryLabel }}</dd></div>
+            <div v-if="selectedNotificationCount"><dt>Notifications</dt><dd>{{ selectedNotificationCount }}</dd></div>
+            <div v-if="deliveryMode !== 'notification'"><dt>Emails</dt><dd>{{ selectedEmailCount }}</dd></div>
           </dl>
-          <p class="an-send-warning">Broadcast emails cannot be recalled.</p>
+          <p class="an-send-warning">Sent announcements cannot be recalled.</p>
         </div>
-        <div class="an-email-preview" aria-label="Email preview">
+        <div class="an-email-preview" :aria-label="deliveryMode === 'notification' ? 'Notification preview' : 'Email preview'">
           <span class="an-preview-logo" aria-label="Beverly">
             <img class="an-preview-logo-light" :src="brandLogoLightUrl" alt="Beverly" />
           </span>
           <span>Announcement</span>
           <strong>{{ title }}</strong>
-          <p>Hi recipient,</p>
+          <p v-if="deliveryMode !== 'notification'">Hi recipient,</p>
           <p>{{ previewMessage }}</p>
-          <small>— The Beverly Team</small>
+          <small v-if="deliveryMode !== 'notification'">— The Beverly Team</small>
         </div>
       </div>
 
       <footer class="an-compose-actions">
         <button type="button" class="bw-btn" @click="composeStep === 1 ? (title = '', message = '') : composeStep--">{{ composeStep === 1 ? 'Clear' : 'Back' }}</button>
         <button v-if="composeStep < 3" type="button" class="bw-btn primary" @click="continueCompose">Continue</button>
-        <button v-else type="button" class="bw-btn primary" :disabled="sending" @click="sendAnnouncement">{{ sending ? 'Sending...' : `Send ${selectedCount} emails` }}</button>
+        <button v-else type="button" class="bw-btn primary" :disabled="sending" @click="sendAnnouncement">{{ sending ? 'Sending...' : `Send to ${selectedCount}` }}</button>
       </footer>
     </section>
 
-    <section class="bw-card flush an-history">
+    <section v-else id="announcement-history-panel" class="bw-card flush an-history" role="tabpanel" aria-labelledby="announcement-history-tab">
       <div class="bw-table-head-bar">
         <div>
           <h2>Message history</h2>
@@ -434,23 +536,47 @@ onBeforeUnmount(() => {
           :resolve-rows="resolveAnnouncementExport"
         />
       </div>
-      <div v-if="history.length" class="an-history-slider" aria-label="Message history slider">
-        <article v-for="item in history" :key="item.id" class="an-history-slide">
+      <div v-if="history.length" class="an-history-grid" aria-label="Message history">
+        <button v-for="item in history" :key="item.id" type="button" class="an-history-card" :aria-label="`View ${item.title}`" @click="openHistoryDetail(item, $event)">
           <div class="an-history-slide-top">
             <span class="bw-badge bw-badge-neutral">{{ item.audience }}</span>
             <time>{{ shortDate(item.created_at) }}</time>
           </div>
           <h3>{{ item.title }}</h3>
-          <p>{{ item.body }}</p>
           <div class="an-history-slide-foot">
             <span>{{ item.delivery_status || 'unknown' }}</span>
-            <strong v-if="item.email_recipient_count !== undefined" class="bw-mono">{{ item.email_sent_count ?? 0 }} / {{ item.email_recipient_count }} emails</strong>
-            <strong v-else>Legacy email tracking unavailable</strong>
+            <span>{{ formatChannel(item.channel) }}</span>
+            <strong>View</strong>
           </div>
-        </article>
+        </button>
       </div>
       <div v-else class="bw-empty">No announcements sent.</div>
     </section>
+
+    <Teleport to="body">
+      <div v-if="selectedHistory" class="an-detail-scrim" role="presentation" @click.self="closeHistoryDetail">
+        <section class="an-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="announcement-detail-title">
+          <header class="an-detail-head">
+            <div>
+              <span class="bw-badge bw-badge-neutral">{{ selectedHistory.audience }}</span>
+              <h2 id="announcement-detail-title">{{ selectedHistory.title }}</h2>
+            </div>
+            <button ref="historyDetailClose" type="button" class="an-detail-close" aria-label="Close announcement details" @click="closeHistoryDetail">×</button>
+          </header>
+          <div class="an-detail-meta">
+            <span>{{ shortDate(selectedHistory.created_at) }}</span>
+            <span>{{ formatChannel(selectedHistory.channel) }}</span>
+            <span>{{ selectedHistory.delivery_status || 'unknown' }}</span>
+          </div>
+          <div class="an-detail-message">{{ selectedHistory.body }}</div>
+          <dl class="an-detail-counts">
+            <div><dt>Recipients</dt><dd>{{ selectedHistory.recipient_count }}</dd></div>
+            <div><dt>Emails sent</dt><dd>{{ selectedHistory.email_sent_count ?? 0 }} / {{ selectedHistory.email_recipient_count ?? 0 }}</dd></div>
+            <div><dt>Email failures</dt><dd>{{ selectedHistory.email_failed_count ?? 0 }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    </Teleport>
   </AppShell>
 </template>
 
@@ -459,6 +585,36 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-bottom: var(--s-4);
 }
+.an-page-tabs {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-1);
+    margin-bottom: var(--s-4);
+    padding: var(--s-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+}
+.an-page-tabs button {
+    min-height: 42px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0 var(--s-4);
+    font: inherit;
+    font-weight: 750;
+    cursor: pointer;
+}
+.an-page-tabs button.active {
+    background: color-mix(in oklab, var(--brand), transparent 84%);
+    color: var(--text);
+}
+.an-page-tabs button:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+.an-page-tabs span { margin-left: var(--s-1); color: var(--brand); }
 .announcement-last {
     font-size: clamp(var(--t-xl), 2.6vw, var(--t-3xl));
     overflow-wrap: anywhere;
@@ -517,13 +673,15 @@ onBeforeUnmount(() => {
 .an-step-copy { margin-bottom: var(--s-3); }
 .an-step-copy h3 { margin: 0; }
 .an-step-copy p { color: var(--text-muted); margin: var(--s-1) 0 0; }
-.an-audience-options {
+.an-audience-options,
+.an-delivery-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--s-2);
     margin-bottom: var(--s-3);
 }
-.an-audience-options button {
+.an-audience-options button,
+.an-delivery-options button {
     display: grid;
     gap: var(--s-1);
     min-height: 76px;
@@ -536,10 +694,15 @@ onBeforeUnmount(() => {
     cursor: pointer;
 }
 .an-audience-options button:hover,
-.an-audience-options button:focus-visible { border-color: color-mix(in oklab, var(--brand), white 12%); }
-.an-audience-options button.selected { border-color: var(--brand); background: color-mix(in oklab, var(--brand), transparent 87%); }
-.an-audience-options span { color: var(--text-muted); font-size: var(--t-sm); }
-.an-audience-options button.selected span { color: color-mix(in oklab, var(--brand), white 16%); }
+.an-audience-options button:focus-visible,
+.an-delivery-options button:hover,
+.an-delivery-options button:focus-visible { border-color: color-mix(in oklab, var(--brand), white 12%); }
+.an-audience-options button.selected,
+.an-delivery-options button.selected { border-color: var(--brand); background: color-mix(in oklab, var(--brand), transparent 87%); }
+.an-audience-options span,
+.an-delivery-options span { color: var(--text-muted); font-size: var(--t-sm); }
+.an-audience-options button.selected span,
+.an-delivery-options button.selected span { color: color-mix(in oklab, var(--brand), white 16%); }
 .an-compose-actions {
     display: flex;
     justify-content: flex-end;
@@ -662,31 +825,17 @@ onBeforeUnmount(() => {
 }
 .an-email-preview small { display: block; color: var(--text-muted); margin-top: var(--s-4); }
 .an-history {
-    margin-top: var(--s-4);
     overflow: hidden;
 }
-.an-history-slider {
+.an-history-grid {
     display: grid;
-    grid-auto-columns: minmax(280px, 72%);
-    grid-auto-flow: column;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--s-3);
     margin-top: var(--s-4);
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
     padding: 0 var(--s-4) var(--s-4);
-    scroll-padding-inline: var(--s-4);
-    scroll-snap-type: inline mandatory;
-    scrollbar-color: color-mix(in oklab, var(--brand), transparent 30%) transparent;
 }
-.an-history-slider::-webkit-scrollbar {
-    height: 8px;
-}
-.an-history-slider::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--brand), transparent 30%);
-    border-radius: 999px;
-}
-.an-history-slide {
-    min-height: 210px;
+.an-history-card {
+    min-height: 150px;
     display: grid;
     align-content: space-between;
     gap: var(--s-3);
@@ -695,9 +844,14 @@ onBeforeUnmount(() => {
     background:
         linear-gradient(145deg, color-mix(in oklab, var(--brand), transparent 82%), transparent 58%),
         var(--surface);
-    padding: var(--s-4);
-    scroll-snap-align: start;
+    color: var(--text);
+    padding: var(--s-3);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur-fast), transform var(--dur-fast), background var(--dur-fast);
 }
+.an-history-card:hover { border-color: var(--brand); transform: translateY(-1px); }
+.an-history-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .an-history-slide-top,
 .an-history-slide-foot {
     display: flex;
@@ -705,26 +859,94 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     gap: var(--s-3);
 }
-.an-history-slide time,
+.an-history-card time,
 .an-history-slide-foot span {
     color: var(--text-muted);
     font-size: var(--t-sm);
     font-weight: 700;
 }
-.an-history-slide h3 {
-    margin: 0;
-    color: var(--text);
-    font-size: var(--t-xl);
-    line-height: 1.1;
-}
-.an-history-slide p {
+.an-history-card h3 {
     display: -webkit-box;
     overflow: hidden;
-    color: var(--text-muted);
+    margin: 0;
+    color: var(--text);
+    font-size: var(--t-lg);
+    line-height: 1.2;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
+}
+.an-history-view { color: var(--brand) !important; }
+.an-detail-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 2147482000;
+    display: grid;
+    place-items: center;
+    padding: var(--s-4);
+    background: rgb(0 0 0 / 64%);
+    backdrop-filter: blur(6px);
+}
+.an-detail-dialog {
+    width: min(560px, 100%);
+    max-height: min(720px, calc(100dvh - 2 * var(--s-4)));
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-xl);
+    padding: var(--s-4);
+}
+.an-detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s-3);
+}
+.an-detail-head h2 { margin: var(--s-2) 0 0; }
+.an-detail-close {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface-raised);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--t-xl);
+    cursor: pointer;
+}
+.an-detail-close:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.an-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    color: var(--text-muted);
+    font-size: var(--t-sm);
+    margin-top: var(--s-3);
+}
+.an-detail-message {
+    margin: var(--s-4) 0;
+    padding: var(--s-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: color-mix(in oklab, var(--surface), var(--brand) 4%);
+    line-height: 1.65;
+    white-space: pre-wrap;
+}
+.an-detail-counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s-2);
     margin: 0;
 }
+.an-detail-counts div {
+    padding: var(--s-3);
+    border-radius: var(--r-md);
+    background: var(--surface-raised);
+}
+.an-detail-counts dt { color: var(--text-muted); font-size: var(--t-xs); }
+.an-detail-counts dd { margin: var(--s-1) 0 0; font-weight: 800; }
 @media (max-width: 760px) {
     .an-scope {
         grid-template-columns: 1fr;
@@ -743,17 +965,14 @@ onBeforeUnmount(() => {
     .an-step-panel { padding: var(--s-3); }
     .an-compose-actions { position: sticky; bottom: 0; background: var(--surface); padding: var(--s-3); }
     .an-compose-actions .bw-btn { flex: 1; }
-    .an-history-slider {
-        grid-auto-flow: row;
-        grid-auto-columns: auto;
-        grid-template-columns: 1fr;
-        overflow-x: visible;
-        scroll-snap-type: none;
-    }
+    .an-page-tabs { display: grid; width: 100%; }
+    .an-history-grid { grid-template-columns: 1fr; }
+    .an-detail-counts { grid-template-columns: 1fr; }
 }
 @media (max-width: 420px) {
     .announcements-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .announcements-kpis article:last-child { grid-column: 1 / -1; }
-    .an-audience-options { grid-template-columns: 1fr; }
+    .an-audience-options,
+    .an-delivery-options { grid-template-columns: 1fr; }
 }
 </style>

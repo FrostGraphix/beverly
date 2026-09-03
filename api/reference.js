@@ -706,12 +706,38 @@ async function authorizeRequest(request, pathname, requestData) {
 }
 
 function readRequest(request) {
+  if (request.__readRequestData) {
+    return Promise.resolve(request.__readRequestData);
+  }
   return new Promise((resolve, reject) => {
+    if (request.body !== undefined && request.body !== null) {
+      let rawBody;
+      let rawText;
+      let parsedBody = {};
+      if (Buffer.isBuffer(request.body)) {
+        rawBody = request.body;
+        rawText = rawBody.toString("utf8");
+      } else if (typeof request.body === "string") {
+        rawText = request.body;
+        rawBody = Buffer.from(rawText, "utf8");
+      } else {
+        parsedBody = request.body;
+        rawText = JSON.stringify(request.body);
+        rawBody = Buffer.from(rawText, "utf8");
+      }
+      const contentType = String(request.headers?.["content-type"] || "");
+      if (Object.keys(parsedBody).length === 0 && rawText) {
+        try { parsedBody = JSON.parse(rawText); } catch { parsedBody = { raw: rawText }; }
+      }
+      const data = { contentType, rawBody, rawText, parsedBody };
+      request.__readRequestData = data;
+      return resolve(data);
+    }
     const chunks = [];
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
       const rawBody = Buffer.concat(chunks);
-      const contentType = String(request.headers["content-type"] || "");
+      const contentType = String(request.headers?.["content-type"] || "");
       const rawText = rawBody.toString("utf8");
       let parsedBody = {};
       if (!rawBody.length) {
@@ -729,12 +755,14 @@ function readRequest(request) {
       } else {
         parsedBody = { raw: rawText };
       }
-      resolve({
+      const data = {
         contentType,
         rawBody,
         rawText,
         parsedBody
-      });
+      };
+      request.__readRequestData = data;
+      resolve(data);
     });
     request.on("error", reject);
   });
@@ -4058,8 +4086,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const actorId = request.__auth?.userId || payload.actorId || "staff";
     return localJobResponse(walletSettlement.settleSettlementBatch({ ...payload, actorId }));
   }
-  // ── Vendor v1 REST POST endpoints ───────────────────────────────────────────
-  if (pathname === "/api/v1/vendor/logout") {
+  // ── Logout v1 REST POST endpoints ──────────────────────────────────────────
+  if (pathname === "/api/v1/vendor/logout" || pathname === "/api/v1/admin/logout" || pathname === "/api/v1/customer/logout") {
     return localJobResponse({ ok: true });
   }
 
@@ -5171,7 +5199,7 @@ async function handler(request, response) {
     if (isCanonicalWalletRequest(pathname)) {
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
-      if (canonicalResult && (canonicalResult.status < 400 || !pathname.includes('/remote-send'))) {
+      if (canonicalResult && (canonicalResult.status < 400 || !pathname.includes('/remote-send') || canonicalResult.status >= 400)) {
         response.status(canonicalResult.status).json(canonicalResult.body);
         return;
       }

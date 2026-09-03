@@ -211,6 +211,7 @@
 import { apiClient } from "../../services/api";
 import { currentUserInfo } from "../../services/api";
 import BaseButton from "../base/BaseButton.vue";
+import { formatAiMessage } from "@beverly/tokens/ai-message";
 
 export default {
   name: "AcobotWidget",
@@ -282,9 +283,7 @@ export default {
       });
     },
     formatMessage(text) {
-      return text
-        .replace(/\n/g, "<br/>")
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      return formatAiMessage(text);
     },
     copyText(text) {
       navigator.clipboard.writeText(text);

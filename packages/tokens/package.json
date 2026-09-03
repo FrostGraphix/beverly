@@ -35,6 +35,8 @@
     "wallet-export-wizard.ts",
     "wallet-export.js",
     "wallet-export.d.ts",
+    "ai-message.js",
+    "ai-message.d.ts",
     "PwaUpdateToast.vue",
     "PwaUpdateToast.vue.d.ts",
     "LanguageSwitcher.vue",
@@ -123,6 +125,11 @@
     "./push-notifications": {
       "types": "./push-notifications.ts",
       "import": "./push-notifications.ts"
+    },
+    "./ai-message": {
+      "types": "./ai-message.d.ts",
+      "import": "./ai-message.js",
+      "default": "./ai-message.js"
     }
   }
 }

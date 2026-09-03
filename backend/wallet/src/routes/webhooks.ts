@@ -161,7 +161,13 @@ const route: FastifyPluginAsync = async (fastify) => {
                 for (const row of deliveryRows ?? []) states.set(row.email_message_id, row.email_status);
                 const failed = Array.from(states.values()).filter((status) => status === 'failed').length;
                 const sent = states.size - failed;
-                const status = failed === 0 ? 'sent' : sent === 0 ? 'failed' : 'partial';
+                const { data: announcement } = await adminClient
+                    .from('admin_announcements')
+                    .select('channel')
+                    .eq('id', announcementId)
+                    .maybeSingle();
+                const includesInApp = String(announcement?.channel ?? '').split(',').includes('in_app');
+                const status = failed === 0 ? 'sent' : (sent === 0 && !includesInApp) ? 'failed' : 'partial';
                 const { error: summaryError } = await adminClient.from('admin_announcements').update({
                     email_sent_count: sent,
                     email_failed_count: failed,

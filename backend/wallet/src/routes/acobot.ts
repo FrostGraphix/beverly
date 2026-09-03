@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { buildAcobotContext } from '../services/acobot-context.js';
 import { buildBeverlySystemPrompt } from '../services/acobot-prompt.js';
+import { formatOfflineContextAnswer, normalizeBeverlyResponse } from '../services/acobot-response.js';
 import { getPermittedIntentsForActor } from '../services/acobot-rbac.js';
 import { roleHasPermission } from '../services/rbac.js';
 
@@ -179,20 +180,7 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                 if (contextBuild.permissionStatus === 'denied') {
                     botResponse = `You don't have permission (role: **${actor.role}**) to access that information.`;
                 } else if (contextBuild.detectedIntents.length > 0 && contextBuild.contextText.trim()) {
-                    // Summarise the resolved data from context rather than dumping raw text
-                    botResponse =
-                        `Here's what I found based on your query:\n\n` +
-                        contextBuild.contextText
-                            .split('\n\n')
-                            .filter((section) => !section.startsWith('[USER IDENTITY]'))
-                            .map((section) =>
-                                section
-                                    .replace(/^\[DATA: ([^\]]+)\]\n/, '**$1**\n')
-                                    .replace(/^\[PERMISSION DENIED: ([^\]]+)\]\n/, '⛔ **Access Denied — $1**\n')
-                                    .replace(/^\[DATA FETCH NOTICE: ([^\]]+)\]\n/, '⚠️ **Notice — $1**\n')
-                            )
-                            .join('\n\n') ||
-                        `No specific data matched your query. Try rephrasing or ask about a specific metric (e.g. "pending meter approvals", "wallet balance").`;
+                    botResponse = formatOfflineContextAnswer(contextBuild.contextText);
                 } else {
                     botResponse =
                         `Hi! I'm Beverly AI. I can help you with wallet operations, customer management, vendor data, and system metrics.\n\n` +
@@ -208,6 +196,8 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
             req.log.error(err, '[ACOBOT-ROUTE] Chat completion failed');
             botResponse = `Something went wrong while processing your request. Please try again.`;
         }
+
+        botResponse = normalizeBeverlyResponse(botResponse);
 
         // 4. Audit Log in Supabase acobot_logs
         try {

@@ -418,6 +418,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .select('id, notification_id, created_at, admin_announcements(id, title, body, audience, created_at)')
             .eq('recipient_type', 'vendor')
             .eq('recipient_id', orgId)
+            .not('notification_id', 'is', null)
             .order('created_at', { ascending: false })
             .limit(limit + 1);
         if (query.cursor) deliveryQuery.lt('created_at', query.cursor);
