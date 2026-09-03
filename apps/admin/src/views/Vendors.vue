@@ -260,6 +260,8 @@ onMounted(() => {
             title="Vendor Organizations"
             subtitle="Filtered vendor registry"
             :loading="loading"
+            :formats="['pdf']"
+            label="Export PDF"
           />
           <input class="bw-input search-input" v-model="q" placeholder="Search vendors…" @keyup.enter="load" />
           <select class="bw-select status-select" v-model="status" @change="load">

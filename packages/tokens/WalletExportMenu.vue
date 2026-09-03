@@ -11,11 +11,13 @@ const props = withDefaults(defineProps<{
   meta?: WalletExportMeta[];
   loading?: boolean;
   label?: string;
+  formats?: Array<'csv' | 'pdf'>;
 }>(), {
   subtitle: '',
   meta: () => [],
   loading: false,
   label: 'Export',
+  formats: () => ['csv', 'pdf'],
 });
 
 const emit = defineEmits<{
@@ -34,7 +36,12 @@ function close() {
 }
 
 function toggle() {
-  if (!disabled.value) open.value = !open.value;
+  if (disabled.value) return;
+  if (props.formats.length === 1) {
+    run(props.formats[0]);
+    return;
+  }
+  open.value = !open.value;
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -79,18 +86,18 @@ onBeforeUnmount(() => {
       type="button"
       class="bw-btn bw-export-trigger"
       :disabled="disabled"
-      :aria-expanded="open"
-      aria-haspopup="menu"
+      :aria-expanded="formats.length > 1 ? open : undefined"
+      :aria-haspopup="formats.length > 1 ? 'menu' : undefined"
       @click.stop="toggle"
     >
       {{ busy ? 'Exporting…' : label }}
     </button>
-    <div v-if="open" class="bw-export-panel" role="menu" aria-label="Export formats">
-      <button type="button" role="menuitem" @click="run('csv')">
+    <div v-if="open && formats.length > 1" class="bw-export-panel" role="menu" aria-label="Export formats">
+      <button v-if="formats.includes('csv')" type="button" role="menuitem" @click="run('csv')">
         <strong>Export CSV</strong>
         <span>Spreadsheet-ready records</span>
       </button>
-      <button type="button" role="menuitem" @click="run('pdf')">
+      <button v-if="formats.includes('pdf')" type="button" role="menuitem" @click="run('pdf')">
         <strong>Export PDF</strong>
         <span>Print-ready report</span>
       </button>

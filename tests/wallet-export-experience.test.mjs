@@ -50,10 +50,11 @@ for (const relativePath of requiredExportSurfaces) {
 }
 
 const menu = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportMenu.vue'), 'utf8');
-assert.match(menu, /aria-haspopup="menu"/);
+assert.match(menu, /:aria-haspopup="formats\.length > 1 \? 'menu' : undefined"/);
 assert.match(menu, /aria-live="polite"/);
 assert.match(menu, /@click="run\('csv'\)"/);
 assert.match(menu, /@click="run\('pdf'\)"/);
+assert.match(menu, /formats\.length === 1/);
 
 const wizard = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportWizard.vue'), 'utf8');
 assert.match(wizard, /Choose record scope/);

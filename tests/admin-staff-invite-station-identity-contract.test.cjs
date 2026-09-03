@@ -13,6 +13,7 @@ const vendorDetail = read('apps/admin/src/views/VendorDetail.vue');
 const customers = read('apps/admin/src/views/Customers.vue');
 const customerDetail = read('apps/admin/src/views/CustomerDetail.vue');
 const exportMenu = read('packages/tokens/WalletExportMenu.vue');
+const exportMenuTypes = read('packages/tokens/WalletExportMenu.vue.d.ts');
 
 assert.match(adminRoutes, /const invitationDelivery = await notifyStaffInvitation/);
 assert.match(adminRoutes, /const emailReadiness = await staffInvitationReadiness/);
@@ -31,14 +32,20 @@ assert.match(adminRoutes, /query = query\.eq\('station_id', stationId\)/);
 assert.match(vendors, /Filter by station ID/);
 assert.match(vendors, /<th>Station ID<\/th>/);
 assert.match(vendors, /v\.station_id \|\| 'Unassigned'/);
+assert.match(vendors, /:formats="\['pdf'\]"/);
+assert.match(vendors, /label="Export PDF"/);
 assert.match(vendorDetail, /Station ID · \{\{ detail\.vendor\.station_id/);
 
 assert.match(adminRoutes, /select\('customer_id, station_id'\)/);
 assert.match(adminRoutes, /station_ids:\s+stationsByCustomer\.get\(c\.id\)/);
 assert.match(customers, /<th>Station IDs<\/th>/);
+assert.doesNotMatch(customers, /Export CSV/);
+assert.match(customers, />Export PDF<\/button>/);
 assert.match(customerDetail, /detail\.customer\.station_ids\?\.join/);
 
 assert.match(exportMenu, /class="bw-btn bw-export-trigger"/);
+assert.match(exportMenu, /formats\.length === 1/);
 assert.doesNotMatch(exportMenu, /class="bw-btn sm bw-export-trigger"/);
+assert.match(exportMenuTypes, /formats: \{ type: PropType<Array<'csv' \| 'pdf'>>/);
 
 console.log('admin staff invitation and station identity contracts passed');

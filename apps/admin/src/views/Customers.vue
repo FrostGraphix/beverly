@@ -23,7 +23,7 @@ import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
-import { exportCsv, printPdf } from '../lib/export';
+import { printPdf } from '../lib/export';
 import { useStaffAuthStore } from '../stores/auth';
 
 interface CustomerRow {
@@ -156,21 +156,6 @@ function tierBadge(t: number) {
     return t >= 2 ? 'success' : t === 1 ? 'info' : 'neutral';
 }
 
-function exportCsvRows() {
-    exportCsv('customers', customers.value, [
-        { key: 'id', header: 'ID', value: (c) => c.id },
-        { key: 'full_name', header: 'Name', value: (c) => c.full_name ?? '' },
-        { key: 'phone', header: 'Phone', value: (c) => c.phone ?? '' },
-        { key: 'email', header: 'Email', value: (c) => c.email ?? '' },
-        { key: 'station_ids', header: 'Station IDs', value: (c) => c.station_ids.join(', ') },
-        { key: 'kyc_tier', header: 'KYC Tier', value: (c) => c.kyc_tier },
-        { key: 'kyc_status', header: 'KYC Status', value: (c) => c.kyc_status },
-        { key: 'status', header: 'Status', value: (c) => c.status },
-        { key: 'balance', header: 'Balance (₦)', value: (c) => (c.balance_minor ?? 0) / 100 },
-        { key: 'created_at', header: 'Created', value: (c) => c.created_at },
-    ]);
-}
-
 function exportPdfDoc() {
     printPdf({
         title: 'Customers',
@@ -294,8 +279,7 @@ watch([fStatus, fTier], () => loadList());
         </div>
         <div class="bw-table-actions">
           <WalletDataViewSwitch v-model="viewMode" label="Customer display view" />
-          <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
-          <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc">PDF</button>
+          <button class="bw-btn" :disabled="!customers.length" @click="exportPdfDoc">Export PDF</button>
         </div>
       </div>
 
