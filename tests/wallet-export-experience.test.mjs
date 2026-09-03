@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildPrintDocument, exportTimestamp, rowsToCsv, sanitizeSpreadsheetValue } from '../packages/tokens/wallet-export.js';
+import { buildPrintDocument, exportTimestamp, resolveWalletPrintBranding, rowsToCsv, sanitizeSpreadsheetValue } from '../packages/tokens/wallet-export.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -22,6 +22,24 @@ const printDocument = buildPrintDocument({ title: '<Wallet Report>', rows: [{ na
 assert.match(printDocument, /&lt;Wallet Report&gt;/);
 assert.doesNotMatch(printDocument, /<script>alert\(1\)<\/script>/);
 assert.match(printDocument, /@page\{size:landscape/);
+
+const darkPrintDocument = buildPrintDocument({ title: 'Dark report', rows: [{ name: 'Ada', note: 'Ready' }], columns, theme: 'dark', logoUrl: 'https://example.test/beverly-mark-light.png' });
+assert.match(darkPrintDocument, /<html lang="en" data-theme="dark">/);
+assert.match(darkPrintDocument, /beverly-mark-light\.png/);
+assert.match(darkPrintDocument, /document\.images/);
+assert.deepEqual(resolveWalletPrintBranding(null), { theme: 'dark', logoUrl: '/brand/beverly-mark-light.png' });
+const lightBranding = resolveWalletPrintBranding({
+  documentElement: { getAttribute: () => 'light' },
+  defaultView: { getComputedStyle: () => ({ getPropertyValue: () => 'url("/brand/beverly-mark.png")' }) },
+  baseURI: 'https://wallet.example.test/wallet-admin/',
+});
+assert.deepEqual(lightBranding, { theme: 'light', logoUrl: 'https://wallet.example.test/brand/beverly-mark.png' });
+const darkBranding = resolveWalletPrintBranding({
+  documentElement: { getAttribute: () => 'executive' },
+  defaultView: { getComputedStyle: () => ({ getPropertyValue: () => 'url("/brand/beverly-mark-light.png")' }) },
+  baseURI: 'https://wallet.example.test/wallet-admin/',
+});
+assert.deepEqual(darkBranding, { theme: 'dark', logoUrl: 'https://wallet.example.test/brand/beverly-mark-light.png' });
 
 const requiredExportSurfaces = [
   'apps/admin/src/views/Applications.vue', 'apps/admin/src/views/Announcements.vue',
@@ -55,6 +73,11 @@ assert.match(menu, /aria-live="polite"/);
 assert.match(menu, /@click="run\('csv'\)"/);
 assert.match(menu, /@click="run\('pdf'\)"/);
 assert.match(menu, /formats\.length === 1/);
+
+const adminExport = fs.readFileSync(path.join(root, 'apps/admin/src/lib/export.ts'), 'utf8');
+assert.match(adminExport, /resolveWalletPrintBranding\(\)/);
+assert.match(adminExport, /<img src="\$\{escapeHtml\(logoUrl\)\}" alt="Beverly"/);
+assert.doesNotMatch(adminExport, /<div class="mark">B<\/div>/);
 
 const wizard = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportWizard.vue'), 'utf8');
 assert.match(wizard, /Choose record scope/);
