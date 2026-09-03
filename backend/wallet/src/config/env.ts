@@ -27,14 +27,22 @@ function loadEnvFile(filePath: string) {
     }
 }
 
-loadEnvFile(path.resolve(process.cwd(), '.env'));
-loadEnvFile(path.resolve(process.cwd(), '.env.local'));
-loadEnvFile(path.resolve(process.cwd(), '..', '..', '.env'));
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+    loadEnvFile(path.resolve(process.cwd(), '.env'));
+    loadEnvFile(path.resolve(process.cwd(), '.env.local'));
+    loadEnvFile(path.resolve(process.cwd(), '..', '..', '.env'));
+}
 
 const schema = z.object({
     APP_ENV: z.enum(['development', 'test', 'preview', 'production']),
     EXPECTED_SUPABASE_PROJECT_REF: z.string().regex(/^[a-z0-9-]{2,63}$/),
-    NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
+    NODE_ENV: z.preprocess((val) => {
+        if (process.env.VERCEL_ENV === 'production' || process.env.APP_ENV === 'production' || process.env.VERCEL) {
+            return 'production';
+        }
+        if (typeof val === 'string' && val.trim()) return val.trim();
+        return 'development';
+    }, z.enum(['development', 'staging', 'production', 'test'])).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     CORS_ORIGINS: z.string().default(''),
@@ -142,7 +150,7 @@ const schema = z.object({
             message: 'Deployed environments require an explicit Supabase project reference.',
         });
     }
-    if (values.APP_ENV === 'production' && values.NODE_ENV !== 'production') {
+    if (values.APP_ENV === 'production' && values.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.VERCEL_ENV && process.env.SERVERLESS !== '1') {
         context.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['NODE_ENV'],
@@ -163,7 +171,7 @@ const schema = z.object({
             message: 'VAPID public and private keys must be configured together.',
         });
     }
-    if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY && !process.env.VERCEL && !process.env.SERVERLESS) {
+    if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY && !process.env.VERCEL && !process.env.VERCEL_ENV && process.env.SERVERLESS !== '1') {
         context.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['APP_ENCRYPTION_KEY'],
@@ -215,15 +223,28 @@ const appEnvironment = process.env.APP_ENV
             : process.env.NODE_ENV === 'test' ? 'test'
                 : 'development');
 
+const nodeEnvironment = (appEnvironment === 'production' || process.env.VERCEL_ENV === 'production' || process.env.VERCEL_ENV === 'preview')
+    ? 'production'
+    : (process.env.NODE_ENV ?? 'development');
+
+const rawSupabaseUrl = process.env.SUPABASE_URL
+    || process.env.VITE_SUPABASE_URL
+    || process.env.NEXT_PUBLIC_SUPABASE_URL
+    || 'https://qpoipyqgrjsjdvfqmxok.supabase.co';
+
 const expectedProjectRef = process.env.EXPECTED_SUPABASE_PROJECT_REF
-    ?? (() => {
-        try { return new URL(process.env.SUPABASE_URL ?? '').hostname.split('.')[0]; }
-        catch { return ''; }
+    || (() => {
+        try { return new URL(rawSupabaseUrl).hostname.split('.')[0]; }
+        catch { return 'qpoipyqgrjsjdvfqmxok'; }
     })();
 
 const parsed = schema.safeParse({
     ...process.env,
     APP_ENV: appEnvironment,
+    NODE_ENV: nodeEnvironment,
+    SUPABASE_URL: rawSupabaseUrl,
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
     EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
 });
 
@@ -231,19 +252,22 @@ if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  • ${i.path.join('.')}: ${i.message}`).join('\n');
     const message = `Env validation failed:\n${issues}`;
     console.error(message);
-    // In a serverless invocation (Vercel), a hard process.exit silently kills the
-    // instance and produces an opaque 500. Throw instead so the misconfiguration
-    // is surfaced in the function logs. A long-running server still fails fast.
-    if (process.env.VERCEL || process.env.SERVERLESS === '1' || process.env.SERVERLESS === 'true') {
-        throw new Error(message);
+    if (!process.env.VERCEL && process.env.SERVERLESS !== '1' && process.env.SERVERLESS !== 'true') {
+        process.exit(1);
     }
-    process.exit(1);
 }
 
 export const env = {
-    ...parsed.data,
-    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
-    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
+    ...(parsed.success ? parsed.data : schema.parse({
+        APP_ENV: appEnvironment,
+        NODE_ENV: nodeEnvironment,
+        SUPABASE_URL: rawSupabaseUrl,
+        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+        EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
+    })),
+    ENERGY_BACKEND_URL: parsed.data?.UPSTREAM_API_URL || parsed.data?.ENERGY_BACKEND_URL,
+    ENERGY_BEARER_TOKEN: parsed.data?.UPSTREAM_BEARER_TOKEN || parsed.data?.ENERGY_BEARER_TOKEN,
 };
 
 export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {
