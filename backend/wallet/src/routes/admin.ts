@@ -134,6 +134,8 @@ function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string
 }
 
 type AnnouncementRecipientType = 'customer' | 'vendor';
+type AnnouncementChannel = 'in_app' | 'email';
+type AnnouncementReachability = 'account' | 'email';
 
 function isLegacyAnnouncementSchemaError(error: any): boolean {
     const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
@@ -205,6 +207,7 @@ async function listWalletVendorIds(): Promise<string[]> {
 
 async function listAnnouncementRecipients(opts: {
     audiences: AnnouncementRecipientType[];
+    reachability?: AnnouncementReachability;
     search?: string;
     limit?: number;
     offset?: number;
@@ -212,6 +215,7 @@ async function listAnnouncementRecipients(opts: {
     const limit = Math.min(Math.max(opts.limit ?? 100, 1), 1_000);
     const offset = Math.max(opts.offset ?? 0, 0);
     const term = cleanSearchTerm(opts.search);
+    const emailOnly = opts.reachability === 'email';
     const recipients: AnnouncementRecipient[] = [];
 
     if (opts.audiences.includes('customer')) {
@@ -221,11 +225,10 @@ async function listAnnouncementRecipients(opts: {
                 .from('customers')
                 .select('id, full_name, email, phone, status')
                 .in('id', walletCustomerIds)
-                .not('email', 'is', null)
-                .neq('email', '')
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
+            if (emailOnly) query = query.not('email', 'is', null).neq('email', '');
             if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
             const { data, error } = await query;
             if (error) throw error;
@@ -240,11 +243,10 @@ async function listAnnouncementRecipients(opts: {
                 .from('vendor_organizations')
                 .select('id, legal_name, trading_name, contact_email, contact_phone, status')
                 .in('id', walletVendorIds)
-                .not('contact_email', 'is', null)
-                .neq('contact_email', '')
                 .neq('status', 'deleted')
                 .order('created_at', { ascending: false })
                 .range(offset, offset + limit - 1);
+            if (emailOnly) query = query.not('contact_email', 'is', null).neq('contact_email', '');
             if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
             const { data, error } = await query;
             if (error) throw error;
@@ -255,14 +257,16 @@ async function listAnnouncementRecipients(opts: {
     return recipients;
 }
 
-async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string }) {
+async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string; reachability?: AnnouncementReachability }) {
     const term = cleanSearchTerm(opts.search);
+    const emailOnly = opts.reachability === 'email';
     let customers = 0;
     let vendors = 0;
     if (opts.audiences.includes('customer')) {
         const walletCustomerIds = await listWalletCustomerIds();
         if (walletCustomerIds.length) {
-            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).not('email', 'is', null).neq('email', '').neq('status', 'deleted');
+            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).neq('status', 'deleted');
+            if (emailOnly) query = query.not('email', 'is', null).neq('email', '');
             if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
             const { count, error } = await query;
             if (error) throw error;
@@ -272,7 +276,8 @@ async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipi
     if (opts.audiences.includes('vendor')) {
         const walletVendorIds = await listWalletVendorIds();
         if (walletVendorIds.length) {
-            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).not('contact_email', 'is', null).neq('contact_email', '').neq('status', 'deleted');
+            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).neq('status', 'deleted');
+            if (emailOnly) query = query.not('contact_email', 'is', null).neq('contact_email', '');
             if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
             const { count, error } = await query;
             if (error) throw error;
@@ -282,17 +287,32 @@ async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipi
     return { customers, vendors, total: customers + vendors };
 }
 
-async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[]): Promise<AnnouncementRecipient[]> {
+async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[], reachability: AnnouncementReachability, search?: string): Promise<AnnouncementRecipient[]> {
     const pageSize = 1_000;
     const byKey = new Map<string, AnnouncementRecipient>();
     for (const audience of audiences) {
         for (let offset = 0; ; offset += pageSize) {
-            const rows = await listAnnouncementRecipients({ audiences: [audience], limit: pageSize, offset });
+            const rows = await listAnnouncementRecipients({ audiences: [audience], reachability, search, limit: pageSize, offset });
             for (const row of rows) byKey.set(row.key, row);
             if (rows.length < pageSize) break;
         }
     }
     return Array.from(byKey.values());
+}
+
+async function summarizeAnnouncementEmails(audiences: AnnouncementRecipientType[], search?: string) {
+    const recipients = await listAllAnnouncementRecipients(audiences, 'email', search);
+    const customerEmails = new Set<string>();
+    const vendorEmails = new Set<string>();
+    const allEmails = new Set<string>();
+    for (const recipient of recipients) {
+        const email = recipient.email?.trim().toLowerCase();
+        if (!email) continue;
+        allEmails.add(email);
+        if (recipient.type === 'customer') customerEmails.add(email);
+        else vendorEmails.add(email);
+    }
+    return { customers: customerEmails.size, vendors: vendorEmails.size, total: allEmails.size };
 }
 
 async function insertAnnouncementNotifications(rows: any[]) {
@@ -343,7 +363,8 @@ async function updateAnnouncementEmailState(
         }).eq('id', announcementId),
         adminClient.from('admin_announcement_deliveries')
             .update({ status: state.status === 'sent' ? 'email_sent' : state.status === 'partial' ? 'email_partial' : 'email_failed' })
-            .eq('announcement_id', announcementId),
+            .eq('announcement_id', announcementId)
+            .not('email', 'is', null),
     ]);
     if (announcementResult.error) throw announcementResult.error;
     if (deliveryResult.error) throw deliveryResult.error;
@@ -578,9 +599,15 @@ function adminRouteKey(req: FastifyRequest): string {
 }
 
 async function permissionsForRole(role: string): Promise<Set<string>> {
-    await ensureAccessDefaults();
-    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
-    return new Set((data ?? []).map((p: any) => p.route_hash));
+    try {
+        await ensureAccessDefaults().catch(() => undefined);
+        const { data, error } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+        if (!error && data && data.length > 0) {
+            return new Set(data.map((p: any) => p.route_hash));
+        }
+    } catch { /* ignore and fallback */ }
+    const fallback = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS['super-admin'] || DEFAULT_ROLE_PERMISSIONS.account;
+    return new Set(fallback || []);
 }
 
 async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
@@ -751,26 +778,34 @@ async function ensureAccessDefaults() {
     // Deduplicate concurrent calls during startup (e.g. multiple requests arriving before the first finishes).
     if (_accessDefaultsPromise) return _accessDefaultsPromise;
     _accessDefaultsPromise = (async () => {
-        for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
-            await adminClient.from('roles').upsert({
-                name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
-                role_key: roleKey,
-                role_name: label,
-                label,
-                description: roleKey === 'super-admin'
-                    ? 'Full wallet administration and access control.'
-                    : 'Wallet administration role managed by Beverly access policy.',
-            }, { onConflict: 'role_key' });
-        }
-        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-            for (const permission of permissions) {
-                await adminClient.from('permissions').upsert({
-                    role_key: roleKey,
-                    route_hash: permission,
-                }, { onConflict: 'role_key,route_hash' });
+        try {
+            for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
+                try {
+                    await adminClient.from('roles').upsert({
+                        name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
+                        role_key: roleKey,
+                        role_name: label,
+                        label,
+                        description: roleKey === 'super-admin'
+                            ? 'Full wallet administration and access control.'
+                            : 'Wallet administration role managed by Beverly access policy.',
+                    }, { onConflict: 'role_key' });
+                } catch { /* ignore */ }
             }
+            for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+                for (const permission of permissions) {
+                    try {
+                        await adminClient.from('permissions').upsert({
+                            role_key: roleKey,
+                            route_hash: permission,
+                        }, { onConflict: 'role_key,route_hash' });
+                    } catch { /* ignore */ }
+                }
+            }
+            _accessDefaultsSeeded = true;
+        } catch {
+            _accessDefaultsPromise = null;
         }
-        _accessDefaultsSeeded = true;
     })();
     return _accessDefaultsPromise;
 }
@@ -825,20 +860,26 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/me', async (req) => {
         const permissions = Array.from(await permissionsForRole(req.actor!.role));
-        let staffResult = await adminClient
-            .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at')
-            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
-            .maybeSingle();
-        if (missingColumn(staffResult.error, 'station_ids')) {
-            staffResult = await adminClient
+        let staffData: any = null;
+        try {
+            let staffResult = await adminClient
                 .from('users')
-                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at')
                 .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
                 .maybeSingle();
+            if (missingColumn(staffResult?.error, 'station_ids')) {
+                staffResult = await adminClient
+                    .from('users')
+                    .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at')
+                    .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+                    .maybeSingle();
+            }
+            staffData = staffResult?.data ?? null;
+        } catch {
+            staffData = null;
         }
         return {
-            user: shapeStaffProfile(req.actor, staffResult.data),
+            user: shapeStaffProfile(req.actor, staffData),
             permissions,
             catalog: PERMISSION_CATALOG,
         };
@@ -959,9 +1000,11 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/logout', async (req) => {
-        await revokePortalSession(req.portalSessionKey).catch((err) => {
-            req.log.warn({ err }, 'failed to revoke portal session during logout');
-        });
+        try {
+            await revokePortalSession(req.portalSessionKey).catch((err) => {
+                req.log.warn({ err }, 'failed to revoke portal session during logout');
+            });
+        } catch { /* ignore */ }
         return { ok: true };
     });
 
@@ -3459,6 +3502,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/announcements/recipients', async (req) => {
         const query = z.object({
             audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            delivery: z.enum(['notification', 'email', 'both']).default('both'),
             search: z.string().optional(),
             limit: z.coerce.number().int().min(1).max(1000).optional(),
         }).parse(req.query);
@@ -3466,13 +3510,17 @@ const route: FastifyPluginAsync = async (fastify) => {
             query.audience === 'vendors' ? ['vendor']
                 : query.audience === 'customers' ? ['customer']
                     : ['customer', 'vendor'];
-        const [recipients, summary] = await Promise.all([
+        const reachability: AnnouncementReachability = query.delivery === 'email' ? 'email' : 'account';
+        const [recipients, summary, emailSummary, notificationSummary] = await Promise.all([
             listAnnouncementRecipients({
                 audiences,
+                reachability,
                 search: query.search,
                 limit: query.limit ?? 100,
             }),
-            countAnnouncementRecipients({ audiences, search: query.search }),
+            countAnnouncementRecipients({ audiences, search: query.search, reachability }),
+            summarizeAnnouncementEmails(audiences, query.search),
+            countAnnouncementRecipients({ audiences, search: query.search, reachability: 'account' }),
         ]);
         return {
             recipients,
@@ -3481,6 +3529,8 @@ const route: FastifyPluginAsync = async (fastify) => {
                 vendors: summary.vendors,
                 total: summary.total,
             },
+            email_summary: emailSummary,
+            notification_summary: notificationSummary,
         };
     });
 
@@ -3552,6 +3602,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             audiences: z.array(z.enum(['customers', 'vendors'])).min(1),
             send_to_all: z.boolean().optional(),
             recipient_keys: z.array(z.string().regex(/^(customer|vendor):[0-9a-f-]{36}$/i)).optional(),
+            channels: z.array(z.enum(['in_app', 'email'])).min(1).max(2).default(['in_app', 'email']),
         });
         const body = schema.parse(req.body ?? {});
         const { data: existingAnnouncement, error: existingError } = await adminClient
@@ -3572,17 +3623,26 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(200).send({
                 ok: true,
                 announcement: existingAnnouncement,
-                delivered: existingAnnouncement.email_sent_count ?? 0,
+                delivered: String(existingAnnouncement.channel ?? '').includes('in_app')
+                    ? existingAnnouncement.recipient_count ?? 0
+                    : existingAnnouncement.email_sent_count ?? 0,
+                notification_delivered: String(existingAnnouncement.channel ?? '').includes('in_app') ? existingAnnouncement.recipient_count ?? 0 : 0,
+                email_delivered: existingAnnouncement.email_sent_count ?? 0,
                 replayed: true,
             });
         }
+        const channels = (['in_app', 'email'] as AnnouncementChannel[]).filter((channel) => body.channels.includes(channel));
+        const wantsNotifications = channels.includes('in_app');
+        const wantsEmail = channels.includes('email');
+        const reachability: AnnouncementReachability = wantsEmail && !wantsNotifications ? 'email' : 'account';
         const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : 'vendor'))) as AnnouncementRecipientType[];
         const requestedKeys = new Set(body.recipient_keys ?? []);
         let recipients = body.send_to_all
-            ? await listAllAnnouncementRecipients(audiences)
-            : await listAnnouncementRecipients({ audiences, limit: 1000 });
+            ? await listAllAnnouncementRecipients(audiences, reachability)
+            : await listAnnouncementRecipients({ audiences, reachability, limit: 1000 });
         if (!body.send_to_all) recipients = recipients.filter((r) => requestedKeys.has(r.key));
         if (!recipients.length) return reply.code(400).send({ error: 'no_recipients', message: 'Select at least one recipient.' });
+        const emailRecipientCount = new Set(recipients.map((recipient) => recipient.email?.trim().toLowerCase()).filter(Boolean)).size;
 
         const audienceLabel = audiences.length === 2 ? 'system' : audiences[0] === 'customer' ? 'customers' : 'vendors';
         let { data: announcement, error: annError } = await adminClient
@@ -3592,12 +3652,12 @@ const route: FastifyPluginAsync = async (fastify) => {
                 body: body.body,
                 audience: audienceLabel,
                 target_mode: body.send_to_all ? 'all' : 'selected',
-                channel: 'email,in_app',
+                channel: channels.join(','),
                 request_key: requestKey,
                 created_by_staff_id: req.actor!.userId,
                 recipient_count: recipients.length,
-                email_recipient_count: new Set(recipients.map((recipient) => recipient.email?.trim().toLowerCase()).filter(Boolean)).size,
-                delivery_status: 'sending',
+                email_recipient_count: wantsEmail ? emailRecipientCount : 0,
+                delivery_status: wantsEmail && emailRecipientCount > 0 ? 'sending' : 'sent',
             })
             .select('*')
             .single();
@@ -3609,7 +3669,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     body: body.body,
                     audience: audienceLabel,
                     target_mode: body.send_to_all ? 'all' : 'selected',
-                    channel: 'email,in_app',
+                    channel: channels.join(','),
                     created_by_staff_id: req.actor!.userId,
                     recipient_count: recipients.length,
                 })
@@ -3618,7 +3678,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         if (annError) throw annError;
 
-        const notificationRows = recipients.map((r) => ({
+        const notificationRows = wantsNotifications ? recipients.map((r) => ({
             customer_id: r.type === 'customer' ? r.id : null,
             vendor_organization_id: r.type === 'vendor' ? r.id : null,
             recipient_type: r.type,
@@ -3629,9 +3689,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             body: body.body,
             metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key },
             read: false,
-        }));
+        })) : [];
         try {
-            const notifications = await insertAnnouncementNotifications(notificationRows);
+            const notifications = notificationRows.length ? await insertAnnouncementNotifications(notificationRows) : [];
             const notificationsByRecipient = new Map(
                 (notifications ?? []).map((n: any) => [`${n.recipient_type}:${n.recipient_id}`, n])
             );
@@ -3645,9 +3705,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                     customer_id: r.type === 'customer' ? r.id : null,
                     vendor_organization_id: r.type === 'vendor' ? r.id : null,
                     notification_id: notification?.id ?? null,
-                    email: r.email?.trim().toLowerCase() ?? null,
-                    email_status: 'queued',
-                    status: notification?.id ? 'delivered' : 'queued',
+                    email: wantsEmail ? r.email?.trim().toLowerCase() ?? null : null,
+                    email_status: wantsEmail && r.email ? 'queued' : 'untracked',
+                    status: notification?.id ? 'delivered' : wantsEmail && r.email ? 'queued' : 'untracked',
                 };
             });
             await insertAnnouncementDeliveries(deliveryRows);
@@ -3669,16 +3729,18 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
-        let emailResult: { sent: number; recipients: number; messages: Array<{ email: string; messageId: string }> };
+        let emailResult: { sent: number; recipients: number; messages: Array<{ email: string; messageId: string }> } = { sent: 0, recipients: 0, messages: [] };
         try {
-            emailResult = await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, requestKey);
+            if (wantsEmail && emailRecipientCount > 0) {
+                emailResult = await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, requestKey);
+            }
         } catch (emailError: any) {
             const sentCount = Number(emailError?.sentCount ?? 0);
-            const emailRecipientCount = Number(announcement.email_recipient_count ?? recipients.length);
+            const trackedEmailRecipientCount = Number(announcement.email_recipient_count ?? emailRecipientCount);
             await updateAnnouncementEmailState(announcement.id, {
                 sent: sentCount,
-                failed: Math.max(0, emailRecipientCount - sentCount),
-                status: sentCount ? 'partial' : 'failed',
+                failed: Math.max(0, trackedEmailRecipientCount - sentCount),
+                status: wantsNotifications || sentCount ? 'partial' : 'failed',
             }).catch((trackingError) => req.log.error({ trackingError, announcementId: announcement.id }, 'Announcement email state update failed'));
             req.log.error({ emailError, announcementId: announcement.id, sentCount }, 'Announcement email fan-out failed');
             await logAction({
@@ -3694,12 +3756,14 @@ const route: FastifyPluginAsync = async (fastify) => {
                 error: 'announcement_email_failed',
                 message: sentCount
                     ? `${sentCount} emails sent before delivery stopped. Review history before retrying.`
-                    : 'Email delivery failed. Check Resend configuration and retry.',
-                details: { announcement_id: announcement.id, sent: sentCount, total: emailRecipientCount },
+                    : wantsNotifications
+                        ? 'In-app notifications were sent, but email delivery failed. Review history before retrying.'
+                        : 'Email delivery failed. Check Resend configuration and retry.',
+                details: { announcement_id: announcement.id, sent: sentCount, total: trackedEmailRecipientCount, notification_sent: wantsNotifications ? recipients.length : 0 },
             });
         }
         try {
-            if (!legacyAnnouncementSchema) {
+            if (!legacyAnnouncementSchema && wantsEmail && emailRecipientCount > 0) {
                 await storeAnnouncementEmailMessages(announcement.id, recipients, emailResult.messages);
                 await updateAnnouncementEmailState(announcement.id, {
                     sent: emailResult.sent,
@@ -3723,18 +3787,20 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'admin.announcement.sent',
             targetType: 'admin_announcement',
             targetId: announcement.id,
-            after: { audience: audienceLabel, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length, email_sent_count: emailResult.sent },
+            after: { audience: audienceLabel, channels, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length, email_sent_count: emailResult.sent },
         }).catch(() => undefined);
 
         return reply.code(201).send({
             ok: true,
             announcement: {
                 ...announcement,
-                delivery_status: legacyAnnouncementSchema ? 'sent' : announcement.delivery_status,
+                delivery_status: 'sent',
                 email_sent_count: emailResult.sent,
                 email_failed_count: Math.max(0, emailResult.recipients - emailResult.sent),
             },
-            delivered: emailResult.sent,
+            delivered: wantsNotifications ? recipients.length : emailResult.sent,
+            notification_delivered: wantsNotifications ? recipients.length : 0,
+            email_delivered: emailResult.sent,
             tracking_deferred: legacyAnnouncementSchema,
         });
     });

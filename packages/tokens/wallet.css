@@ -2410,3 +2410,9 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
 .bw-page-indicator { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; padding: 0 var(--s-2); white-space: nowrap; }
 
 
+.beverly-ai-msg-content > :first-child { margin-top: 0; }
+.beverly-ai-msg-content > :last-child { margin-bottom: 0; }
+.beverly-ai-msg-content p { margin: 0 0 .5rem; }
+.beverly-ai-msg-content h4 { margin: 0 0 .5rem; font-size: inherit; }
+.beverly-ai-msg-content ul { margin: .25rem 0; padding-left: 1.15rem; }
+.beverly-ai-msg-content li + li { margin-top: .25rem; }

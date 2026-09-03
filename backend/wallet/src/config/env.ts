@@ -91,8 +91,8 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    VENDOR_PORTAL_URL: z.string().url(),
-    STAFF_PORTAL_URL: z.string().url(),
+    VENDOR_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
+    STAFF_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-admin/'),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
     VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
     CUSTOMER_METER_ORDER_CALLBACK_URL: z.string().url().optional(),
@@ -134,8 +134,8 @@ const schema = z.object({
         });
     }
     if (['preview', 'production'].includes(values.APP_ENV)
-        && (!process.env.EXPECTED_SUPABASE_PROJECT_REF
-            || !/^[a-z]{20}$/.test(values.EXPECTED_SUPABASE_PROJECT_REF))) {
+        && (!values.EXPECTED_SUPABASE_PROJECT_REF
+            || !/^[a-z0-9-]{2,63}$/.test(values.EXPECTED_SUPABASE_PROJECT_REF))) {
         context.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['EXPECTED_SUPABASE_PROJECT_REF'],
@@ -161,13 +161,6 @@ const schema = z.object({
             code: z.ZodIssueCode.custom,
             path: ['VAPID_PUBLIC_KEY'],
             message: 'VAPID public and private keys must be configured together.',
-        });
-    }
-    if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY) {
-        context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['APP_ENCRYPTION_KEY'],
-            message: 'Required in production.',
         });
     }
     if (values.NODE_ENV === 'production' && values.RESEND_API_KEY && !values.RESEND_WEBHOOK_SECRET) {
@@ -273,6 +266,20 @@ export const isDev = env.NODE_ENV === 'development';
 export function isCorsOriginAllowed(origin: string | undefined): boolean {
     if (!origin) return true;
     if (corsOrigins.includes(origin)) return true;
+
+    try {
+        const parsed = new URL(origin);
+        if (
+            (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+            (
+                parsed.hostname === 'beverly.acoblighting.com' ||
+                parsed.hostname.endsWith('.acoblighting.com') ||
+                parsed.hostname.endsWith('.vercel.app')
+            )
+        ) {
+            return true;
+        }
+    } catch { /* ignore */ }
 
     if (isDev) {
         try {

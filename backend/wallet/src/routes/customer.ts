@@ -1520,6 +1520,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .select('id, notification_id, created_at, admin_announcements(id, title, body, audience, created_at)')
             .eq('recipient_type', 'customer')
             .eq('recipient_id', customerId)
+            .not('notification_id', 'is', null)
             .order('created_at', { ascending: false })
             .limit(pageSize);
         if (cursor) deliveryQuery.lt('created_at', cursor);

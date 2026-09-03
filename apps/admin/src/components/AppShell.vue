@@ -294,11 +294,6 @@ function openSettings() {
     void router.push('/settings');
 }
 
-function openSecurity() {
-    closeUserMenu();
-    void router.push('/security');
-}
-
 async function signOut() {
     if (signingOut.value) return;
     signingOut.value = true;
@@ -474,13 +469,6 @@ onBeforeUnmount(() => {
                   <circle cx="12" cy="7" r="4" />
                 </svg>
                 <span>{{ t('common.profile') }}</span>
-              </button>
-              <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSecurity">
-                <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <span>{{ t('common.securityAnd2fa') }}</span>
               </button>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSettings">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

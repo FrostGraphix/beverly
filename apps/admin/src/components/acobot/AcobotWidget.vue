@@ -270,6 +270,7 @@
 import { ref, nextTick, computed, onMounted } from 'vue';
 import { api } from '../../lib/api';
 import { useStaffAuthStore } from '../../stores/auth';
+import { formatAiMessage } from '@beverly/tokens/ai-message';
 
 const auth = useStaffAuthStore();
 const userFirstName = computed(() => {
@@ -440,9 +441,7 @@ function scrollToBottom() {
 }
 
 function formatMessage(text: string): string {
-  return text
-    .replace(/\n/g, '<br/>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  return formatAiMessage(text);
 }
 
 function copyText(text: string) {

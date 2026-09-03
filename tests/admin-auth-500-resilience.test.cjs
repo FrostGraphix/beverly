@@ -48,6 +48,51 @@ async function runTest() {
   });
   assert.notEqual(res4.statusCode, 500, "POST /logout returned 500 without body");
 
+  console.log("5. Testing api/wallet.mjs directly for GET /api/v1/admin/me...");
+  const walletHandlerPath = path.resolve(__dirname, "../api/wallet.mjs");
+  const { default: walletHandler } = await import(`file:///${walletHandlerPath.replace(/\\/g, "/")}`);
+
+  let status1 = 0;
+  let body1 = "";
+  const mockRes1 = {
+    statusCode: 200,
+    setHeader() {},
+    end(data) { body1 = data ? String(data) : ""; },
+  };
+  Object.defineProperty(mockRes1, "statusCode", {
+    get() { return status1; },
+    set(v) { status1 = v; },
+  });
+  await walletHandler({
+    method: "GET",
+    url: "/api/wallet?__pathname=/api/v1/admin/me",
+    headers: {},
+  }, mockRes1);
+  assert.equal(status1, 401, `Expected 401 from wallet.mjs, got ${status1}: ${body1}`);
+
+  console.log("6. Testing api/wallet.mjs directly for POST /api/v1/admin/logout with empty body...");
+  let status2 = 0;
+  let body2 = "";
+  const mockRes2 = {
+    statusCode: 200,
+    setHeader() {},
+    end(data) { body2 = data ? String(data) : ""; },
+  };
+  Object.defineProperty(mockRes2, "statusCode", {
+    get() { return status2; },
+    set(v) { status2 = v; },
+  });
+  await walletHandler({
+    method: "POST",
+    url: "/api/wallet?__pathname=/api/v1/admin/logout",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer invalid-token-xyz",
+    },
+    body: "",
+  }, mockRes2);
+  assert.notEqual(status2, 500, `POST /logout returned 500: ${body2}`);
+
   console.log("admin auth 500 resilience contract test passed successfully.");
 }
 
@@ -55,3 +100,4 @@ runTest().catch((err) => {
   console.error("admin auth 500 resilience test failed:", err);
   process.exit(1);
 });
+

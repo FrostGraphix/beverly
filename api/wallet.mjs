@@ -24,7 +24,10 @@ async function getApp() {
       const app = await build({ inMemoryRateLimit: true });
       await app.ready();
       return app;
-    })();
+    })().catch((err) => {
+      appPromise = null;
+      throw err;
+    });
   }
   return appPromise;
 }
@@ -69,7 +72,11 @@ export default async function handler(request, response) {
       targetUrl = rawUrl;
     }
 
-    const payload = method === 'GET' || method === 'HEAD' ? undefined : await readRawBody(request);
+    let payload = method === 'GET' || method === 'HEAD' ? undefined : await readRawBody(request);
+    const contentType = String(request.headers?.['content-type'] || '').toLowerCase();
+    if ((payload === undefined || payload === '' || (Buffer.isBuffer(payload) && payload.length === 0)) && (method === 'POST' || method === 'PUT' || method === 'PATCH') && contentType.includes('application/json')) {
+      payload = '{}';
+    }
 
     const res = await app.inject({
       method,

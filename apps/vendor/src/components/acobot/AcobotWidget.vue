@@ -251,6 +251,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatAiMessage } from '@beverly/tokens/ai-message';
 import { ref, nextTick, computed, onMounted } from 'vue';
 import { api } from '../../lib/api';
 import { useVendorAuthStore } from '../../stores/auth';
@@ -343,9 +344,7 @@ function scrollToBottom() {
 }
 
 function formatMessage(text: string): string {
-  return text
-    .replace(/\n/g, '<br/>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  return formatAiMessage(text);
 }
 
 function copyText(text: string) {
