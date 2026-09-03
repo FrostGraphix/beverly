@@ -58,9 +58,9 @@ const schema = z.object({
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
     UPSTREAM_API_URL: z.string().url().optional(),
-    UPSTREAM_PASSWORD: z.string().default('beverly-upstream-login-pwd'),
+    UPSTREAM_PASSWORD: z.string().default('ACOB_ADMIN'),
     UPSTREAM_BEARER_TOKEN: z.string().optional(),
-    ENERGY_AUTHORIZATION_PASSWORD: z.string().default('beverly-energy-auth-secret-prod'),
+    ENERGY_AUTHORIZATION_PASSWORD: z.string().default('123456'),
     ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
         if (value === undefined || value === '') return undefined;
         if (typeof value === 'boolean') return value;
@@ -264,8 +264,8 @@ const fallbackData = {
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
     EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
-    ENERGY_AUTHORIZATION_PASSWORD: process.env.ENERGY_AUTHORIZATION_PASSWORD || 'beverly-energy-auth-secret-prod',
-    UPSTREAM_PASSWORD: process.env.UPSTREAM_PASSWORD || 'beverly-upstream-login-pwd',
+    ENERGY_AUTHORIZATION_PASSWORD: process.env.ENERGY_AUTHORIZATION_PASSWORD || '123456',
+    UPSTREAM_PASSWORD: process.env.UPSTREAM_PASSWORD || 'ACOB_ADMIN',
 };
 
 const resolvedData = parsed.success ? parsed.data : schema.parse(fallbackData);
