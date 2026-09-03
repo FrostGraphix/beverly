@@ -4,8 +4,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
-    "CORS_ORIGINS": "https://acob-beverly.vercel.app,https://admin-acob-beverly.vercel.app,https://vendor-acob-beverly.vercel.app,https://customer-acob-beverly.vercel.app,https://beverly.acoblighting.com,https://vendor.beverly.acoblighting.com",
+    "NODE_ENV": "production",
+    "APP_ENV": "production",
+    "SUPABASE_URL": "https://qpoipyqgrjsjdvfqmxok.supabase.co",
     "EXPECTED_SUPABASE_PROJECT_REF": "qpoipyqgrjsjdvfqmxok",
+    "APP_ENCRYPTION_KEY": "beverly-production-app-encryption-fallback-key-32b",
+    "CORS_ORIGINS": "https://acob-beverly.vercel.app,https://admin-acob-beverly.vercel.app,https://vendor-acob-beverly.vercel.app,https://customer-acob-beverly.vercel.app,https://beverly.acoblighting.com,https://vendor.beverly.acoblighting.com",
     "STAFF_PORTAL_URL": "https://beverly.acoblighting.com/wallet-admin",
     "CUSTOMER_APP_URL": "https://acob-beverly.vercel.app/wallet-customer/",
     "VENDOR_APP_URL": "https://acob-beverly.vercel.app/wallet-vendor/",
