@@ -257,17 +257,21 @@ if (!parsed.success) {
     }
 }
 
+const fallbackData = {
+    APP_ENV: appEnvironment,
+    NODE_ENV: nodeEnvironment,
+    SUPABASE_URL: rawSupabaseUrl,
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+    EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
+};
+
+const resolvedData = parsed.success ? parsed.data : schema.parse(fallbackData);
+
 export const env = {
-    ...(parsed.success ? parsed.data : schema.parse({
-        APP_ENV: appEnvironment,
-        NODE_ENV: nodeEnvironment,
-        SUPABASE_URL: rawSupabaseUrl,
-        SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
-        EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
-    })),
-    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
-    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
+    ...resolvedData,
+    ENERGY_BACKEND_URL: parsed.success ? (parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL) : (resolvedData.UPSTREAM_API_URL || resolvedData.ENERGY_BACKEND_URL),
+    ENERGY_BEARER_TOKEN: parsed.success ? (parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN) : (resolvedData.UPSTREAM_BEARER_TOKEN || resolvedData.ENERGY_BEARER_TOKEN),
 };
 
 export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {
