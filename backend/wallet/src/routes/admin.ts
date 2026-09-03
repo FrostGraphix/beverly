@@ -28,7 +28,7 @@ import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, g
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
-import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyAdminAnnouncement } from '../services/admin-notifications.js';
+import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyAdminAnnouncement, staffInvitationReadiness } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
@@ -1277,6 +1277,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         const stationIds = [...new Set(body.stationIds.map((value) => value.toUpperCase()))];
         const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', body.roleKey).maybeSingle();
         if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
+        const emailReadiness = await staffInvitationReadiness();
+        if (!emailReadiness.ready) {
+            return reply.code(503).send({
+                error: 'staff_invitation_unavailable',
+                message: emailReadiness.reason === 'not_configured'
+                    ? 'Staff invitations are unavailable because email delivery is not configured.'
+                    : 'Staff invitations are temporarily disabled. Enable staff invitation emails before creating an account.',
+            });
+        }
         const password = body.temporaryPassword ?? `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
         const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
             email: body.email.toLowerCase(),
@@ -1300,6 +1309,41 @@ const route: FastifyPluginAsync = async (fastify) => {
             await adminClient.auth.admin.deleteUser(authData.user.id);
             return reply.code(400).send({ error: 'staff_profile_failed', message: rowErr.message });
         }
+        const invitationDelivery = await notifyStaffInvitation({
+            email: body.email.toLowerCase(),
+            fullName: body.fullName,
+            temporaryPassword: password,
+            roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey,
+        });
+        if (invitationDelivery.status !== 'sent') {
+            const profileCleanup = await adminClient.from('users').delete().eq('user_id', authData.user.id);
+            const authCleanup = await adminClient.auth.admin.deleteUser(authData.user.id);
+            const rollbackFailed = Boolean(profileCleanup.error || authCleanup.error);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'access.user.create_failed',
+                targetType: 'staff_user',
+                targetId: authData.user.id,
+                after: {
+                    email: body.email.toLowerCase(),
+                    invitationEmailFailureReason: invitationDelivery.reason ?? 'provider_error',
+                    accountRolledBack: !rollbackFailed,
+                },
+            }).catch(() => undefined);
+            if (rollbackFailed) {
+                req.log.error({ profileCleanup: profileCleanup.error, authCleanup: authCleanup.error, userId: authData.user.id }, 'Staff invite delivery and rollback failed');
+                return reply.code(500).send({
+                    error: 'staff_invitation_cleanup_required',
+                    message: 'Invitation delivery failed and the incomplete account needs administrator review.',
+                });
+            }
+            return reply.code(502).send({
+                error: 'staff_invitation_delivery_failed',
+                message: 'The invitation email was not delivered, so the staff account was not created. Try again.',
+            });
+        }
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'staff',
@@ -1307,11 +1351,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'access.user.create',
             targetType: 'staff_user',
             targetId: authData.user.id,
-            after: { email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds },
+            after: {
+                email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds,
+                invitationEmailStatus: invitationDelivery.status,
+                invitationEmailMessageId: invitationDelivery.messageId ?? null,
+            },
         });
-        await notifyStaffInvitation({ email: body.email.toLowerCase(), fullName: body.fullName, temporaryPassword: password, roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey });
 
-        return { ok: true, userId: authData.user.id, temporaryPassword: password };
+        return { ok: true, userId: authData.user.id, temporaryPassword: password, invitationDelivery };
     });
 
     fastify.patch('/access/users/:userId/role', async (req, reply) => {
@@ -1566,7 +1613,8 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.get('/vendors', async (req) => {
-        const { status, q } = req.query as { status?: string; q?: string };
+        const { status, q, stationId: rawStationId } = req.query as { status?: string; q?: string; stationId?: string };
+        const stationId = rawStationId?.trim().toUpperCase();
         let query = adminClient
             .from('vendor_organizations')
             .select('*')
@@ -1575,6 +1623,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .limit(200);
         if (status) query = query.eq('status', status);
         if (q) query = query.ilike('legal_name', `%${q}%`);
+        if (stationId) query = query.eq('station_id', stationId);
         const assignedStations = staffStations(req);
         if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
         let { data, error } = await query;
@@ -1582,6 +1631,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             let fallback = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
             if (status) fallback = fallback.eq('status', status);
             if (q) fallback = fallback.ilike('legal_name', `%${q}%`);
+            if (stationId) fallback = fallback.eq('station_id', stationId);
             if (assignedStations) fallback = fallback.overlaps('operating_stations', assignedStations);
             const retry = await fallback;
             data = retry.data;
@@ -2340,9 +2390,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (walletErr) return { customers: [], error: walletErr.message };
         const walletByOwner = new Map((walletRows ?? []).map((w: any) => [w.owner_id, w]));
         let walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        if (!walletOwnerIds.length) return { customers: [], nextCursor: null };
+        const { data: customerMeters } = await adminClient
+            .from('customer_meters')
+            .select('customer_id, station_id')
+            .in('customer_id', walletOwnerIds);
         if (assignedStations) {
-            const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
-            const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
+            const scopedIds = new Set((customerMeters ?? [])
+                .filter((row: any) => assignedStations.includes(String(row.station_id ?? '').toUpperCase()))
+                .map((row: any) => row.customer_id));
             walletOwnerIds = walletOwnerIds.filter((id) => scopedIds.has(id));
         }
         if (!walletOwnerIds.length) return { customers: [], nextCursor: null };
@@ -2374,6 +2430,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             }),
         );
 
+        const stationsByCustomer = new Map<string, string[]>();
+        for (const meter of customerMeters ?? []) {
+            if (!meter.customer_id || !meter.station_id) continue;
+            const station = String(meter.station_id).toUpperCase();
+            const existing = stationsByCustomer.get(meter.customer_id) ?? [];
+            if (!existing.includes(station)) existing.push(station);
+            stationsByCustomer.set(meter.customer_id, existing);
+        }
         const enriched = rows.map((c: any, i: number) => {
             const w = walletByOwner.get(c.id);
             const b = balances[i];
@@ -2383,6 +2447,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 wallet_status:   w?.status ?? null,
                 balance_minor:   b?.ledgerBalanceMinor ?? 0,
                 available_minor: b?.availableMinor ?? 0,
+                station_ids:     stationsByCustomer.get(c.id) ?? [],
             };
         });
         const nextCursor = rows.length === pageSize
@@ -2436,8 +2501,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { getBalance } = await import('../services/ledger.js');
         const balance = wallet ? await getBalance((wallet as any).id).catch(() => null) : null;
 
-        const [meterCount, purchaseAgg, fundingAgg] = await Promise.all([
-            adminClient.from('customer_meters').select('id', { count: 'exact', head: true }).eq('customer_id', id),
+        const [meters, purchaseAgg, fundingAgg] = await Promise.all([
+            adminClient.from('customer_meters').select('id, station_id').eq('customer_id', id),
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' }).eq('customer_id', id),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
                 .eq('actor_type', 'customer').eq('actor_id', id).eq('purpose', 'wallet_funding')
@@ -2446,13 +2511,18 @@ const route: FastifyPluginAsync = async (fastify) => {
         const sum = (arr: any[] | null | undefined) => (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
 
         return {
-            customer,
+            customer: {
+                ...customer,
+                station_ids: [...new Set((meters.data ?? [])
+                    .map((meter: any) => String(meter.station_id ?? '').toUpperCase())
+                    .filter(Boolean))],
+            },
             wallet: wallet ?? null,
             balance_minor:   balance?.ledgerBalanceMinor ?? 0,
             holds_minor:     balance?.activeHoldsMinor ?? 0,
             available_minor: balance?.availableMinor ?? 0,
             stats: {
-                meterCount:        meterCount.count ?? 0,
+                meterCount:        meters.data?.length ?? 0,
                 purchaseCount:     purchaseAgg.count ?? 0,
                 purchaseValueMinor: sum(purchaseAgg.data),
                 fundingCount:      fundingAgg.count ?? 0,

@@ -29,6 +29,7 @@ interface Vendor {
     status: 'pending' | 'approved' | 'suspended' | 'frozen' | 'closed';
     approved_at: string | null;
     created_at: string;
+    station_id: string | null;
 }
 
 const vendors = ref<Vendor[]>([]);
@@ -36,6 +37,8 @@ const summary = ref<{ total: number; byStatus: Record<Vendor['status'], number> 
 const totalCount = computed(() => summary.value?.total || vendors.value.length);
 const q = ref('');
 const status = ref<'' | Vendor['status']>('');
+const stationId = ref('');
+const stations = ref<Array<{ stationId: string; name?: string }>>([]);
 const loading = ref(false);
 const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
@@ -46,6 +49,7 @@ const vendorExportColumns: WalletExportColumn<Vendor>[] = [
     { key: 'created_at', header: 'Created', value: (vendor) => shortDate(vendor.created_at) },
     { key: 'legal_name', header: 'Legal Name', value: (vendor) => vendor.legal_name },
     { key: 'trading_name', header: 'Trading Name', value: (vendor) => vendor.trading_name || '' },
+    { key: 'station_id', header: 'Station ID', value: (vendor) => vendor.station_id || '' },
     { key: 'contact_email', header: 'Email', value: (vendor) => vendor.contact_email },
     { key: 'contact_phone', header: 'Phone', value: (vendor) => vendor.contact_phone },
     { key: 'risk_level', header: 'Risk', value: (vendor) => vendor.risk_level },
@@ -168,6 +172,7 @@ async function load() {
         const params = new URLSearchParams();
         if (status.value) params.set('status', status.value);
         if (q.value) params.set('q', q.value);
+        if (stationId.value) params.set('stationId', stationId.value);
         const r = await api.get<{ vendors: Vendor[] }>(`/api/v1/admin/vendors${params.toString() ? '?' + params : ''}`);
         vendors.value = r.vendors;
     } catch (e: any) {
@@ -183,6 +188,13 @@ async function loadSummary() {
     }
 }
 
+async function loadStations() {
+    try {
+        const response = await api.get<{ stations: Array<{ stationId: string; name?: string }> }>('/api/v1/admin/stations');
+        stations.value = response.stations ?? [];
+    } catch { /* The vendor records still expose their assigned station IDs. */ }
+}
+
 function statusBadge(s: Vendor['status']) {
     if (s === 'approved') return 'success';
     if (s === 'frozen') return 'danger';
@@ -193,6 +205,7 @@ function statusBadge(s: Vendor['status']) {
 onMounted(() => {
     void load();
     void loadSummary();
+    void loadStations();
 });
 </script>
 
@@ -256,6 +269,12 @@ onMounted(() => {
             <option value="frozen">Frozen</option>
             <option value="closed">Closed</option>
           </select>
+          <select class="bw-select station-select" v-model="stationId" aria-label="Filter by station ID" @change="load">
+            <option value="">All station IDs</option>
+            <option v-for="station in stations" :key="station.stationId" :value="station.stationId">
+              {{ station.stationId }}{{ station.name ? ` · ${station.name}` : '' }}
+            </option>
+          </select>
           <div class="bw-action-btns">
             <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
             <router-link to="/vendors/analytics" class="bw-btn sm" style="text-decoration: none">Analytics</router-link>
@@ -270,6 +289,7 @@ onMounted(() => {
             <tr>
               <th>Created</th>
               <th>Legal name</th>
+              <th>Station ID</th>
               <th>Contact</th>
               <th>Risk</th>
               <th>Status</th>
@@ -283,6 +303,7 @@ onMounted(() => {
                 <strong>{{ v.legal_name }}</strong>
                 <div v-if="v.trading_name" class="bw-muted" style="font-size: var(--t-xs)">{{ v.trading_name }}</div>
               </td>
+              <td><span class="bw-badge info bw-mono">{{ v.station_id || 'Unassigned' }}</span></td>
               <td>
                 <div class="bw-mono" style="font-size: var(--t-xs)">{{ v.contact_email }}</div>
                 <div class="bw-muted bw-mono" style="font-size: var(--t-xs)">{{ v.contact_phone }}</div>
@@ -298,7 +319,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!vendors.length && !loading">
-              <td colspan="6" class="bw-muted" style="text-align: center; padding: var(--s-6)">No vendors yet.</td>
+              <td colspan="7" class="bw-muted" style="text-align: center; padding: var(--s-6)">No vendors match these filters.</td>
             </tr>
           </tbody>
         </table>
@@ -315,6 +336,10 @@ onMounted(() => {
             <span :class="['bw-badge', statusBadge(v.status)]">{{ v.status }}</span>
           </div>
           <div class="bw-tc-mid">
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Station ID</span>
+              <span class="bw-badge info bw-mono">{{ v.station_id || 'Unassigned' }}</span>
+            </div>
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Contact</span>
               <span class="bw-tc-pair-val bw-mono">{{ v.contact_email }}</span>
@@ -431,6 +456,7 @@ onMounted(() => {
 
 .search-input { width: 200px; }
 .status-select { width: 130px; }
+.station-select { width: 180px; }
 .bw-action-btns { display: flex; align-items: center; gap: 6px; }
 
 .v-row { cursor: pointer; }
@@ -470,6 +496,12 @@ onMounted(() => {
     flex: 1 1 120px;
     width: 100% !important;
     min-width: 110px;
+  }
+
+  .station-select {
+    flex: 1 1 150px;
+    width: 100% !important;
+    min-width: 140px;
   }
 
   .bw-action-btns {

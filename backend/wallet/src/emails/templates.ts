@@ -463,7 +463,7 @@ export function staffInvitationEmail(opts: {
     const name = firstName(opts.fullName);
     const heading = 'You’ve been added to Beverly';
     const body = `<p>Hi ${esc(name)},</p>
-        <p>An account has been created for you on the Beverly admin portal with <strong>${esc(opts.roleLabel)}</strong> access. Sign in with the credentials below — you'll set your own password on first login.</p>`;
+        <p>An account has been created for you on the Beverly admin portal with <strong>${esc(opts.roleLabel)}</strong> access. Use the secure platform link below to sign in. We recommend changing the temporary password immediately after your first sign-in.</p>`;
     const highlight = `<span style="display:block;font-size:12px;font-weight:600;color:${MUTED};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Your sign-in details</span>
         <span style="display:block;font-size:14px;color:${INK};margin-bottom:6px;">Email &nbsp;<strong>${esc(opts.loginEmail)}</strong></span>
         <span style="display:block;font-size:14px;color:${INK};">Temporary password &nbsp;<strong style="font-family:'SF Mono',SFMono-Regular,Consolas,monospace;">${esc(opts.temporaryPassword)}</strong></span>`;
@@ -472,14 +472,14 @@ export function staffInvitationEmail(opts: {
         html: layout({
             eyebrow: 'Team access',
             heading,
-            preheader: `Your ${opts.roleLabel} account is ready. Sign in and set your password to get started.`,
+            preheader: `Your ${opts.roleLabel} account is ready. Follow the Beverly admin portal link to get started.`,
             bodyHtml: body,
             highlightHtml: highlight,
-            ctaLabel: 'Sign in',
+            ctaLabel: 'Open Beverly Admin',
             ctaUrl: opts.loginUrl,
             footerNote: 'Welcome to the team.',
         }),
-        text: `Hi ${name},\n\nAn account has been created for you on the Beverly admin portal with ${opts.roleLabel} access.\n\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nSign in and set your own password: ${opts.loginUrl}\n\nWelcome to the team.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+        text: `Hi ${name},\n\nAn account has been created for you on the Beverly admin portal with ${opts.roleLabel} access.\n\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nOpen Beverly Admin: ${opts.loginUrl}\n\nWe recommend changing the temporary password immediately after your first sign-in.\n\nWelcome to the team.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
     };
 }
 

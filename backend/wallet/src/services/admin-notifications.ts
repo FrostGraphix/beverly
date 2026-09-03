@@ -28,14 +28,24 @@ async function flagEnabled(key: string): Promise<boolean> {
     }
 }
 
+export async function staffInvitationReadiness(): Promise<{
+    ready: boolean;
+    reason?: 'disabled' | 'not_configured';
+}> {
+    if (!(await flagEnabled('notifications.email.staff_invitation'))) return { ready: false, reason: 'disabled' };
+    if (!isResendConfigured()) return { ready: false, reason: 'not_configured' };
+    return { ready: true };
+}
+
 export async function notifyStaffInvitation(opts: {
     email: string;
     fullName: string;
     temporaryPassword: string;
     roleLabel: string;
-}): Promise<void> {
+}): Promise<{ status: 'sent' | 'not_sent'; messageId?: string; reason?: 'disabled' | 'not_configured' | 'provider_error' }> {
     try {
-        if (!(await flagEnabled('notifications.email.staff_invitation'))) return;
+        const readiness = await staffInvitationReadiness();
+        if (!readiness.ready) return { status: 'not_sent', reason: readiness.reason };
         const content = staffInvitationEmail({
             fullName: opts.fullName,
             loginEmail: opts.email,
@@ -43,8 +53,11 @@ export async function notifyStaffInvitation(opts: {
             roleLabel: opts.roleLabel,
             loginUrl: env.STAFF_PORTAL_URL,
         });
-        await sendEmail({ to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-invitation' });
-    } catch { /* non-fatal */ }
+        const result = await sendEmail({ to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-invitation' });
+        return { status: 'sent', messageId: result.messageId };
+    } catch {
+        return { status: 'not_sent', reason: 'provider_error' };
+    }
 }
 
 export async function notifyRoleAssignment(userId: string, roleLabel: string): Promise<void> {

@@ -401,6 +401,7 @@ onMounted(loadDetail);
             <p v-if="detail.vendor.trading_name" class="head-trade">Trading as <strong>{{ detail.vendor.trading_name }}</strong></p>
             <p class="head-meta bw-mono">{{ detail.vendor.contact_email }} · {{ detail.vendor.contact_phone }}</p>
             <div class="head-badges">
+              <span class="bw-badge info bw-mono">Station ID · {{ detail.vendor.station_id || 'Unassigned' }}</span>
               <span :class="['bw-badge', vStatusBadge(detail.vendor.status)]">{{ detail.vendor.status }}</span>
               <span :class="['bw-badge', riskBadge(detail.vendor.risk_level)]">{{ detail.vendor.risk_level }} risk</span>
             </div>

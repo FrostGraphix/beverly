@@ -39,6 +39,7 @@ interface CustomerRow {
     wallet_status: string | null;
     balance_minor: number;
     available_minor: number;
+    station_ids: string[];
 }
 
 interface Summary {
@@ -161,6 +162,7 @@ function exportCsvRows() {
         { key: 'full_name', header: 'Name', value: (c) => c.full_name ?? '' },
         { key: 'phone', header: 'Phone', value: (c) => c.phone ?? '' },
         { key: 'email', header: 'Email', value: (c) => c.email ?? '' },
+        { key: 'station_ids', header: 'Station IDs', value: (c) => c.station_ids.join(', ') },
         { key: 'kyc_tier', header: 'KYC Tier', value: (c) => c.kyc_tier },
         { key: 'kyc_status', header: 'KYC Status', value: (c) => c.kyc_status },
         { key: 'status', header: 'Status', value: (c) => c.status },
@@ -179,9 +181,9 @@ function exportPdfDoc() {
         ],
         tables: [{
             title: 'Customers',
-            columns: ['Name', 'Phone', 'KYC', 'Status', 'Balance'],
+            columns: ['Name', 'Station IDs', 'Phone', 'KYC', 'Status', 'Balance'],
             rows: customers.value.map((c) => [
-                c.full_name ?? '—', c.phone ?? '—', `T${c.kyc_tier}`, c.status, naira(c.balance_minor),
+                c.full_name ?? '—', c.station_ids.join(', ') || '—', c.phone ?? '—', `T${c.kyc_tier}`, c.status, naira(c.balance_minor),
             ]),
         }],
     });
@@ -304,6 +306,7 @@ watch([fStatus, fTier], () => loadList());
             <tr>
               <th>Customer</th>
               <th>Phone</th>
+              <th>Station IDs</th>
               <th>KYC</th>
               <th style="text-align: right">Balance</th>
               <th>Status</th>
@@ -318,6 +321,7 @@ watch([fStatus, fTier], () => loadList());
                 <div class="bw-mono row-sub">{{ c.email || c.id.slice(0, 8) }}</div>
               </td>
               <td class="bw-mono">{{ c.phone || '—' }}</td>
+              <td><span class="bw-badge info bw-mono">{{ c.station_ids.join(', ') || 'Unassigned' }}</span></td>
               <td><span :class="['bw-badge', tierBadge(c.kyc_tier)]">Tier {{ c.kyc_tier }}</span></td>
               <td class="bw-money" style="text-align: right">{{ naira(c.balance_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(c.status)]">{{ c.status }}</span></td>
@@ -331,7 +335,7 @@ watch([fStatus, fTier], () => loadList());
               </td>
             </tr>
             <tr v-if="!customers.length && !loading">
-              <td colspan="7" class="bw-muted empty">No customers match the filters.</td>
+              <td colspan="8" class="bw-muted empty">No customers match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -348,6 +352,10 @@ watch([fStatus, fTier], () => loadList());
             <span :class="['bw-badge', statusBadge(c.status)]">{{ c.status }}</span>
           </div>
           <div class="cc-grid">
+            <div>
+              <p class="cc-label">Station IDs</p>
+              <span class="bw-badge info bw-mono">{{ c.station_ids.join(', ') || 'Unassigned' }}</span>
+            </div>
             <div>
               <p class="cc-label">Balance</p>
               <p class="bw-money">{{ naira(c.balance_minor) }}</p>

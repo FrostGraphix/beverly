@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
   <div ref="root" class="bw-export-menu">
     <button
       type="button"
-      class="bw-btn sm bw-export-trigger"
+      class="bw-btn bw-export-trigger"
       :disabled="disabled"
       :aria-expanded="open"
       aria-haspopup="menu"

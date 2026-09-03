@@ -399,16 +399,20 @@ async function createStaff() {
     if (!canManage.value) return;
     saving.value = true;
     try {
-        const res = await api.post<{ temporaryPassword: string }>('/api/v1/admin/access/users', {
+        const res = await api.post<{
+            temporaryPassword: string;
+            invitationDelivery: { status: 'sent' | 'not_sent'; reason?: 'disabled' | 'not_configured' | 'provider_error' };
+        }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
             roleKey: draft.value.roleKey, stationIds: draft.value.stationIds,
             temporaryPassword: draft.value.tempPassword || undefined,
         });
+        const invitedEmail = draft.value.email;
         closeInvite();
         draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], tempPassword: '' };
         await load();
         revealTempPw(res.temporaryPassword);
-        toast('Staff user created.');
+        toast(`Staff user created. Invitation sent to ${invitedEmail}.`);
     } catch (e: any) { toast(e?.message ?? 'Could not create user', 'err'); }
     finally { saving.value = false; }
 }
@@ -672,6 +676,7 @@ onMounted(() => { void load(); });
                   <div><dt>Email</dt><dd>{{ draft.email }}</dd></div>
                   <div><dt>Role</dt><dd>{{ roles.find(r => r.role_key === draft.roleKey)?.role_name }}</dd></div>
                   <div><dt>Stations</dt><dd>{{ draft.stationIds.join(', ') }}</dd></div>
+                  <div class="ac-invite-email"><dt>Email invitation</dt><dd>Creation completes only after Resend confirms delivery to this work email. The message includes the Beverly Admin link and sign-in details.</dd></div>
                 </dl>
               </div>
 
