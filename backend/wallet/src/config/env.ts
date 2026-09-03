@@ -163,6 +163,13 @@ const schema = z.object({
             message: 'VAPID public and private keys must be configured together.',
         });
     }
+    if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY && !process.env.VERCEL && !process.env.SERVERLESS) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['APP_ENCRYPTION_KEY'],
+            message: 'Production deployments require a dedicated APP_ENCRYPTION_KEY.',
+        });
+    }
     if (values.NODE_ENV === 'production' && values.RESEND_API_KEY && !values.RESEND_WEBHOOK_SECRET) {
         context.addIssue({
             code: z.ZodIssueCode.custom,
