@@ -192,7 +192,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
   <div class="bw-export-wizard-root">
     <button
       type="button"
-      class="bw-btn sm bw-export-wizard-trigger"
+      class="bw-btn bw-export-wizard-trigger"
       :disabled="disabled"
       aria-haspopup="dialog"
       @click="show"

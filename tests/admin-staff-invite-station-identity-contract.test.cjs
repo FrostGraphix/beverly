@@ -53,7 +53,7 @@ assert.match(customerDetail, /detail\.customer\.station_ids\?\.join/);
 
 assert.match(exportMenu, /WalletExportWizard/);
 assert.match(exportMenu, /:formats="formats"/);
-assert.match(exportWizard, /class="bw-btn sm bw-export-wizard-trigger"/);
+assert.match(exportWizard, /class="bw-btn bw-export-wizard-trigger"/);
 assert.match(exportWizard, /formats\.length > 1/);
 assert.match(exportMenuTypes, /formats: \{ type: PropType<Array<'csv' \| 'pdf'>>/);
 
