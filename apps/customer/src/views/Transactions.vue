@@ -264,6 +264,7 @@ function printPurchaseReceipt(p: any) {
             title="Customer Transactions"
             subtitle="Filtered electricity purchases"
             :loading="loading"
+            :formats="['pdf']"
           />
           <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
           <button

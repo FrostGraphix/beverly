@@ -194,6 +194,7 @@ onMounted(load);
               title="Vendor Token Receipts"
               subtitle="Filtered customer receipts"
               :loading="loading"
+              :formats="['pdf']"
             />
             <input v-model="search" class="bw-input" placeholder="Search customer / meter / token…" style="width: 240px" />
             <button class="bw-btn sm" :disabled="loading" @click="load">

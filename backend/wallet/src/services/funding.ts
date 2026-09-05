@@ -51,7 +51,9 @@ async function generateFundingReference(
 
 export interface FundingRequest {
     id: string;
-    vendor_organization_id: string;
+    owner_type: 'vendor' | 'customer';
+    vendor_organization_id: string | null;
+    customer_id: string | null;
     wallet_id: string;
     amount_minor: number;
     funding_reference: string | null;
@@ -74,6 +76,7 @@ export interface FundingRequest {
         contact_email: string | null;
         contact_phone?: string | null;
     } | null;
+    customers?: { full_name: string | null; email: string | null; phone: string | null } | null;
 }
 
 export class FundingError extends Error {
@@ -207,7 +210,8 @@ export async function initiatePaystackFunding(input: InitiatePaystackInput): Pro
 }
 
 export interface InitiateBankProofInput {
-    vendorOrganizationId: string;
+    ownerType: 'vendor' | 'customer';
+    ownerId: string;
     amountMinor: number;
     submittedBy: string;
     proofFilePath: string;
@@ -215,7 +219,8 @@ export interface InitiateBankProofInput {
 }
 
 export interface UploadBankProofInput {
-    vendorOrganizationId: string;
+    ownerType: 'vendor' | 'customer';
+    ownerId: string;
     submittedBy: string;
     fileName: string;
     mimeType: string;
@@ -241,7 +246,7 @@ export async function uploadBankFundingProof(input: UploadBankProofInput): Promi
     proofFilePath: string;
     proofHash: string;
 }> {
-    const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
+    const wallet = await findWalletByOwner(input.ownerType, input.ownerId);
     try { assertWalletCanTransact(wallet, 'upload funding proof'); }
     catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
     if (!PROOF_ALLOWED_MIME.has(input.mimeType)) {
@@ -249,16 +254,19 @@ export async function uploadBankFundingProof(input: UploadBankProofInput): Promi
     }
     const buffer = decodeProofBase64(input.base64);
     const proofHash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const { data: duplicate } = await adminClient
+    let duplicateQuery = adminClient
         .from('funding_requests')
         .select('id')
-        .eq('vendor_organization_id', input.vendorOrganizationId)
-        .eq('proof_hash', proofHash)
-        .maybeSingle();
+        .eq('owner_type', input.ownerType)
+        .eq('proof_hash', proofHash);
+    duplicateQuery = input.ownerType === 'vendor'
+        ? duplicateQuery.eq('vendor_organization_id', input.ownerId)
+        : duplicateQuery.eq('customer_id', input.ownerId);
+    const { data: duplicate } = await duplicateQuery.maybeSingle();
     if (duplicate) throw new FundingError('proof appears to be a duplicate submission', 'duplicate_proof');
 
     const ext = safeProofFileName(input.fileName).split('.').pop();
-    const proofFilePath = `wallet/funding-proofs/${input.vendorOrganizationId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const proofFilePath = `wallet/funding-proofs/${input.ownerType}/${input.ownerId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
 
     const { error } = await adminClient.storage
         .from(PROOF_BUCKET)
@@ -271,14 +279,19 @@ export async function uploadBankFundingProof(input: UploadBankProofInput): Promi
 
     await logAction({
         actorUserId: input.submittedBy,
-        actorType: 'vendor_user',
+        actorType: input.ownerType === 'vendor' ? 'vendor_user' : 'customer',
         action: 'funding.proof.upload',
-        targetType: 'vendor_organization',
-        targetId: input.vendorOrganizationId,
+        targetType: input.ownerType,
+        targetId: input.ownerId,
         after: { proofFilePath, proofHash },
     });
 
     return { proofFilePath, proofHash };
+}
+
+export async function removeBankFundingProof(proofFilePath: string): Promise<void> {
+    const { error } = await adminClient.storage.from(PROOF_BUCKET).remove([proofFilePath]);
+    if (error) throw new FundingError(error.message, 'proof_cleanup_failed');
 }
 
 export async function attachProofUrls(requests: FundingRequest[]): Promise<FundingRequest[]> {
@@ -295,25 +308,30 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
     if (input.amountMinor < 100000) {
         throw new FundingError('minimum bank funding is ₦1,000', 'amount_too_low');
     }
-    const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
+    const wallet = await findWalletByOwner(input.ownerType, input.ownerId);
     try { assertWalletCanTransact(wallet, 'receive funding'); }
     catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
 
     // Reject obvious duplicate proofs by hash
-    const { data: dup } = await adminClient
+    let duplicateQuery = adminClient
         .from('funding_requests')
         .select('id, status')
-        .eq('vendor_organization_id', input.vendorOrganizationId)
-        .eq('proof_hash', input.proofHash)
-        .maybeSingle();
+        .eq('owner_type', input.ownerType)
+        .eq('proof_hash', input.proofHash);
+    duplicateQuery = input.ownerType === 'vendor'
+        ? duplicateQuery.eq('vendor_organization_id', input.ownerId)
+        : duplicateQuery.eq('customer_id', input.ownerId);
+    const { data: dup } = await duplicateQuery.maybeSingle();
     if (dup) throw new FundingError('proof appears to be a duplicate submission', 'duplicate_proof');
 
     const { data, error } = await adminClient.from('funding_requests').insert({
-        vendor_organization_id: input.vendorOrganizationId,
+        owner_type: input.ownerType,
+        vendor_organization_id: input.ownerType === 'vendor' ? input.ownerId : null,
+        customer_id: input.ownerType === 'customer' ? input.ownerId : null,
         wallet_id: wallet.id,
         amount_minor: input.amountMinor,
         channel: 'bank_transfer',
-        funding_reference: await generateFundingReference('bank_transfer', input.vendorOrganizationId),
+        funding_reference: await generateFundingReference('bank_transfer', input.ownerId),
         proof_file_path: input.proofFilePath,
         proof_hash: input.proofHash,
         status: 'proof_uploaded',
@@ -324,18 +342,16 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
 
     await logAction({
         actorUserId: input.submittedBy,
-        actorType: 'vendor_user',
+        actorType: input.ownerType === 'vendor' ? 'vendor_user' : 'customer',
         action: 'funding.initiate.bank_transfer',
         targetType: 'funding_request',
         targetId: (data as FundingRequest).id,
         after: { amountMinor: input.amountMinor, reference: (data as FundingRequest).funding_reference },
     });
 
-    const { data: vendor } = await adminClient
-        .from('vendor_organizations')
-        .select('operating_stations')
-        .eq('id', input.vendorOrganizationId)
-        .maybeSingle();
+    const stationIds = input.ownerType === 'vendor'
+        ? ((await adminClient.from('vendor_organizations').select('operating_stations').eq('id', input.ownerId).maybeSingle()).data as any)?.operating_stations ?? []
+        : ((await adminClient.from('customer_meters').select('station_id').eq('customer_id', input.ownerId)).data ?? []).map((row: any) => row.station_id).filter(Boolean);
     await notifyOperationalStaff({
         permission: 'wallet.funding.view',
         type: 'funding_approval',
@@ -343,8 +359,8 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         body: `${(data as FundingRequest).funding_reference ?? 'Bank funding'} requires review.`,
         path: '/funding',
         dedupeKey: `funding.requested.${(data as FundingRequest).id}`,
-        stationIds: (vendor as any)?.operating_stations ?? [],
-        metadata: { fundingRequestId: (data as FundingRequest).id, amountMinor: input.amountMinor },
+        stationIds,
+        metadata: { fundingRequestId: (data as FundingRequest).id, amountMinor: input.amountMinor, ownerType: input.ownerType },
     }).catch(() => undefined);
 
     return data as FundingRequest;
@@ -355,8 +371,11 @@ export interface ApproveFundingInput {
     approvedBy: string;
 }
 
-async function canonicalVendorWallet(funding: FundingRequest): Promise<Wallet> {
-    const wallet = await getOrCreateWallet('vendor', funding.vendor_organization_id);
+async function canonicalFundingWallet(funding: FundingRequest): Promise<Wallet> {
+    const ownerType = funding.owner_type ?? (funding.customer_id ? 'customer' : 'vendor');
+    const ownerId = ownerType === 'customer' ? funding.customer_id : funding.vendor_organization_id;
+    if (!ownerId) throw new FundingError('funding request owner is missing', 'owner_missing');
+    const wallet = await getOrCreateWallet(ownerType, ownerId);
     if (wallet.id !== funding.wallet_id) {
         await adminClient
             .from('funding_requests')
@@ -442,7 +461,7 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         .single();
     if (frErr || !fr) throw new FundingError('funding request not found', 'not_found');
     const funding = fr as FundingRequest;
-    const canonicalWallet = await canonicalVendorWallet(funding);
+    const canonicalWallet = await canonicalFundingWallet(funding);
     try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
     catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
     const fundingForCredit = { ...funding, wallet_id: canonicalWallet.id };
@@ -549,7 +568,7 @@ export async function reconcileApprovedFundingCredits(input: {
 
     for (const row of data ?? []) {
         const funding = row as FundingRequest;
-        const canonicalWallet = await canonicalVendorWallet(funding);
+        const canonicalWallet = await canonicalFundingWallet(funding);
         const existing = await findFundingCredit(funding.id);
 
         if (!existing) {
@@ -651,7 +670,8 @@ export async function rejectFundingRequest(opts: {
 export async function listVendorFunding(vendorOrganizationId: string, limit = 50): Promise<FundingRequest[]> {
     const { data, error } = await adminClient
         .from('funding_requests')
-        .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
+        .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone), customers(full_name, email, phone)')
+        .eq('owner_type', 'vendor')
         .eq('vendor_organization_id', vendorOrganizationId)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -659,10 +679,24 @@ export async function listVendorFunding(vendorOrganizationId: string, limit = 50
     return attachProofUrls((data ?? []) as FundingRequest[]);
 }
 
+export async function listCustomerFunding(customerId: string, limit = 50, cursor?: string): Promise<FundingRequest[]> {
+    let query = adminClient
+        .from('funding_requests')
+        .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone), customers(full_name, email, phone)')
+        .eq('owner_type', 'customer')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (cursor) query = query.lt('created_at', cursor);
+    const { data, error } = await query;
+    if (error) throw error;
+    return attachProofUrls((data ?? []) as FundingRequest[]);
+}
+
 export async function listPendingFunding(limit = 100): Promise<FundingRequest[]> {
     const { data, error } = await adminClient
         .from('funding_requests')
-        .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
+        .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone), customers(full_name, email, phone)')
         .in('status', ['proof_uploaded', 'under_review'])
         .order('created_at', { ascending: true })
         .limit(limit);

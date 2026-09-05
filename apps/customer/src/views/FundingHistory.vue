@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Customer funding history — wallet top-ups via Paystack.
+ * Customer funding history — reviewed bank transfers and gateway top-ups.
  * GET /api/v1/customer/funding[?cursor]
  */
 import { onMounted, ref, computed } from 'vue';
@@ -14,8 +14,10 @@ import { naira, shortDate } from '../lib/format';
 
 interface Funding {
     id: string;
-    gateway: string;
-    gateway_reference: string;
+    gateway?: string;
+    gateway_reference?: string;
+    channel?: string;
+    funding_reference?: string;
     amount_minor: number;
     status: string;
     created_at: string;
@@ -30,7 +32,15 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 
 function isSuccessfulStatus(status: string) {
-    return ['succeeded', 'success'].includes(status);
+    return ['succeeded', 'success', 'approved'].includes(status);
+}
+
+function fundingChannel(item: Funding) {
+    return item.channel || item.gateway || 'bank_transfer';
+}
+
+function fundingReference(item: Funding) {
+    return item.funding_reference || item.gateway_reference || item.id;
 }
 
 async function load(reset = true) {
@@ -48,8 +58,8 @@ async function load(reset = true) {
 const filtered = computed(() => {
     if (filter.value === 'all') return items.value;
     if (filter.value === 'success') return items.value.filter((f) => isSuccessfulStatus(f.status));
-    if (filter.value === 'failed') return items.value.filter((f) => ['failed', 'abandoned'].includes(f.status));
-    return items.value.filter((f) => ['initiated', 'pending'].includes(f.status));
+    if (filter.value === 'failed') return items.value.filter((f) => ['failed', 'abandoned', 'rejected', 'expired', 'cancelled'].includes(f.status));
+    return items.value.filter((f) => ['initiated', 'pending', 'proof_uploaded', 'under_review'].includes(f.status));
 });
 
 const paginatedFunding = computed(() => {
@@ -63,14 +73,14 @@ const totalFunded = computed(() =>
 
 const fundingExportColumns: WalletExportColumn<Funding>[] = [
     { key: 'created_at', header: 'When', value: (item) => shortDate(item.created_at) },
-    { key: 'gateway_reference', header: 'Reference', value: (item) => item.gateway_reference },
-    { key: 'gateway', header: 'Channel', value: (item) => item.gateway },
+    { key: 'reference', header: 'Reference', value: fundingReference },
+    { key: 'channel', header: 'Channel', value: fundingChannel },
     { key: 'amount_minor', header: 'Amount', value: (item) => naira(item.amount_minor) },
     { key: 'status', header: 'Status', value: (item) => item.status },
 ];
 
 function statusBadge(s: string) {
-    return ({ succeeded: 'success', success: 'success', initiated: 'warn', pending: 'warn', failed: 'danger', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
+    return ({ succeeded: 'success', success: 'success', approved: 'success', initiated: 'warn', pending: 'warn', proof_uploaded: 'warn', under_review: 'warn', failed: 'danger', rejected: 'danger', expired: 'neutral', cancelled: 'neutral', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
 }
 
 onMounted(() => load());
@@ -96,6 +106,7 @@ onMounted(() => load());
             title="Customer Funding History"
             subtitle="Filtered wallet top-ups"
             :loading="loading"
+            :formats="['pdf']"
           />
           <div class="bw-segmented">
             <button v-for="f in (['all','success','pending','failed'] as const)" :key="f"
@@ -120,8 +131,8 @@ onMounted(() => load());
             <WalletTableSkeleton v-if="loading && !items.length" :columns="5" />
             <tr v-for="f in paginatedFunding" :key="f.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(f.created_at) }}</td>
-              <td class="bw-mono" style="font-size: var(--t-xs)">{{ f.gateway_reference }}</td>
-              <td><span class="bw-badge neutral">{{ f.gateway }}</span></td>
+              <td class="bw-mono" style="font-size: var(--t-xs)">{{ fundingReference(f) }}</td>
+              <td><span class="bw-badge neutral">{{ fundingChannel(f).replaceAll('_', ' ') }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(f.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span></td>
             </tr>
@@ -146,11 +157,11 @@ onMounted(() => load());
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Channel</span>
-              <span class="bw-tc-pair-val">{{ f.gateway }}</span>
+              <span class="bw-tc-pair-val">{{ fundingChannel(f).replaceAll('_', ' ') }}</span>
             </div>
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Reference</span>
-              <span class="bw-tc-pair-val bw-mono" style="font-size: var(--t-xs)">{{ f.gateway_reference }}</span>
+              <span class="bw-tc-pair-val bw-mono" style="font-size: var(--t-xs)">{{ fundingReference(f) }}</span>
             </div>
           </div>
         </div>

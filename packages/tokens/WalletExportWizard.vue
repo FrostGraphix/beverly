@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   meta?: WalletExportMeta[];
   loading?: boolean;
   label?: string;
+  formats?: Array<'csv' | 'pdf'>;
   statusOptions?: WalletExportOption[];
   stationOptions?: WalletExportOption[];
   actorOptions?: WalletExportOption[];
@@ -38,6 +39,7 @@ const props = withDefaults(defineProps<{
   meta: () => [],
   loading: false,
   label: 'Export',
+  formats: () => ['csv', 'pdf'],
   statusOptions: () => [],
   stationOptions: () => [],
   actorOptions: () => [],
@@ -65,7 +67,7 @@ const open = ref(false);
 const step = ref(1);
 const busy = ref(false);
 const message = ref('');
-const format = ref<'csv' | 'pdf'>('csv');
+const format = ref<'csv' | 'pdf'>(props.formats[0] ?? 'pdf');
 const since = ref(props.initialSince);
 const until = ref(props.initialUntil);
 const status = ref(props.initialStatus);
@@ -87,7 +89,7 @@ const scopeSummary = computed(() => {
 
 function reset() {
   step.value = 1;
-  format.value = 'csv';
+  format.value = props.formats[0] ?? 'pdf';
   since.value = props.initialSince;
   until.value = props.initialUntil;
   status.value = props.initialStatus;
@@ -190,7 +192,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
   <div class="bw-export-wizard-root">
     <button
       type="button"
-      class="bw-btn sm bw-export-wizard-trigger"
+      class="bw-btn bw-export-wizard-trigger"
       :disabled="disabled"
       aria-haspopup="dialog"
       @click="show"
@@ -201,7 +203,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
     <div class="bw-export-hover-card" role="tooltip">
       <strong>{{ hoverTitle }}</strong>
       <span>{{ hoverDescription }}</span>
-      <span>Then choose fields and format.</span>
+      <span>Then choose fields{{ formats.length > 1 ? ' and format' : '' }}.</span>
     </div>
 
     <Teleport to="body">
@@ -227,8 +229,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
             <div v-if="step === 1" class="bw-export-step-panel">
               <h3>Choose record scope</h3>
               <div class="bw-export-form-grid">
-                <label><span>Start date</span><input v-model="since" type="date" class="bw-input" /></label>
-                <label><span>End date</span><input v-model="until" type="date" class="bw-input" /></label>
+                <label v-if="dateValue"><span>Start date</span><input v-model="since" type="date" class="bw-input" /></label>
+                <label v-if="dateValue"><span>End date</span><input v-model="until" type="date" class="bw-input" /></label>
                 <label v-if="statusOptions.length"><span>{{ statusLabel }}</span><select v-model="status" class="bw-select"><option value="">{{ allStatusLabel }}</option><option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
                 <label v-if="stationOptions.length"><span>{{ stationLabel }}</span><select v-model="station" class="bw-select"><option value="">{{ allStationLabel }}</option><option v-for="option in stationOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
                 <label v-if="actorOptions.length" class="wide"><span>{{ actorLabel }}</span><select v-model="actor" class="bw-select"><option value="">{{ allActorLabel }}</option><option v-for="option in actorOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
@@ -251,8 +253,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
             <div v-else class="bw-export-step-panel">
               <h3>Choose export format</h3>
               <div class="bw-export-format-grid">
-                <button type="button" :class="{ selected: format === 'csv' }" @click="format = 'csv'"><strong>CSV</strong><span>Power BI and spreadsheets</span></button>
-                <button type="button" :class="{ selected: format === 'pdf' }" @click="format = 'pdf'"><strong>PDF</strong><span>Printable business report</span></button>
+                <button v-if="formats.includes('csv')" type="button" :class="{ selected: format === 'csv' }" @click="format = 'csv'"><strong>CSV</strong><span>Power BI and spreadsheets</span></button>
+                <button v-if="formats.includes('pdf')" type="button" :class="{ selected: format === 'pdf' }" @click="format = 'pdf'"><strong>PDF</strong><span>Printable Beverly report</span></button>
               </div>
               <dl class="bw-export-review">
                 <div><dt>Scope</dt><dd>{{ scopeSummary }}</dd></div>

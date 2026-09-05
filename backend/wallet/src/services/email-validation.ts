@@ -8,7 +8,6 @@
  * 4. Corporate domain restriction for staff accounts
  */
 import dns from 'node:dns';
-import { env } from '../config/env.js';
 
 export class EmailValidationError extends Error {
     constructor(message: string, public code: string) {
@@ -66,13 +65,7 @@ export function isDisposableEmail(email: string): boolean {
 export function isCorporateStaffEmail(email: string): boolean {
     try {
         const domain = extractEmailDomain(email);
-        const configuredDomain = env.LOGIN_EMAIL_DOMAIN?.toLowerCase().trim() || 'org.acoblighting.com';
-        const allowedDomains = new Set<string>([
-            'acoblighting.com',
-            'org.acoblighting.com',
-            configuredDomain,
-        ]);
-        return allowedDomains.has(domain);
+        return domain === 'acoblighting.com';
     } catch {
         return false;
     }

@@ -73,7 +73,9 @@
             class="beverly-ai-icon-btn"
             :class="{ active: speakResponses }"
             @click="toggleSpeech"
-            :title="speakResponses ? 'Mute Voice' : 'Enable Voice'"
+            :title="!synthesisSupported ? 'Spoken responses are unavailable in this browser' : speakResponses ? 'Mute Voice' : 'Enable Voice'"
+            :aria-label="!synthesisSupported ? 'Spoken responses unavailable' : speakResponses ? 'Mute spoken responses' : 'Enable spoken responses'"
+            :aria-pressed="speakResponses"
           >
             <svg v-if="speakResponses" class="beverly-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -223,13 +225,19 @@
         </div>
 
         <footer class="beverly-ai-footer">
+          <div v-if="voiceStatus" id="beverly-customer-voice-status" class="beverly-ai-voice-status" role="status" aria-live="polite">
+            {{ voiceStatus }}
+          </div>
           <!-- Comprehensive Microphone Outline Icon -->
           <button
             type="button"
             class="beverly-ai-mic-btn"
             :class="{ listening: isListening }"
             @click="toggleListening"
-            :title="isListening ? 'Listening…' : 'Speak command'"
+            :title="!recognitionSupported ? 'Voice input is unavailable in this browser' : isListening ? 'Listening…' : 'Speak command'"
+            :aria-label="!recognitionSupported ? 'Voice input unavailable' : isListening ? 'Stop listening' : 'Speak a command'"
+            :aria-pressed="isListening"
+            :disabled="isThinking"
           >
             <svg class="beverly-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -244,6 +252,7 @@
             type="text"
             class="beverly-ai-input"
             placeholder="Ask Beverly AI or speak..."
+            aria-label="Ask Beverly AI"
             @keyup.enter="handleSend"
           />
 
@@ -268,6 +277,7 @@
 
 <script setup lang="ts">
 import { formatAiMessage } from '@beverly/tokens/ai-message';
+import { useAssistantVoice } from '@beverly/tokens/use-assistant-voice';
 import { ref, nextTick, computed, onMounted } from 'vue';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
@@ -283,10 +293,24 @@ const isOpen = ref(false);
 const isMinimized = ref(false);
 const inputPrompt = ref('');
 const isThinking = ref(false);
-const isListening = ref(false);
-const speakResponses = ref(false);
 const currentTheme = ref<'dark' | 'light' | 'executive'>('dark');
 const messageContainer = ref<HTMLElement | null>(null);
+const {
+  isListening,
+  speakResponses,
+  voiceStatus,
+  recognitionSupported,
+  synthesisSupported,
+  toggleListening,
+  toggleSpeech,
+  speakText,
+} = useAssistantVoice({
+  language: 'en-NG',
+  onTranscript(transcript) {
+    inputPrompt.value = transcript;
+    return handleSend();
+  },
+});
 
 interface ChatMessage {
   sender: 'user' | 'bot';
@@ -367,59 +391,6 @@ function formatMessage(text: string): string {
 
 function copyText(text: string) {
   navigator.clipboard.writeText(text);
-}
-
-function speakText(text: string) {
-  if (!speakResponses.value || !('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.replace(/<[^>]*>?/gm, ''));
-  utterance.rate = 1.0;
-  window.speechSynthesis.speak(utterance);
-}
-
-function toggleSpeech() {
-  speakResponses.value = !speakResponses.value;
-  if (!speakResponses.value && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-  }
-}
-
-function toggleListening() {
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('Speech recognition is not supported in this browser.');
-    return;
-  }
-
-  if (isListening.value) {
-    isListening.value = false;
-    return;
-  }
-
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
-  recognition.interimResults = false;
-
-  recognition.onstart = () => {
-    isListening.value = true;
-  };
-
-  recognition.onresult = (event: any) => {
-    const transcript = event.results[0][0].transcript;
-    inputPrompt.value = transcript;
-    isListening.value = false;
-    handleSend();
-  };
-
-  recognition.onerror = () => {
-    isListening.value = false;
-  };
-
-  recognition.onend = () => {
-    isListening.value = false;
-  };
-
-  recognition.start();
 }
 
 async function handleSend() {
@@ -932,12 +903,23 @@ async function sendPrompt(prompt: string, isRetry = false) {
   align-items: center;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  flex-wrap: wrap;
+}
+
+.beverly-ai-voice-status {
+  flex-basis: 100%;
+  color: var(--text-2);
+  font-size: var(--t-xs);
+  line-height: 1.35;
 }
 
 .beverly-ai-mic-btn {
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
-  padding: 6px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
   border-radius: var(--r-md);
   color: var(--text);
   cursor: pointer;
@@ -951,6 +933,12 @@ async function sendPrompt(prompt: string, isRetry = false) {
   border-color: var(--semantic-negative);
   color: var(--semantic-negative);
   animation: pulse 1s infinite;
+}
+
+.beverly-ai-mic-btn:disabled,
+.beverly-ai-icon-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 .beverly-ai-input {
@@ -971,6 +959,8 @@ async function sendPrompt(prompt: string, isRetry = false) {
 
 /* Send Button: Beverly Brand Green Tokens */
 .beverly-ai-send-btn {
+  min-width: 44px;
+  min-height: 44px;
   padding: 6px 10px;
   background: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-500) 100%);
   color: #ffffff;

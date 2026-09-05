@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getSingleVendorAnalytics, getVendorAnalytics } from '../services/vendor-analytics.js';
+import { staffStations } from '../services/staff-station-scope.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/vendors/:id/analytics', async (req, reply) => {
@@ -18,11 +19,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 message: 'period must be 7d, 30d, 90d, or all.',
             });
         }
-        const stationIds = req.actor?.role === 'super-admin'
-            ? null
-            : [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-                .map((value) => String(value ?? '').trim().toUpperCase())
-                .filter(Boolean))];
+        const stationIds = staffStations(req);
         return getVendorAnalytics(parsed.data, stationIds);
     });
 };

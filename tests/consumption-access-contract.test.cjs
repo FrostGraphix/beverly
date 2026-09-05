@@ -18,7 +18,8 @@ const adminRoutes = read("backend/wallet/src/routes/admin.ts") + "\n" + (fs.exis
 const vendorRoutes = read("backend/wallet/src/routes/vendor.ts");
 const customerRoutes = read("backend/wallet/src/routes/customer.ts");
 const authPlugin = read("backend/wallet/src/plugins/auth.ts");
-const constants = read("backend/wallet/src/routes/admin-access-constants.ts");
+const constants = read("backend/wallet/src/services/rbac.ts");
+const staffScope = read("backend/wallet/src/services/staff-station-scope.ts");
 const accessMigration = read("supabase/migrations/20260717120000_consumption_access_model.sql");
 const pruneMigration = read("supabase/migrations/20260717130000_consumption_refresh_prune_orphans.sql");
 
@@ -58,10 +59,10 @@ assert.ok(
   adminRoutes.includes("assignedStations ? stationsAuthority(assignedStations) : allStations()"),
   "admin consumption must grant allStations only when unassigned (super-admin)"
 );
-assert.match(
-  adminRoutes,
-  /function staffStations[\s\S]{0,220}role === 'super-admin'\) return null/,
-  "staffStations must return null (all) only for super-admin"
+assert.ok(
+  staffScope.includes("role === 'super-admin'")
+  && staffScope.includes("stations.includes(ALL_STATIONS_SCOPE) ? null : stations"),
+  "staffStations must return all-stations authority for super-admin and explicit wildcard assignments"
 );
 
 // ── Every staff role may view consumption; station scope bounds them ────────

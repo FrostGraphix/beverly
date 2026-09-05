@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminAnnouncementEmail } from '../templates.js';
+import { adminAnnouncementEmail, staffInvitationEmail } from '../templates.js';
 
 describe('admin announcement email', () => {
     it('embeds a reliable Beverly logo with dark-mode support', () => {
@@ -50,5 +50,24 @@ describe('admin announcement email', () => {
         expect(email.html).not.toContain('<script>');
         expect(email.html).not.toContain('<img src=x');
         expect(email.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+});
+
+describe('staff invitation email', () => {
+    it('includes branded HTML, exact sign-in identity, and the configured admin portal link', () => {
+        const email = staffInvitationEmail({
+            fullName: 'Ada Okonkwo',
+            loginEmail: 'ada@acoblighting.com',
+            temporaryPassword: 'Beverly-test-A1!',
+            roleLabel: 'Operations Manager',
+            loginUrl: 'https://example.com/wallet-admin/',
+        });
+
+        expect(email.html).toContain('src="cid:beverly-logo"');
+        expect(email.html).toContain('https://example.com/wallet-admin/');
+        expect(email.html).toContain('Open Beverly Admin');
+        expect(email.html).toContain('ada@acoblighting.com');
+        expect(email.text).toContain('Open Beverly Admin: https://example.com/wallet-admin/');
+        expect(email.text).toContain('Beverly-test-A1!');
     });
 });

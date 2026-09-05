@@ -24,12 +24,12 @@ function main() {
 
   assert(page.includes("api.post<FundingApprovalResponse>"), "Funding approval must consume receipt response.");
   assert(page.includes("`/api/v1/admin/funding/${f.id}/approve`, {}"), "Funding approval must send an explicit JSON object.");
-  assert(page.includes("Vendor balance is now"), "Funding approval must confirm credited balance.");
+  assert(page.includes("Wallet balance is now"), "Funding approval must confirm credited balance.");
   assert(page.includes("repairApprovedCredits"), "Funding page must expose approved-credit repair.");
   assert(page.includes("/api/v1/admin/funding/reconcile-approved"), "Funding repair must call backend reconciliation.");
-  assert(page.includes("function vendorName"), "Funding page must render vendor names.");
-  assert(page.includes("function vendorEmail"), "Funding page must render vendor emails.");
-  assert(page.includes("vendor_organizations"), "Funding page must read hydrated vendor identity.");
+  assert(page.includes("function ownerName"), "Funding page must render wallet owner names.");
+  assert(page.includes("function ownerEmail"), "Funding page must render wallet owner emails.");
+  assert(page.includes("vendor_organizations") && page.includes("customers"), "Funding page must read customer and vendor identity.");
 
   assert(route.includes("getBalance"), "Funding route must import balance lookup.");
   assert(route.includes("const balance = await getBalance(r.funding.wallet_id)"), "Funding route must fetch updated balance.");
@@ -37,7 +37,7 @@ function main() {
   assert(route.includes("ledgerEntryId: r.ledgerEntry.id"), "Funding route must return ledger receipt.");
   assert(route.includes("reconcileApprovedFundingCredits"), "Funding route must expose approved-credit reconciliation.");
 
-  assert(service.includes("canonicalVendorWallet"), "Funding approval must canonicalize vendor wallets.");
+  assert(service.includes("canonicalFundingWallet"), "Funding approval must canonicalize customer and vendor wallets.");
   assert(service.includes("repairApprovedFundingWallet"), "Funding approval must repair stale wallet credits.");
   assert(service.includes("reconcileApprovedFundingCredits"), "Funding service must reconcile approved funding rows.");
   assert(service.includes("vendor_organizations(legal_name, trading_name, contact_email"), "Funding service must hydrate vendor identity.");

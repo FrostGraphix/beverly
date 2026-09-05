@@ -140,6 +140,7 @@ onMounted(async () => {
           title="Customer Meter Orders"
           subtitle="Meter installation requests"
           :loading="loading"
+          :formats="['pdf']"
         />
         <RouterLink to="/buy-meter" class="bw-btn small primary" style="text-decoration:none">+ New order</RouterLink>
       </div>

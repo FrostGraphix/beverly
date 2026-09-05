@@ -1,18 +1,85 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, idempotencyHeaders, newIdempotencyKey, redirectToPayment } from '../lib/api';
 import { naira } from '../lib/format';
 
 const PAYSTACK_AVAILABLE = import.meta.env.VITE_PAYSTACK_PAYMENTS_ENABLED === 'true';
+type Mode = 'paystack' | 'bank';
+const mode = ref<Mode>('bank');
 
 const amountRaw = ref('');
 const quickAmts = [100_00, 500_00, 1000_00, 2000_00, 5000_00, 10000_00];
 const loading   = ref(false);
 const error     = ref<string | null>(null);
 const success   = ref<string | null>(null);
+const proofFile = ref<File | null>(null);
+const copied = ref(false);
+const PROOF_MAX_BYTES = 8 * 1024 * 1024;
+const PROOF_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
 const amountMinor = () => Math.round(parseFloat(amountRaw.value || '0') * 100);
+const minimumMinor = computed(() => mode.value === 'bank' ? 100_000 : 50_000);
+const amountValid = computed(() => Number.isInteger(amountMinor()) && amountMinor() >= minimumMinor.value && amountMinor() <= 1_000_000_000);
+
+function selectMode(next: Mode) {
+    if (next === 'paystack' && !PAYSTACK_AVAILABLE) {
+        error.value = 'Paystack is temporarily unavailable. Kindly use bank transfer.';
+        mode.value = 'bank';
+        return;
+    }
+    mode.value = next;
+    error.value = null;
+    success.value = null;
+}
+
+async function copyAccountNumber() {
+    try {
+        await navigator.clipboard.writeText('4011606766');
+        copied.value = true;
+        setTimeout(() => { copied.value = false; }, 2000);
+    } catch { copied.value = false; }
+}
+
+function selectProof(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    error.value = null;
+    if (!file) { proofFile.value = null; return; }
+    if (!PROOF_MIME_TYPES.has(file.type)) {
+        input.value = ''; proofFile.value = null; error.value = 'Proof must be a PDF, JPG, PNG, or WebP file.'; return;
+    }
+    if (file.size > PROOF_MAX_BYTES) {
+        input.value = ''; proofFile.value = null; error.value = 'Proof file must be 8MB or smaller.'; return;
+    }
+    proofFile.value = file;
+}
+
+function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? '').split(',').pop() ?? '');
+        reader.onerror = () => reject(new Error('Could not read proof file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function submitBankTransfer() {
+    if (!amountValid.value) { error.value = 'Enter an amount from ₦1,000 to ₦10,000,000.'; return; }
+    if (!proofFile.value) { error.value = 'Upload your transfer proof.'; return; }
+    loading.value = true; error.value = null; success.value = null;
+    try {
+        const proofBase64 = await fileToBase64(proofFile.value);
+        await api.post('/api/v1/customer/funding/bank-transfer', {
+            amountMinor: amountMinor(), proofFileName: proofFile.value.name,
+            proofMimeType: proofFile.value.type, proofBase64,
+        });
+        proofFile.value = null;
+        success.value = 'Bank transfer proof submitted. Finance will review it and credit your wallet after approval.';
+    } catch (cause: any) {
+        error.value = cause?.message ?? 'The bank transfer request could not be submitted.';
+    } finally { loading.value = false; }
+}
 
 // One key per top-up intent, so a double-click cannot open two checkouts.
 const fundIntentKey = ref(newIdempotencyKey());
@@ -81,6 +148,7 @@ async function checkPendingTopup() {
 async function fund() {
     if (!PAYSTACK_AVAILABLE) {
         error.value = 'Paystack is temporarily unavailable. Kindly use bank transfer.';
+        mode.value = 'bank';
         return;
     }
     const amt = amountMinor();
@@ -128,16 +196,20 @@ onMounted(async () => {
   <AppShell>
     <div class="bw-card">
       <p class="bw-page-title" style="margin-bottom: var(--s-1)">Add money</p>
-      <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-5)">
-        Add money securely.
-      </p>
+      <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-4)">Add money securely.</p>
+
+      <div class="funding-methods" aria-label="Funding method">
+        <button type="button" :class="['bw-btn', mode === 'paystack' ? 'primary' : '']" :disabled="loading || !PAYSTACK_AVAILABLE" @click="selectMode('paystack')">Paystack</button>
+        <button type="button" :class="['bw-btn', mode === 'bank' ? 'primary' : '']" :disabled="loading" @click="selectMode('bank')">Bank transfer</button>
+      </div>
 
       <div v-if="!PAYSTACK_AVAILABLE" class="bw-alert warn" role="status" style="margin-bottom: var(--s-4); display:grid; gap:var(--s-2)">
         <strong>Paystack temporarily unavailable.</strong>
         <span>Kindly use bank transfer.</span>
-        <a class="bw-btn primary" href="mailto:support@acoblighting.com?subject=Customer%20wallet%20bank%20transfer" style="justify-content:center">Request bank transfer</a>
+        <button type="button" class="bw-btn primary" style="justify-content:center" @click="mode = 'bank'">Use bank transfer</button>
       </div>
 
+      <template v-if="mode === 'paystack'">
       <label class="bw-label">Amount (₦)</label>
       <input class="bw-input bw-mono" v-model="amountRaw" type="number" min="500"
              inputmode="numeric" placeholder="0.00"
@@ -173,6 +245,49 @@ onMounted(async () => {
       <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-4)">
         Paystack remains paused.
       </p>
+      </template>
+
+      <template v-else>
+        <div class="bank-details">
+          <span class="bw-badge success">FIDELITY BANK</span>
+          <span class="bank-label">ACCOUNT NUMBER</span>
+          <div class="bank-number-row"><strong class="bw-mono">4011606766</strong><button type="button" class="bw-btn sm" @click="copyAccountNumber">{{ copied ? 'Copied!' : 'Copy' }}</button></div>
+          <dl><div><dt>Account name</dt><dd>ACOB LIGHTING TECHNOLOGY LTD</dd></div><div><dt>Purpose</dt><dd>SALES COLLECTION ACCOUNT</dd></div></dl>
+          <p><strong>Narration:</strong> Include your full name or registered email in the transfer narration.</p>
+        </div>
+
+        <label class="bw-label" for="customer-bank-amount">Amount transferred (₦)</label>
+        <input id="customer-bank-amount" class="bw-input bw-mono" v-model="amountRaw" type="number" min="1000" max="10000000" step="0.01" inputmode="decimal" placeholder="0.00" />
+        <div class="bw-quick-amounts" style="margin:var(--s-3) 0 var(--s-4)">
+          <button v-for="a in [100000,250000,500000,1000000]" :key="a" :class="['bw-quick-amt', amountMinor() === a ? 'active' : '']" @click="amountRaw = (a/100).toString()">{{ naira(a) }}</button>
+        </div>
+        <label class="bw-label" for="customer-bank-proof">Upload proof of transfer</label>
+        <input id="customer-bank-proof" class="bw-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" @change="selectProof" />
+        <p class="bw-muted proof-help">PDF, JPG, PNG, or WebP. Maximum 8MB.</p>
+
+        <div v-if="error" class="bw-alert danger" role="alert">{{ error }}</div>
+        <div v-if="success" class="bw-alert success" role="status">{{ success }}</div>
+        <button type="button" class="bw-btn primary lg submit-bank" :disabled="loading || !proofFile || !amountValid" @click="submitBankTransfer">{{ loading ? 'Submitting…' : 'Submit for approval' }}</button>
+        <p class="bw-muted proof-help center">Your wallet is credited only after a finance reviewer approves the transfer.</p>
+      </template>
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.funding-methods { display:grid; grid-template-columns:1fr 1fr; gap:var(--s-2); margin-bottom:var(--s-4); }
+.funding-methods .bw-btn { justify-content:center; }
+.bank-details { display:grid; gap:var(--s-2); padding:var(--s-4); margin-bottom:var(--s-4); border:1px solid var(--glass-border); border-radius:var(--r-lg); background:var(--surface-2); }
+.bank-details > .bw-badge { justify-self:start; }
+.bank-label, .bank-details dt { color:var(--text-muted); font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.bank-number-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s-3); }
+.bank-number-row strong { color:var(--brand); font-size:clamp(1.25rem,5vw,1.7rem); letter-spacing:.08em; }
+.bank-details dl { display:grid; grid-template-columns:1fr 1fr; gap:var(--s-2); margin:0; }
+.bank-details dl div { padding:var(--s-2); border:1px solid var(--border); border-radius:var(--r-sm); }
+.bank-details dd { margin:4px 0 0; font-size:var(--t-sm); }
+.bank-details p, .proof-help { margin:0; color:var(--text-muted); font-size:var(--t-xs); line-height:1.5; }
+.submit-bank { width:100%; justify-content:center; margin-top:var(--s-4); }
+.center { text-align:center; margin-top:var(--s-2); }
+.bw-alert { margin-top:var(--s-3); }
+@media (max-width:480px) { .bank-details dl { grid-template-columns:1fr; } }
+</style>

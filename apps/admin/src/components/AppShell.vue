@@ -95,7 +95,7 @@ const standardNavGroups = computed(() => [
         label: 'Overview',
         items: [
             { to: '/', text: 'Dashboard', permission: 'wallet.dashboard.view', icon: 'dashboard' },
-            { to: '/reports', text: 'Reports', permission: 'wallet.dashboard.view', icon: 'reports' },
+            { to: '/reports', text: 'Reports', permission: 'wallet.reports.view', icon: 'reports' },
         ],
     },
     {

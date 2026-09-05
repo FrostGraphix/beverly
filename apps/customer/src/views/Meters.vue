@@ -133,12 +133,12 @@ function formatHistoryDate(value: string) {
 
 <template>
   <AppShell>
-    <div class="bw-row" style="justify-content:space-between; align-items:center">
-      <div>
+    <div class="meter-page-head">
+      <div class="meter-page-heading">
         <p class="bw-page-title">My Meters</p>
         <p class="bw-page-sub">{{ meters.length }} linked</p>
       </div>
-      <div class="bw-row" style="gap:8px">
+      <div class="meter-page-actions">
         <WalletExportMenu
           :rows="meters"
           :columns="meterExportColumns"
@@ -146,6 +146,7 @@ function formatHistoryDate(value: string) {
           title="Customer Meters"
           subtitle="Linked prepaid meters"
           :loading="loading"
+          :formats="['pdf']"
         />
         <router-link to="/consumption" class="bw-btn" style="text-decoration:none; white-space:nowrap">
           Consumption
@@ -196,14 +197,14 @@ function formatHistoryDate(value: string) {
       </router-link>
     </div>
 
-    <div v-for="meter in meters" :key="meter.id" class="bw-card">
-      <div class="bw-row">
+    <div v-for="meter in meters" :key="meter.id" class="bw-card meter-card">
+      <div class="bw-row meter-card-row">
         <div class="bw-meter-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
           </svg>
         </div>
-        <div style="flex:1; min-width:0">
+        <div class="meter-card-copy">
           <div style="font-weight:700">{{ meter.nickname || meter.meter_id }}</div>
           <div class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ meter.meter_id }}</div>
           <div class="bw-row" style="gap: var(--s-2); margin-top:4px; flex-wrap:wrap">
@@ -219,7 +220,7 @@ function formatHistoryDate(value: string) {
             {{ meter.rejection_reason }}
           </p>
         </div>
-        <div class="bw-row" style="gap: var(--s-2); flex-shrink:0">
+        <div class="bw-row meter-card-actions">
           <router-link v-if="meter.status === 'approved'" :to="{ name: 'buy-token', query: { meter: meter.meter_id } }"
                        class="bw-btn" style="text-decoration:none; font-size: var(--t-sm); padding:0 var(--s-3); height:36px">
             Buy
@@ -282,6 +283,25 @@ function formatHistoryDate(value: string) {
 </template>
 
 <style scoped>
+.meter-page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-4);
+    margin-bottom: var(--s-4);
+}
+.meter-page-heading { min-width: 0; }
+.meter-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--s-2);
+    min-width: 0;
+}
+.meter-page-actions :deep(.bw-export-wizard-root),
+.meter-page-actions > a { min-width: 0; }
+.meter-card-copy { flex: 1; min-width: 0; }
+.meter-card-actions { gap: var(--s-2); flex-shrink: 0; }
 .meter-install-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -469,11 +489,45 @@ function formatHistoryDate(value: string) {
     font-size: var(--t-sm);
     font-weight: 700;
 }
+@media (max-width: 640px) {
+    .meter-page-head {
+        align-items: stretch;
+        flex-direction: column;
+        gap: var(--s-3);
+    }
+    .meter-page-actions {
+        display: grid;
+        grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+        width: 100%;
+    }
+    .meter-page-actions :deep(.bw-export-wizard-root),
+    .meter-page-actions :deep(.bw-export-wizard-trigger),
+    .meter-page-actions > a {
+        width: 100%;
+        justify-content: center;
+    }
+    .meter-install-card { padding: var(--s-4); }
+}
 @media (max-width: 420px) {
+    .meter-page-actions { grid-template-columns: 1fr 1fr; }
+    .meter-page-actions > a:last-child { grid-column: 1 / -1; }
     .meter-install-card,
     .meter-install-actions {
         grid-template-columns: 1fr;
     }
+    .meter-install-icon { width: 48px; height: 48px; }
+    .meter-install-prices { grid-template-columns: 1fr; }
+    .meter-card-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .meter-card-copy { flex-basis: calc(100% - 64px); }
+    .meter-card-actions {
+        width: 100%;
+        padding-top: var(--s-3);
+        border-top: 1px solid var(--border);
+    }
+    .meter-card-actions > * { flex: 1; justify-content: center; }
     .meter-history-head,
     .meter-history-event-head {
         align-items: flex-start;

@@ -30,6 +30,7 @@ export function eligibleStaffRecipients(rows: StaffRow[], stationIds: string[] =
         if (!recipientId || !UUID.test(recipientId)) return [];
         if (!stationIds.length || row.role_key === 'super-admin') return [recipientId];
         const assigned = new Set([row.station_id, ...(row.station_ids ?? [])].filter(Boolean));
+        if (assigned.has('*')) return [recipientId];
         return stationIds.some((stationId) => assigned.has(stationId)) ? [recipientId] : [];
     });
     return [...new Set(recipientIds)];
