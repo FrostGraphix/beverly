@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
-import { exportCsv, type Column } from '../lib/export';
 import { naira } from '../lib/format';
 
 interface SettlementBatch {
@@ -29,7 +30,7 @@ const totals = computed(() => ({
     net: batches.value.reduce((sum, batch) => sum + (batch.net_amount_minor ?? 0), 0),
 }));
 
-const CSV_COLUMNS: Column<SettlementBatch>[] = [
+const statementExportColumns: WalletExportColumn<SettlementBatch>[] = [
     { key: 'period_start', header: 'Period Start', value: (row) => row.period_start },
     { key: 'period_end', header: 'Period End', value: (row) => row.period_end },
     { key: 'total_vends', header: 'Total Vends', value: (row) => row.total_vends },
@@ -46,10 +47,6 @@ function fmtDate(iso: string) {
 
 function statusBadge(status: string) {
     return status === 'settled' ? 'success' : 'warn';
-}
-
-function exportStatement() {
-    exportCsv('beverly-vendor-statement', batches.value, CSV_COLUMNS);
 }
 
 onMounted(async () => {
@@ -105,7 +102,7 @@ onMounted(async () => {
             <div class="bw-card-sub">Vendor account settlement history and statements</div>
           </div>
           <div class="bw-table-actions">
-            <button class="bw-btn sm" @click="exportStatement">Export CSV</button>
+            <WalletExportWizard :rows="batches" :columns="statementExportColumns" filename="beverly-vendor-statement" title="Vendor Settlement Statement" subtitle="Choose settlement periods and fields." :loading="loading" :formats="['pdf']" :date-value="row => row.period_start" :status-value="row => row.status" :status-options="[{value:'settled',label:'Settled'},{value:'pending',label:'Pending'}]" />
           </div>
         </div>
 

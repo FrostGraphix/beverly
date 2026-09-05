@@ -82,6 +82,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { verifiedPrincipalAmount, verifyTransaction } from '../adapters/paystack.js';
+import { initiateBankProofFunding, listCustomerFunding, uploadBankFundingProof, removeBankFundingProof, FundingError } from '../services/funding.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -990,7 +991,39 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { purchases };
     });
 
-    // Funding history — wallet top-ups via Paystack (payment_transactions).
+    fastify.post('/funding/bank-transfer', {
+        preHandler: fastify.requireCustomer(),
+        bodyLimit: 12 * 1024 * 1024,
+    }, async (req, reply) => {
+        const customerId = req.actor!.customerId!;
+        const body = z.object({
+            amountMinor: z.number().int().min(100000).max(1_000_000_000),
+            proofFileName: z.string().min(1).max(180),
+            proofMimeType: z.string().min(1).max(120),
+            proofBase64: z.string().min(1),
+        }).parse(req.body);
+        let uploadedProofPath: string | null = null;
+        try {
+            const proof = await uploadBankFundingProof({
+                ownerType: 'customer', ownerId: customerId, submittedBy: req.actor!.userId,
+                fileName: body.proofFileName, mimeType: body.proofMimeType, base64: body.proofBase64,
+            });
+            uploadedProofPath = proof.proofFilePath;
+            return await initiateBankProofFunding({
+                ownerType: 'customer', ownerId: customerId, amountMinor: body.amountMinor,
+                submittedBy: req.actor!.userId, proofFilePath: proof.proofFilePath, proofHash: proof.proofHash,
+            });
+        } catch (error: any) {
+            if (uploadedProofPath) await removeBankFundingProof(uploadedProofPath).catch(() => undefined);
+            if (error instanceof FundingError) {
+                return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(error.code) ? 403 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
+    // Funding history combines reviewed bank-transfer requests and gateway top-ups.
     fastify.get('/funding', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { limit, cursor } = req.query as { limit?: string; cursor?: string };
         let query = adminClient
@@ -1002,9 +1035,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 50), 200));
         if (cursor) query = query.lt('created_at', cursor);
-        const { data, error } = await query;
+        const [{ data, error }, bankFunding] = await Promise.all([
+            query,
+            listCustomerFunding(req.actor!.customerId!, Math.min(Number(limit ?? 50), 200), cursor),
+        ]);
         if (error) throw error;
-        const rows = data ?? [];
+        const gatewayRows = (data ?? []).map((row: any) => ({ ...row, channel: row.gateway ?? 'paystack', funding_reference: row.gateway_reference }));
+        const rows = [...gatewayRows, ...bankFunding].sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, Math.min(Number(limit ?? 50), 200));
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { funding: rows, nextCursor };
     });

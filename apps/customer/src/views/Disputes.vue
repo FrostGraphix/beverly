@@ -278,6 +278,7 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             title="Customer Disputes"
             subtitle="Filtered wallet support cases"
             :loading="loading"
+            :formats="['pdf']"
           />
           <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openNew()">+ Raise</button>
         </div>

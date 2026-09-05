@@ -68,11 +68,8 @@ for (const relativePath of requiredExportSurfaces) {
 }
 
 const menu = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportMenu.vue'), 'utf8');
-assert.match(menu, /:aria-haspopup="formats\.length > 1 \? 'menu' : undefined"/);
-assert.match(menu, /aria-live="polite"/);
-assert.match(menu, /@click="run\('csv'\)"/);
-assert.match(menu, /@click="run\('pdf'\)"/);
-assert.match(menu, /formats\.length === 1/);
+assert.match(menu, /WalletExportWizard/);
+assert.match(menu, /:formats="formats"/);
 
 const adminExport = fs.readFileSync(path.join(root, 'apps/admin/src/lib/export.ts'), 'utf8');
 assert.match(adminExport, /resolveWalletPrintBranding\(\)/);
@@ -86,6 +83,9 @@ assert.match(wizard, /Choose export format/);
 assert.match(wizard, /resolveRows/);
 assert.match(wizard, /All stations/);
 assert.match(wizard, /All statuses/);
+assert.match(wizard, /aria-live="polite"/);
+assert.match(wizard, /format === 'csv'/);
+assert.match(wizard, /formats\.includes\('pdf'\)/);
 
 const purchases = fs.readFileSync(path.join(root, 'apps/admin/src/views/Purchases.vue'), 'utf8');
 assert.match(purchases, /purchase-filter-button/);

@@ -167,6 +167,7 @@ onMounted(load);
             title="Vendor Consumption"
             :subtitle="`${periodLabelText} consumption view`"
             :loading="loading"
+            :formats="['pdf']"
           />
           <div class="seg" role="tablist" aria-label="View">
             <button

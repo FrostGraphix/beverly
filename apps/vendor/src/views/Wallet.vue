@@ -141,6 +141,7 @@ onMounted(async () => {
               title="Vendor Wallet Ledger"
               subtitle="Filtered ledger entries"
               :loading="wallet.loading"
+              :formats="['pdf']"
             />
             <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
             <button

@@ -9,7 +9,7 @@ import { adminClient } from '../db/supabase.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { isResendConfigured, sendEmail, sendBatch } from '../adapters/resend.js';
 import {
-    staffInvitationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
+    staffInvitationEmail, staffEmailVerificationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
 } from '../emails/templates.js';
 
 async function findStaffUser(userId: string): Promise<{ email?: string; user_name?: string } | null> {
@@ -42,7 +42,11 @@ export async function notifyStaffInvitation(opts: {
     fullName: string;
     temporaryPassword: string;
     roleLabel: string;
-}): Promise<{ status: 'sent' | 'not_sent'; messageId?: string; reason?: 'disabled' | 'not_configured' | 'provider_error' }> {
+    verificationUrl: string;
+    permissionLabels: string[];
+    stationScope: string;
+    idempotencyKey: string;
+}): Promise<{ status: 'sent' | 'not_sent'; messageId?: string; messageIds?: string[]; reason?: 'disabled' | 'not_configured' | 'provider_error' }> {
     try {
         const readiness = await staffInvitationReadiness();
         if (!readiness.ready) return { status: 'not_sent', reason: readiness.reason };
@@ -52,9 +56,15 @@ export async function notifyStaffInvitation(opts: {
             temporaryPassword: opts.temporaryPassword,
             roleLabel: opts.roleLabel,
             loginUrl: env.STAFF_PORTAL_URL,
+            permissionLabels: opts.permissionLabels,
+            stationScope: opts.stationScope,
         });
-        const result = await sendEmail({ to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-invitation' });
-        return { status: 'sent', messageId: result.messageId };
+        const verification = staffEmailVerificationEmail({ fullName: opts.fullName, verificationUrl: opts.verificationUrl });
+        const results = await sendBatch([
+            { to: opts.email, subject: verification.subject, html: verification.html, text: verification.text, tag: 'staff-verification' },
+            { to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-welcome' },
+        ], opts.idempotencyKey);
+        return { status: 'sent', messageId: results[0]?.messageId, messageIds: results.map((result) => result.messageId) };
     } catch {
         return { status: 'not_sent', reason: 'provider_error' };
     }

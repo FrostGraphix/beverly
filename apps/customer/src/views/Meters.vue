@@ -146,6 +146,7 @@ function formatHistoryDate(value: string) {
           title="Customer Meters"
           subtitle="Linked prepaid meters"
           :loading="loading"
+          :formats="['pdf']"
         />
         <router-link to="/consumption" class="bw-btn" style="text-decoration:none; white-space:nowrap">
           Consumption

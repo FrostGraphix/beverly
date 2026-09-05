@@ -270,6 +270,7 @@ const recentExportColumns: WalletExportColumn<typeof wallet.ledger[number]>[] = 
             title="Vendor Recent Activity"
             subtitle="Filtered wallet movements"
             :loading="dashboardLoading"
+            :formats="['pdf']"
           />
           <WalletDataViewSwitch
             v-model="viewMode"

@@ -8,6 +8,7 @@
         title="Vendor Disputes"
         subtitle="Wallet and vending cases"
         :loading="loading"
+        :formats="['pdf']"
       />
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ Raise Dispute</button>
     </div>

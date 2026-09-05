@@ -45,6 +45,7 @@ import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
 import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
+import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -538,9 +539,9 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /audit/export.csv': 'wallet.audit.view',
     'GET /security-events': 'wallet.audit.view',
     'GET /audit/summary': 'wallet.audit.view',
-    'GET /reports/overview': 'wallet.dashboard.view',
-    'GET /reports/export.csv': 'wallet.dashboard.view',
-    'GET /reports/power-bi.csv': 'wallet.dashboard.view',
+    'GET /reports/overview': 'wallet.reports.view',
+    'GET /reports/export.csv': 'wallet.reports.view',
+    'GET /reports/power-bi.csv': 'wallet.reports.view',
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',
@@ -661,13 +662,6 @@ function requireAccessManager(req: any, reply: any): boolean {
     return true;
 }
 
-function staffStations(req: FastifyRequest): string[] | null {
-    if (req.actor?.role === 'super-admin') return null;
-    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-        .map((value) => String(value ?? '').trim().toUpperCase())
-        .filter(Boolean))];
-}
-
 function scopeStations(query: any, stationIds: string[] | null, column = 'station_id') {
     return stationIds ? query.in(column, stationIds) : query;
 }
@@ -730,10 +724,13 @@ async function enforceResourceStation(req: FastifyRequest, reply: FastifyReply):
 
     if (routeUrl.startsWith('/funding/:id')) {
         const [{ data: funding }, owners] = await Promise.all([
-            adminClient.from('funding_requests').select('vendor_organization_id').eq('id', id).maybeSingle(),
+            adminClient.from('funding_requests').select('vendor_organization_id, customer_id, owner_type').eq('id', id).maybeSingle(),
             stationOwnerIds(stationIds),
         ]);
-        if (funding && owners.vendors.has(funding.vendor_organization_id)) return true;
+        if (funding && (
+            (funding.owner_type === 'customer' && owners.customers.has(funding.customer_id))
+            || (funding.owner_type !== 'customer' && owners.vendors.has(funding.vendor_organization_id))
+        )) return true;
         reply.code(404).send({ error: 'not_found', message: 'Funding request not found for your assigned station.' });
         return false;
     }
@@ -1264,17 +1261,22 @@ const route: FastifyPluginAsync = async (fastify) => {
             email: z.string().email(),
             fullName: z.string().min(2),
             roleKey: z.string().trim().min(2).max(80),
-            stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100),
+            stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
+            allStations: z.boolean().default(false),
             temporaryPassword: z.string().min(12).optional(),
+        }).refine((value) => value.allStations || value.stationIds.length > 0, {
+            message: 'Choose at least one station or All stations.',
+            path: ['stationIds'],
         });
         const body = schema.parse(req.body);
         if (!isCorporateStaffEmail(body.email)) {
             return reply.code(400).send({
                 error: 'invalid_staff_email_domain',
-                message: 'Staff accounts must use an approved corporate email domain (@acoblighting.com or @org.acoblighting.com).',
+                message: 'Staff accounts must use an @acoblighting.com email address.',
             });
         }
-        const stationIds = [...new Set(body.stationIds.map((value) => value.toUpperCase()))];
+        const stationIds = body.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(body.stationIds);
+        const primaryStationId = body.allStations ? null : stationIds[0];
         const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', body.roleKey).maybeSingle();
         if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const emailReadiness = await staffInvitationReadiness();
@@ -1290,8 +1292,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
             email: body.email.toLowerCase(),
             password,
-            email_confirm: true,
-            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName, station_id: stationIds[0], station_ids: stationIds },
+            email_confirm: false,
+            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName, station_id: primaryStationId, station_ids: stationIds, all_stations: body.allStations },
         });
         if (authErr || !authData.user) {
             return reply.code(400).send({ error: 'user_create_failed', message: authErr?.message ?? 'Could not create staff user.' });
@@ -1302,18 +1304,41 @@ const route: FastifyPluginAsync = async (fastify) => {
             user_name: body.fullName,
             email: body.email.toLowerCase(),
             role_key: body.roleKey,
-            station_id: stationIds[0],
+            station_id: primaryStationId,
             station_ids: stationIds,
         }, { onConflict: 'user_id' });
         if (rowErr) {
             await adminClient.auth.admin.deleteUser(authData.user.id);
             return reply.code(400).send({ error: 'staff_profile_failed', message: rowErr.message });
         }
+        const { data: verificationLink, error: verificationLinkError } = await adminClient.auth.admin.generateLink({
+            type: 'magiclink',
+            email: body.email.toLowerCase(),
+            options: { redirectTo: env.STAFF_PORTAL_URL },
+        });
+        const actionLink = verificationLink?.properties?.action_link;
+        if (verificationLinkError || !actionLink) {
+            await adminClient.from('users').delete().eq('user_id', authData.user.id);
+            await adminClient.auth.admin.deleteUser(authData.user.id);
+            return reply.code(502).send({
+                error: 'staff_verification_link_failed',
+                message: 'The email verification link could not be created, so the staff account was not created.',
+            });
+        }
+        const permissionRows = body.roleKey === 'super-admin'
+            ? PERMISSION_CATALOG.map((item) => item.key)
+            : ((await adminClient.from('permissions').select('route_hash').eq('role_key', body.roleKey)).data ?? []).map((item: any) => item.route_hash);
+        const granted = new Set(permissionRows);
+        const permissionLabels = PERMISSION_CATALOG.filter((item) => granted.has(item.key)).map((item) => item.label);
         const invitationDelivery = await notifyStaffInvitation({
             email: body.email.toLowerCase(),
             fullName: body.fullName,
             temporaryPassword: password,
             roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey,
+            verificationUrl: actionLink,
+            permissionLabels,
+            stationScope: body.allStations ? 'All current and future stations' : stationIds.join(', '),
+            idempotencyKey: `staff-invite-${authData.user.id}`,
         });
         if (invitationDelivery.status !== 'sent') {
             const profileCleanup = await adminClient.from('users').delete().eq('user_id', authData.user.id);
@@ -1352,7 +1377,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetType: 'staff_user',
             targetId: authData.user.id,
             after: {
-                email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds,
+                email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds, allStations: body.allStations,
                 invitationEmailStatus: invitationDelivery.status,
                 invitationEmailMessageId: invitationDelivery.messageId ?? null,
             },
@@ -1401,11 +1426,17 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.patch('/access/users/:userId/station', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const userId = (req.params as { userId: string }).userId;
-        const { stationIds } = z.object({ stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100) }).parse(req.body);
-        const normalized = [...new Set(stationIds.map((value) => value.toUpperCase()))];
+        const stationScope = z.object({
+            stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
+            allStations: z.boolean().default(false),
+        }).refine((value) => value.allStations || value.stationIds.length > 0, {
+            message: 'Choose at least one station or All stations.', path: ['stationIds'],
+        }).parse(req.body);
+        const normalized = stationScope.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(stationScope.stationIds);
+        const primaryStationId = stationScope.allStations ? null : normalized[0];
         const { data: before } = await adminClient.from('users').select('email, user_name, station_ids').or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
         const { error } = await adminClient.from('users')
-            .update({ station_id: normalized[0], station_ids: normalized, updated_at: new Date().toISOString() })
+            .update({ station_id: primaryStationId, station_ids: normalized, updated_at: new Date().toISOString() })
             .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
         if (error) return reply.code(400).send({ error: 'station_update_failed', message: error.message });
         await logAction({
@@ -1415,12 +1446,12 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'access.user.station_update',
             targetType: 'staff_user',
             targetId: userId,
-            after: { stationIds: normalized },
+            after: { stationIds: normalized, allStations: stationScope.allStations },
         });
 
-        await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
+        await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: stationScope.allStations ? 'All stations (including future stations)' : normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.includes(ALL_STATIONS_SCOPE) ? 'All stations' : ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
 
-        return { ok: true, userId, stationIds: normalized };
+        return { ok: true, userId, stationIds: normalized, allStations: stationScope.allStations };
     });
 
     fastify.patch('/access/users/:userId/suspension', async (req, reply) => {
@@ -1983,8 +2014,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const list = await listPendingFunding(200);
         const assignedStations = staffStations(req);
         if (!assignedStations) return { funding: list };
-        const { vendors } = await stationOwnerIds(assignedStations);
-        return { funding: list.filter((row) => vendors.has(row.vendor_organization_id)) };
+        const { vendors, customers } = await stationOwnerIds(assignedStations);
+        return { funding: list.filter((row) => row.owner_type === 'customer'
+            ? Boolean(row.customer_id && customers.has(row.customer_id))
+            : Boolean(row.vendor_organization_id && vendors.has(row.vendor_organization_id))) };
     });
 
     await fastify.register(adminPaymentRecoveryRoutes);
@@ -1996,15 +2029,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             limit?: string; cursor?: string;
         };
         const assignedStations = staffStations(req);
-        const scopedVendors = assignedStations ? (await stationOwnerIds(assignedStations)).vendors : null;
-        if (scopedVendors && !scopedVendors.size) return { funding: [], nextCursor: null, summary: null };
+        const scopedOwners = assignedStations ? await stationOwnerIds(assignedStations) : null;
+        if (scopedOwners && !scopedOwners.vendors.size && !scopedOwners.customers.size) return { funding: [], nextCursor: null, summary: null };
         const pageSize = Math.min(Number(limit ?? 50), 200);
         let query = adminClient
             .from('funding_requests')
-            .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
+            .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone), customers(full_name, email, phone)')
             .order('created_at', { ascending: false })
-            .limit(pageSize);
-        if (scopedVendors) query = query.in('vendor_organization_id', [...scopedVendors]);
+            .limit(scopedOwners ? 10_000 : pageSize);
         if (status === 'pending') query = query.in('status', ['initiated', 'proof_uploaded', 'under_review']);
         else if (status && status !== 'all') query = query.eq('status', status);
         if (channel && channel !== 'all') query = query.eq('channel', channel);
@@ -2012,19 +2044,23 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (to)     query = query.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
         if (cursor) query = query.lt('created_at', cursor);
         const { data } = await query;
-        const rows = (data ?? []) as any[];
+        const scopedRows = scopedOwners ? (data ?? []).filter((row: any) => row.owner_type === 'customer'
+            ? scopedOwners.customers.has(row.customer_id)
+            : scopedOwners.vendors.has(row.vendor_organization_id)) : (data ?? []);
+        const rows = (scopedOwners ? scopedRows.slice(0, pageSize) : scopedRows) as any[];
         const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
         const withUrls = await attachProofUrls(rows);
         // KPI aggregates (only on first page / no cursor)
         let summary: Record<string, number> | null = null;
         if (!cursor) {
-            let aggQ = adminClient.from('funding_requests').select('status, amount_minor');
-            if (scopedVendors) aggQ = aggQ.in('vendor_organization_id', [...scopedVendors]);
+            let aggQ = adminClient.from('funding_requests').select('status, amount_minor, owner_type, vendor_organization_id, customer_id');
             if (from)    aggQ = aggQ.gte('created_at', new Date(from).toISOString());
             if (to)      aggQ = aggQ.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
             if (channel && channel !== 'all') aggQ = aggQ.eq('channel', channel);
             const { data: agg } = await aggQ.limit(10_000);
-            const rows2 = (agg ?? []) as any[];
+            const rows2 = (scopedOwners ? (agg ?? []).filter((row: any) => row.owner_type === 'customer'
+                ? scopedOwners.customers.has(row.customer_id)
+                : scopedOwners.vendors.has(row.vendor_organization_id)) : (agg ?? [])) as any[];
             const sumMinor = (s: string) => rows2.filter((r) => r.status === s).reduce((acc, r) => acc + Number(r.amount_minor ?? 0), 0);
             summary = {
                 totalCount:    rows2.length,

@@ -13,6 +13,7 @@ import { eligibleStaffRecipients, notifyOperationalStaff } from '../operational-
 const superAdmin = '11111111-1111-4111-8111-111111111111';
 const stationStaff = '22222222-2222-4222-8222-222222222222';
 const otherStaff = '33333333-3333-4333-8333-333333333333';
+const allStationStaff = '44444444-4444-4444-8444-444444444444';
 
 describe('operational staff notifications', () => {
     beforeEach(() => {
@@ -25,8 +26,9 @@ describe('operational staff notifications', () => {
             { auth_user_id: superAdmin, role_key: 'super-admin' },
             { auth_user_id: stationStaff, role_key: 'operations-manager', station_ids: ['KYAKALE'] },
             { auth_user_id: otherStaff, role_key: 'operations-manager', station_ids: ['TUNGA'] },
+            { auth_user_id: allStationStaff, role_key: 'operations-manager', station_ids: ['*'] },
             { auth_user_id: 'not-a-uuid', role_key: 'operations-manager', station_ids: ['KYAKALE'] },
-        ], ['KYAKALE'])).toEqual([superAdmin, stationStaff]);
+        ], ['KYAKALE'])).toEqual([superAdmin, stationStaff, allStationStaff]);
     });
 
     it('pushes only newly inserted rows', async () => {

@@ -14,6 +14,7 @@ const customers = read('apps/admin/src/views/Customers.vue');
 const customerDetail = read('apps/admin/src/views/CustomerDetail.vue');
 const exportMenu = read('packages/tokens/WalletExportMenu.vue');
 const exportMenuTypes = read('packages/tokens/WalletExportMenu.vue.d.ts');
+const exportWizard = read('packages/tokens/WalletExportWizard.vue');
 
 assert.match(adminRoutes, /const invitationDelivery = await notifyStaffInvitation/);
 assert.match(adminRoutes, /const emailReadiness = await staffInvitationReadiness/);
@@ -24,8 +25,15 @@ assert.match(adminRoutes, /temporaryPassword: password, invitationDelivery/);
 assert.match(notifications, /isResendConfigured\(\)/);
 assert.match(notifications, /export async function staffInvitationReadiness/);
 assert.match(notifications, /status: 'not_sent', reason: 'provider_error'/);
-assert.match(roles, /Invitation sent to \$\{invitedEmail\}/);
-assert.match(roles, /Creation completes only after Resend confirms delivery/);
+assert.match(roles, /Verification and welcome emails sent to \$\{invitedEmail\}/);
+assert.match(roles, /Creation completes only after Resend confirms both the verification and welcome emails/);
+assert.match(roles, /allStations/);
+assert.match(roles, /All current and future stations/);
+assert.match(adminRoutes, /email_confirm: false/);
+assert.match(adminRoutes, /auth\.admin\.generateLink/);
+assert.match(adminRoutes, /@acoblighting\.com/);
+assert.match(notifications, /staffEmailVerificationEmail/);
+assert.match(notifications, /sendBatch/);
 
 assert.match(adminRoutes, /stationId: rawStationId/);
 assert.match(adminRoutes, /query = query\.eq\('station_id', stationId\)/);
@@ -43,9 +51,10 @@ assert.doesNotMatch(customers, /Export CSV/);
 assert.match(customers, />Export PDF<\/button>/);
 assert.match(customerDetail, /detail\.customer\.station_ids\?\.join/);
 
-assert.match(exportMenu, /class="bw-btn bw-export-trigger"/);
-assert.match(exportMenu, /formats\.length === 1/);
-assert.doesNotMatch(exportMenu, /class="bw-btn sm bw-export-trigger"/);
+assert.match(exportMenu, /WalletExportWizard/);
+assert.match(exportMenu, /:formats="formats"/);
+assert.match(exportWizard, /class="bw-btn sm bw-export-wizard-trigger"/);
+assert.match(exportWizard, /formats\.length > 1/);
 assert.match(exportMenuTypes, /formats: \{ type: PropType<Array<'csv' \| 'pdf'>>/);
 
 console.log('admin staff invitation and station identity contracts passed');

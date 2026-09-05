@@ -28,7 +28,7 @@ interface AccessResponse {
 // System roles first, in a stable order; every other role (custom ones created
 // from Roles & Team) follows alphabetically. Filtering to a fixed list here
 // silently hid custom roles from this matrix.
-const SYSTEM_ROLE_ORDER = ['super-admin', 'operations-manager', 'finance-checker', 'account'];
+const SYSTEM_ROLE_ORDER = ['super-admin', 'operations-manager', 'finance-checker', 'account', 'developer'];
 
 const loading = ref(true);
 const error = ref<string | null>(null);

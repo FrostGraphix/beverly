@@ -459,11 +459,14 @@ export function vendorOnboardingEmail(opts: {
 
 export function staffInvitationEmail(opts: {
     fullName: string; loginEmail: string; temporaryPassword: string; roleLabel: string; loginUrl: string;
+    permissionLabels?: string[]; stationScope?: string;
 }): EmailContent {
     const name = firstName(opts.fullName);
     const heading = 'You’ve been added to Beverly';
     const body = `<p>Hi ${esc(name)},</p>
-        <p>An account has been created for you on the Beverly admin portal with <strong>${esc(opts.roleLabel)}</strong> access. Use the secure platform link below to sign in. We recommend changing the temporary password immediately after your first sign-in.</p>`;
+        <p>An account has been created for you on the Beverly admin portal with <strong>${esc(opts.roleLabel)}</strong> access. After verifying your work email, use the platform link below to sign in. Change the temporary password immediately after your first sign-in.</p>
+        ${opts.stationScope ? `<p><strong>Station scope:</strong> ${esc(opts.stationScope)}</p>` : ''}
+        ${opts.permissionLabels?.length ? `<p><strong>Your access includes:</strong></p><ul style="margin:0 0 18px;padding-left:22px;">${opts.permissionLabels.map((label) => `<li style="margin:0 0 7px;">${esc(label)}</li>`).join('')}</ul>` : ''}`;
     const highlight = `<span style="display:block;font-size:12px;font-weight:600;color:${MUTED};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Your sign-in details</span>
         <span style="display:block;font-size:14px;color:${INK};margin-bottom:6px;">Email &nbsp;<strong>${esc(opts.loginEmail)}</strong></span>
         <span style="display:block;font-size:14px;color:${INK};">Temporary password &nbsp;<strong style="font-family:'SF Mono',SFMono-Regular,Consolas,monospace;">${esc(opts.temporaryPassword)}</strong></span>`;
@@ -479,7 +482,24 @@ export function staffInvitationEmail(opts: {
             ctaUrl: opts.loginUrl,
             footerNote: 'Welcome to the team.',
         }),
-        text: `Hi ${name},\n\nAn account has been created for you on the Beverly admin portal with ${opts.roleLabel} access.\n\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nOpen Beverly Admin: ${opts.loginUrl}\n\nWe recommend changing the temporary password immediately after your first sign-in.\n\nWelcome to the team.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+        text: `Hi ${name},\n\nAn account has been created for you on the Beverly admin portal with ${opts.roleLabel} access.\n${opts.stationScope ? `\nStation scope: ${opts.stationScope}\n` : ''}${opts.permissionLabels?.length ? `\nYour access includes:\n${opts.permissionLabels.map((label) => `- ${label}`).join('\n')}\n` : ''}\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nOpen Beverly Admin: ${opts.loginUrl}\n\nVerify your work email before signing in, then change the temporary password immediately.\n\nWelcome to the team.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+    };
+}
+
+export function staffEmailVerificationEmail(opts: { fullName: string; verificationUrl: string }): EmailContent {
+    const name = firstName(opts.fullName);
+    return {
+        subject: 'Verify your Beverly staff email',
+        html: layout({
+            eyebrow: 'Email verification',
+            heading: 'Confirm your work email',
+            preheader: 'Verify your ACOB Lighting work email to activate Beverly Admin access.',
+            bodyHtml: `<p>Hi ${esc(name)},</p><p>Confirm this ACOB Lighting work email to activate your Beverly Admin account. This secure link can only be used for your invitation.</p>`,
+            ctaLabel: 'Verify work email',
+            ctaUrl: opts.verificationUrl,
+            footerNote: 'If you were not expecting this invitation, do not use the link and contact your administrator.',
+        }),
+        text: `Hi ${name},\n\nConfirm your ACOB Lighting work email to activate your Beverly Admin account:\n\n${opts.verificationUrl}\n\nIf you were not expecting this invitation, do not use the link and contact your administrator.\n\n— The Beverly Team`,
     };
 }
 

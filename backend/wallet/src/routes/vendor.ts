@@ -11,7 +11,7 @@ import { resolveFundingCallbackUrl } from '../config/funding-callbacks.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries, getActivitySummary } from '../services/ledger.js';
 import {
-    initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, FundingError,
+    initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, removeBankFundingProof, FundingError,
 } from '../services/funding.js';
 import {
     vendorPurchase,
@@ -1111,22 +1111,27 @@ const route: FastifyPluginAsync = async (fastify) => {
             proofBase64: z.string().min(1),
         });
         const body = schema.parse(req.body);
+        let uploadedProofPath: string | null = null;
         try {
             const proof = await uploadBankFundingProof({
-                vendorOrganizationId: orgId,
+                ownerType: 'vendor',
+                ownerId: orgId,
                 submittedBy: req.actor!.userId,
                 fileName: body.proofFileName,
                 mimeType: body.proofMimeType,
                 base64: body.proofBase64,
             });
+            uploadedProofPath = proof.proofFilePath;
             return await initiateBankProofFunding({
-                vendorOrganizationId: orgId,
+                ownerType: 'vendor',
+                ownerId: orgId,
                 amountMinor: body.amountMinor,
                 submittedBy: req.actor!.userId,
                 proofFilePath: proof.proofFilePath,
                 proofHash: proof.proofHash,
             });
         } catch (e: any) {
+            if (uploadedProofPath) await removeBankFundingProof(uploadedProofPath).catch(() => undefined);
             if (e instanceof FundingError) {
                 return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(e.code) ? 403 : 422)
                     .send({ error: e.code, message: e.message });

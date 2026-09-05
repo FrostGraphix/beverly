@@ -6,8 +6,10 @@ import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
+import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
 import { api } from '../lib/api';
-import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
@@ -39,8 +41,6 @@ const showFilters = ref(false);
 const searchQuery = ref('');
 const currentPage = ref(1);
 const pageSize = ref(10);
-const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
-const exporting = ref(false);
 const exportError = ref<string | null>(null);
 
 const selectedRemoteOrder = ref<PurchaseOrder | null>(null);
@@ -185,7 +185,7 @@ const paginatedPurchases = computed(() => {
     return filtered().slice(start, start + pageSize.value);
 });
 
-const CSV_COLUMNS: Column<PurchaseOrder>[] = [
+const transactionExportColumns: WalletExportColumn<PurchaseOrder>[] = [
     { key: 'created_at', header: 'Date', value: (row) => row.created_at },
     { key: 'customer', header: 'Customer', value: (row) => row.customer_name ?? '' },
     { key: 'meter', header: 'Meter', value: (row) => row.meter_id },
@@ -275,8 +275,7 @@ function printPurchaseReceipt(p: PurchaseOrder) {
     printReceipt(purchaseReceipt(p));
 }
 
-async function exportTransactions() {
-    exporting.value = true;
+async function resolveTransactionExport(selection: WalletExportSelection) {
     exportError.value = null;
     try {
         const rows: PurchaseOrder[] = [];
@@ -284,16 +283,20 @@ async function exportTransactions() {
         let hasMore = true;
         while (hasMore) {
             const response = await api.get<{ purchases: PurchaseOrder[]; has_more: boolean }>(
-                `/api/v1/vendor/transactions?period=${exportRange.value}&limit=${pageSizeVal}&offset=${rows.length}`,
+                `/api/v1/vendor/transactions?period=all&limit=${pageSizeVal}&offset=${rows.length}`,
             );
             rows.push(...(response.purchases ?? []));
             hasMore = response.has_more;
         }
-        exportCsv(`beverly-vendor-transactions-${exportRange.value}`, filterPurchases(rows), CSV_COLUMNS);
+        return filterPurchases(rows).filter((row) => {
+            if (selection.since && new Date(row.created_at) < new Date(`${selection.since}T00:00:00`)) return false;
+            if (selection.until && new Date(row.created_at) > new Date(`${selection.until}T23:59:59.999`)) return false;
+            if (selection.status && statusLabelText(row).toLowerCase() !== selection.status) return false;
+            return true;
+        });
     } catch (cause: any) {
         exportError.value = cause?.message ?? 'Export failed';
-    } finally {
-        exporting.value = false;
+        throw cause;
     }
 }
 
@@ -319,6 +322,7 @@ onMounted(async () => {
           <div class="bw-card-sub">Meter token vending transactions and receipts</div>
         </div>
         <div class="recent-actions">
+          <WalletExportWizard :rows="filtered()" :columns="transactionExportColumns" filename="beverly-vendor-transactions" title="Vendor Transactions" subtitle="Choose transaction scope and report fields." :loading="loading" :formats="['pdf']" :date-value="row => row.created_at" :status-value="row => statusLabelText(row).toLowerCase()" :status-options="[{value:'delivered',label:'Delivered'},{value:'remote send pending',label:'Remote send pending'},{value:'failed',label:'Failed'},{value:'reversed',label:'Reversed'}]" :resolve-rows="resolveTransactionExport" />
           <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
           <button
             class="bw-btn sm recent-filter-button"
@@ -346,21 +350,6 @@ onMounted(async () => {
               class="bw-input bw-input-sm"
               placeholder="Search customer, meter, station..."
             />
-          </div>
-          <div class="filter-group">
-            <label class="filter-label">Export period</label>
-            <select v-model="exportRange" class="bw-select bw-select-sm">
-              <option value="1d">Last day</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="all">All time</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label class="filter-label">Actions</label>
-            <button class="bw-btn sm primary" :disabled="exporting" @click="exportTransactions">
-              {{ exporting ? 'Exporting...' : 'Export CSV' }}
-            </button>
           </div>
           <div class="filter-group full-width">
             <label class="filter-label">Status Filter</label>

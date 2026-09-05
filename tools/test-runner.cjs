@@ -24,6 +24,8 @@ const packageJson = require(path.join(root, "package.json"));
 const serialPatterns = [
   /automation-control/,
   /local-database/,
+  /rate-limit-cors/,
+  /server-session-timeout/,
   /consumption-store/,
   /smoke-tooling/,
   /production-log-review/

@@ -161,6 +161,7 @@ onMounted(load);
               title="Vendor Meter Orders"
               subtitle="Customer meter installation requests"
               :loading="loading"
+              :formats="['pdf']"
             />
             <button class="bw-btn sm" :disabled="loading" @click="load">{{ loading ? 'Loading…' : 'Refresh' }}</button>
             <WalletDataViewSwitch v-model="viewMode" label="Meter order display view" />

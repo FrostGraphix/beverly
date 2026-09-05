@@ -12,6 +12,7 @@ declare const component: DefineComponent<{
   meta: { type: PropType<WalletExportMeta[]>; default: () => WalletExportMeta[] };
   loading: { type: BooleanConstructor; default: boolean };
   label: { type: StringConstructor; default: string };
+  formats: { type: PropType<Array<'csv' | 'pdf'>>; default: () => Array<'csv' | 'pdf'> };
   statusOptions: { type: PropType<WalletExportOption[]>; default: () => WalletExportOption[] };
   stationOptions: { type: PropType<WalletExportOption[]>; default: () => WalletExportOption[] };
   actorOptions: { type: PropType<WalletExportOption[]>; default: () => WalletExportOption[] };

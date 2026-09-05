@@ -118,6 +118,7 @@ const ledgerExportColumns: WalletExportColumn<any>[] = [
             title="Customer Wallet Ledger"
             subtitle="Filtered ledger entries"
             :loading="loading"
+            :formats="['pdf']"
           />
           <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
           <button
