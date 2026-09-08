@@ -451,17 +451,25 @@ export function managementFields(route, action) {
 }
 
 function meterSelectValue(name, value) {
-  const normalized = String(value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (value === undefined || value === null || value === "") {
+    if (name === "type") return "0";
+    if (name === "isThreePhase") return "0";
+    if (name === "communicationWay") return "1";
+    return "";
+  }
+  const normalized = String(value).trim().toLowerCase().replace(/[\s_-]+/g, "");
   if (name === "type") {
-    return ({ "0": "0", electricity: "0", "1": "1", water: "1", "2": "2", gas: "2" })[normalized] ?? "";
+    return ({ "0": "0", electricity: "0", "1": "1", water: "1", "2": "2", gas: "2" })[normalized] ?? "0";
   }
   if (name === "isThreePhase") {
-    if (value === true) return "1";
-    if (value === false) return "0";
-    return ({ "0": "0", false: "0", single: "0", singlephase: "0", "1": "1", true: "1", three: "1", threephase: "1" })[normalized] ?? "";
+    if (value === true || value === 1 || value === "1") return "1";
+    if (value === false || value === 0 || value === "0") return "0";
+    return ({ "0": "0", false: "0", single: "0", singlephase: "0", "1": "1", true: "1", three: "1", threephase: "1" })[normalized] ?? "0";
   }
   if (name === "communicationWay") {
-    return ({ "0": "0", gprs: "0", "1": "1", lorawan: "1" })[normalized] ?? "";
+    if (value === 0 || value === "0") return "0";
+    if (value === 1 || value === "1") return "1";
+    return ({ "0": "0", gprs: "0", "1": "1", lorawan: "1", lora: "1" })[normalized] ?? "1";
   }
   return value;
 }
@@ -472,12 +480,14 @@ export function managementFormSeed(route, action, row = {}) {
   const seed = {};
   for (const currentField of fields) {
     let value = row[currentField.name];
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || value === "") {
       // Try to find the key case-insensitively
       const actualKey = Object.keys(row).find(k => k.toLowerCase() === currentField.name.toLowerCase());
-      if (actualKey) value = row[actualKey];
+      if (actualKey && row[actualKey] !== undefined && row[actualKey] !== null && row[actualKey] !== "") {
+        value = row[actualKey];
+      }
     }
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || value === "") {
       if (currentField.name === "meterId") value = row.meterId || row.id || row.meter_id || row.meter_sn;
       else if (currentField.name === "customerId") value = row.customerId || row.id || row.customer_id;
       else if (currentField.name === "tariffId") value = row.tariffId || row.id || row.tariff_id;
@@ -493,12 +503,12 @@ export function managementFormSeed(route, action, row = {}) {
       else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name || row.customerName || row.gatewayName;
       else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || row.station_id || "";
       else if (currentField.name === "status" && route.hash === "#/admin/user") value = "true";
-      else if (currentField.name === "type") value = row.type ?? row.meterType ?? row.meter_type ?? "";
-      else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? row.is_three_phase ?? row.phase ?? "";
-      else if (currentField.name === "communicationWay") value = row.communicationWayCode ?? row.communicationWay ?? row.communication_way ?? "";
+      else if (currentField.name === "type") value = row.type ?? row.meterType ?? row.meter_type ?? "0";
+      else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? row.is_three_phase ?? row.phase ?? "0";
+      else if (currentField.name === "communicationWay") value = row.communicationWayCode ?? row.communicationWay ?? row.communication_way ?? row.communication ?? row.commWay ?? row.comm_way ?? "1";
       else if (currentField.name === "protocolVersion") value = row.protocolVersion ?? row.protocol_version ?? "2.2";
-      else if (currentField.name === "lat") value = row.lat ?? "";
-      else if (currentField.name === "lng") value = row.lng ?? "";
+      else if (currentField.name === "lat") value = row.lat ?? row.latitude ?? 0;
+      else if (currentField.name === "lng") value = row.lng ?? row.longitude ?? 0;
       else if (currentField.name === "remark") value = row.remark ?? row.Remark ?? "";
     }
     if (currentField.name === "stationId" && typeof value === "string") {
@@ -519,3 +529,4 @@ export function managementFormSeed(route, action, row = {}) {
   }
   return seed;
 }
+
