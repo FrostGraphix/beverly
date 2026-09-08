@@ -39,8 +39,9 @@ const form = ref({
 const fieldErrors = ref<Record<string, string>>({});
 const loading = ref(false);
 const error = ref<string | null>(null);
-const result = ref<{ organizationId: string; temporaryPassword: string } | null>(null);
+const result = ref<{ organizationId: string; temporaryPassword: string | null; replayed?: boolean; invitationDelivery: { status: 'sent' | 'failed'; reason?: string } } | null>(null);
 const copied = ref(false);
+const requestKey = ref(crypto.randomUUID());
 
 onMounted(() => {
     if (route.query.legalName) form.value.legalName = String(route.query.legalName);
@@ -66,6 +67,7 @@ function validateStep(index: number): boolean {
         if (form.value.tin && !/^[A-Za-z0-9-]{3,20}$/.test(form.value.tin)) {
             errs.tin = 'TIN looks invalid (3–20 letters/digits).';
         }
+        if (form.value.operatingStations.length !== 1) errs.operatingStations = 'Choose exactly one operating station.';
     }
 
     if (index === 1) {
@@ -144,26 +146,32 @@ async function submit() {
             contactEmail: form.value.contactEmail.trim(),
             contactPhone: form.value.contactPhone.trim(),
             operatingAddress: form.value.operatingAddress.trim() || undefined,
-            operatingStations: form.value.operatingStations.length ? form.value.operatingStations : undefined,
+            stationId: form.value.operatingStations[0],
             primaryUserFullName: form.value.primaryUserFullName.trim(),
             primaryUserEmail: form.value.primaryUserEmail.trim(),
             primaryUserPhone: form.value.primaryUserPhone.trim() || undefined,
             dailyLimitMinor: Math.round(form.value.dailyLimitNaira * 100),
             sourceApplicationId: form.value.sourceApplicationId || undefined,
         };
-        result.value = await api.post('/api/v1/admin/vendors', payload);
+        result.value = await api.post('/api/v1/admin/vendors', payload, { headers: { 'Idempotency-Key': requestKey.value } });
     } catch (e: any) {
         error.value = e?.message ?? 'Failed to create vendor';
     } finally { loading.value = false; }
 }
 
 async function copyPassword() {
-    if (!result.value) return;
+    if (!result.value?.temporaryPassword) return;
     try {
         await navigator.clipboard.writeText(result.value.temporaryPassword);
         copied.value = true;
         setTimeout(() => (copied.value = false), 2000);
     } catch { /* noop */ }
+}
+
+function createAnother() {
+    result.value = null;
+    currentIndex.value = 0;
+    requestKey.value = crypto.randomUUID();
 }
 
 const dailyLimitFmt = computed(() =>
@@ -184,15 +192,23 @@ const dailyLimitFmt = computed(() =>
         </div>
 
         <div class="bw-card password-card">
-          <p class="bw-label" style="color: var(--warn)">⚠ Temporary password — shown ONCE</p>
-          <p class="bw-mono temp-password">{{ result.temporaryPassword }}</p>
+          <p class="bw-label" style="color: var(--warn)">⚠ Temporary password — shown once</p>
+          <p v-if="result.temporaryPassword" class="bw-mono temp-password">{{ result.temporaryPassword }}</p>
+          <p v-else class="bw-muted">This was a safe retry of an already completed request. The password was not stored or shown again.</p>
           <p class="bw-muted" style="font-size: var(--t-sm)">
             Hand-deliver via your approved secure channel. The vendor will be forced to change it on first login.
             This page will <strong>not</strong> show this password again.
           </p>
-          <button class="bw-btn primary" style="margin-top: var(--s-3)" @click="copyPassword">
+          <button v-if="result.temporaryPassword" class="bw-btn primary" style="margin-top: var(--s-3)" @click="copyPassword">
             {{ copied ? 'Copied ✓' : 'Copy password' }}
           </button>
+        </div>
+
+        <div class="bw-card">
+          <p class="bw-label">Invitation delivery</p>
+          <p :style="{ color: result.invitationDelivery.status === 'sent' ? 'var(--brand)' : 'var(--danger)' }">
+            {{ result.invitationDelivery.status === 'sent' ? 'Verification and welcome email accepted by Resend.' : `Delivery failed: ${result.invitationDelivery.reason || 'Unknown provider error'}` }}
+          </p>
         </div>
 
         <div class="bw-card">
@@ -205,7 +221,7 @@ const dailyLimitFmt = computed(() =>
           </ol>
           <div class="action-row">
             <button class="bw-btn" @click="router.push('/vendors')">Done</button>
-            <button class="bw-btn primary" @click="result = null; currentIndex = 0">Create another</button>
+            <button class="bw-btn primary" @click="createAnother">Create another</button>
           </div>
         </div>
       </div>
@@ -263,9 +279,10 @@ const dailyLimitFmt = computed(() =>
           </div>
 
           <div>
-            <label class="bw-label">Operating stations</label>
+            <label class="bw-label">Operating station *</label>
             <StationMultiSelect v-model="form.operatingStations" />
-            <p class="field-hint">Search and pick the stations this vendor will sell tokens for. List is fetched live from the energy backend.</p>
+            <p class="field-hint">Choose the single station this vendor is authorized to serve.</p>
+            <p v-if="fieldErrors.operatingStations" class="field-error">{{ fieldErrors.operatingStations }}</p>
           </div>
         </section>
 

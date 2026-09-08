@@ -47,7 +47,7 @@ import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
 } from '../services/customer-auth.js';
 import {
-    submitKycTier1, submitKycTier2Nin, KycError,
+    getNinVerificationAvailability, submitKycTier1, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
@@ -82,6 +82,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { verifiedPrincipalAmount, verifyTransaction } from '../adapters/paystack.js';
+import { initiateBankProofFunding, listCustomerFunding, uploadBankFundingProof, removeBankFundingProof, FundingError } from '../services/funding.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -101,6 +102,7 @@ function customerAuthStatus(code: string): number {
         : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
         : code === 'customer_not_found' ? 404
         : code === 'email_in_use' || code === 'phone_in_use' ? 409
+        : code === 'account_conversion_failed' ? 503
         : code === 'invalid_credentials' ? 401
         : code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401
         : 400;
@@ -126,7 +128,9 @@ function assertPublicAuthIpRateLimited(ip: string): void {
 
 function emailOtpStatus(code: string): number {
     return code === 'otp_rate_limited' ? 429
-        : code === 'otp_storage_missing' ? 503
+        : code === 'otp_storage_missing' || code === 'email_delivery_disabled' || code === 'otp_send_failed'
+            || code === 'challenge_create_failed' || code === 'challenge_lookup_failed'
+            || code === 'challenge_update_failed' || code === 'verification_update_failed' ? 503
         : code === 'customer_not_found' ? 404
         : code === 'otp_not_found' || code === 'otp_expired' || code === 'otp_locked' || code === 'otp_incorrect' ? 401
         : 400;
@@ -242,8 +246,15 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
         try {
             assertPublicAuthIpRateLimited(req.ip);
-            const { access_token, customer, isNew } = await signupWithEmail({ email, password, full_name, phone });
-            return { access_token, customer, is_new: isNew };
+            const result = await signupWithEmail({ email, password, full_name, phone });
+            return {
+                access_token: result.access_token,
+                refresh_token: result.refresh_token,
+                expires_at: result.expires_at,
+                expires_in: result.expires_in,
+                customer: result.customer,
+                is_new: result.isNew,
+            };
         } catch (e: any) {
             if (e instanceof AuthError) {
                 return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
@@ -259,8 +270,15 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
         try {
             assertPublicAuthIpRateLimited(req.ip);
-            const { access_token, customer, isNew } = await loginWithEmail({ email, password });
-            return { access_token, customer, is_new: isNew };
+            const result = await loginWithEmail({ email, password });
+            return {
+                access_token: result.access_token,
+                refresh_token: result.refresh_token,
+                expires_at: result.expires_at,
+                expires_in: result.expires_in,
+                customer: result.customer,
+                is_new: result.isNew,
+            };
         } catch (e: any) {
             if (e instanceof AuthError) {
                 return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
@@ -278,8 +296,15 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
         try {
             assertPublicAuthIpRateLimited(req.ip);
-            const { access_token, customer, isNew } = await signupWithPhone({ phone, password, full_name, email });
-            return { access_token, customer, is_new: isNew };
+            const result = await signupWithPhone({ phone, password, full_name, email });
+            return {
+                access_token: result.access_token,
+                refresh_token: result.refresh_token,
+                expires_at: result.expires_at,
+                expires_in: result.expires_in,
+                customer: result.customer,
+                is_new: result.isNew,
+            };
         } catch (e: any) {
             if (e instanceof AuthError) {
                 return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
@@ -295,8 +320,15 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
         try {
             assertPublicAuthIpRateLimited(req.ip);
-            const { access_token, customer, isNew } = await loginWithPhone({ phone, password });
-            return { access_token, customer, is_new: isNew };
+            const result = await loginWithPhone({ phone, password });
+            return {
+                access_token: result.access_token,
+                refresh_token: result.refresh_token,
+                expires_at: result.expires_at,
+                expires_in: result.expires_in,
+                customer: result.customer,
+                is_new: result.isNew,
+            };
         } catch (e: any) {
             if (e instanceof AuthError) {
                 return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
@@ -352,7 +384,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── EMAIL VERIFICATION (email/password accounts) ────────────────────────────
 
-    fastify.post('/auth/email/verify/send', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+    fastify.post('/auth/email/verify/send', { preHandler: fastify.requireCustomer({ allowUnverified: true }) }, async (req, reply) => {
         const { data } = await adminClient.from('customers').select('email, full_name').eq('id', req.actor!.customerId!).maybeSingle();
         const email = (data as any)?.email;
         if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
@@ -365,7 +397,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.post('/auth/email/verify/confirm', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+    fastify.post('/auth/email/verify/confirm', { preHandler: fastify.requireCustomer({ allowUnverified: true }) }, async (req, reply) => {
         const { code } = z.object({ code: z.string().trim().length(6) }).parse(req.body);
         const { data } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).maybeSingle();
         const email = (data as any)?.email;
@@ -411,10 +443,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── PROFILE ───────────────────────────────────────────────────────────────
 
-    fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+    fastify.get('/me', { preHandler: fastify.requireCustomer({ allowUnverified: true }) }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, auth_provider, email_verified_at, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
@@ -488,7 +520,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-    fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {
+    fastify.post('/logout', { preHandler: fastify.requireCustomer({ allowUnverified: true }) }, async (req) => {
         await revokePortalSession(req.portalSessionKey);
         await logAction({
             actorUserId: req.actor!.userId,
@@ -523,6 +555,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    fastify.get('/kyc/tier2/nin/status', { preHandler: fastify.requireCustomer() }, async () => {
+        return getNinVerificationAvailability();
+    });
+
     fastify.post('/kyc/tier2/nin', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
         const { nin } = req.body as { nin: string };
         if (!nin) return reply.code(400).send({ error: 'nin_required', message: 'nin is required.' });
@@ -535,7 +571,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const { data } = await adminClient.from('customers').select('kyc_tier, kyc_status').eq('id', req.actor!.customerId!).single();
             return { ok: true, kyc_tier: (data as any)?.kyc_tier, kyc_status: (data as any)?.kyc_status };
         } catch (e: any) {
-            if (e instanceof KycError) return reply.code(422).send({ error: e.code, message: e.message });
+            if (e instanceof KycError) {
+                const status = e.code === 'nin_service_unavailable' ? 503 : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
             throw e;
         }
     });
@@ -990,7 +1029,39 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { purchases };
     });
 
-    // Funding history — wallet top-ups via Paystack (payment_transactions).
+    fastify.post('/funding/bank-transfer', {
+        preHandler: fastify.requireCustomer(),
+        bodyLimit: 12 * 1024 * 1024,
+    }, async (req, reply) => {
+        const customerId = req.actor!.customerId!;
+        const body = z.object({
+            amountMinor: z.number().int().min(100000).max(1_000_000_000),
+            proofFileName: z.string().min(1).max(180),
+            proofMimeType: z.string().min(1).max(120),
+            proofBase64: z.string().min(1),
+        }).parse(req.body);
+        let uploadedProofPath: string | null = null;
+        try {
+            const proof = await uploadBankFundingProof({
+                ownerType: 'customer', ownerId: customerId, submittedBy: req.actor!.userId,
+                fileName: body.proofFileName, mimeType: body.proofMimeType, base64: body.proofBase64,
+            });
+            uploadedProofPath = proof.proofFilePath;
+            return await initiateBankProofFunding({
+                ownerType: 'customer', ownerId: customerId, amountMinor: body.amountMinor,
+                submittedBy: req.actor!.userId, proofFilePath: proof.proofFilePath, proofHash: proof.proofHash,
+            });
+        } catch (error: any) {
+            if (uploadedProofPath) await removeBankFundingProof(uploadedProofPath).catch(() => undefined);
+            if (error instanceof FundingError) {
+                return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(error.code) ? 403 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
+    // Funding history combines reviewed bank-transfer requests and gateway top-ups.
     fastify.get('/funding', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { limit, cursor } = req.query as { limit?: string; cursor?: string };
         let query = adminClient
@@ -1002,9 +1073,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 50), 200));
         if (cursor) query = query.lt('created_at', cursor);
-        const { data, error } = await query;
+        const [{ data, error }, bankFunding] = await Promise.all([
+            query,
+            listCustomerFunding(req.actor!.customerId!, Math.min(Number(limit ?? 50), 200), cursor),
+        ]);
         if (error) throw error;
-        const rows = data ?? [];
+        const gatewayRows = (data ?? []).map((row: any) => ({ ...row, channel: row.gateway ?? 'paystack', funding_reference: row.gateway_reference }));
+        const rows = [...gatewayRows, ...bankFunding].sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, Math.min(Number(limit ?? 50), 200));
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { funding: rows, nextCursor };
     });

@@ -606,6 +606,64 @@ async function setSgcTokenRule(entry = {}) {
   );
 }
 
+const DEFAULT_CALINMETER_OEM_ID = "bd7e4242-651b-41ca-a3de-b0cd4ffe7927";
+
+async function upsertMeterRecord(entry = {}) {
+  const meterId = String(entry.meterId || entry.upstream_id || entry.meter_sn || "").trim();
+  if (!meterId) return null;
+  const oemId = String(entry.oemId || entry.oem_id || DEFAULT_CALINMETER_OEM_ID);
+
+  const payload = {
+    oem_id: oemId,
+    upstream_id: meterId,
+    upstream_meter_id: meterId,
+    meter_sn: meterId,
+    site_code: entry.siteCode || entry.site_code || null,
+    status: entry.status || "active",
+    raw_payload: sanitizeValue({
+      meterId,
+      type: entry.type ?? entry.meterType ?? 0,
+      isThreePhase: entry.isThreePhase ?? 0,
+      communicationWay: entry.communicationWay ?? 1,
+      protocolVersion: entry.protocolVersion || "2.2",
+      stationId: entry.stationId || entry.station_id || "",
+      remark: entry.remark || "",
+      lat: entry.lat ?? 0,
+      lng: entry.lng ?? 0,
+      updatedAt: nowIso()
+    })
+  };
+
+  return runWithFallback(
+    () => payload,
+    async () => {
+      const rows = await supabase.restRequest("/meters?on_conflict=oem_id,upstream_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: payload
+      });
+      return Array.isArray(rows) ? rows[0] : rows;
+    }
+  );
+}
+
+async function deleteMeterRecord(meterId, oemId) {
+  const id = encodeURIComponent(String(meterId || "").trim());
+  const oem = encodeURIComponent(String(oemId || DEFAULT_CALINMETER_OEM_ID));
+  if (!id) return null;
+
+  return runWithFallback(
+    () => 1,
+    async () => {
+      await supabase.restRequest(`/meters?oem_id=eq.${oem}&upstream_id=eq.${id}`, {
+        method: "DELETE",
+        prefer: "return=minimal"
+      });
+      return 1;
+    }
+  );
+}
+
 async function listSgcTokenRules() {
   return runWithFallback(
     () => localDatabase.listSgcTokenRules(),
@@ -1041,6 +1099,8 @@ module.exports = {
   recordPrintJob,
   recordWriteConfirmation,
   saveAccountBinding,
+  upsertMeterRecord,
+  deleteMeterRecord,
   stableId,
   saveArtifact,
   tableCounts,

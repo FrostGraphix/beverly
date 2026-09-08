@@ -8,9 +8,10 @@ import AppShell from '../components/AppShell.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
-import { exportCsv, type Column } from '../lib/export';
 
 interface Funding {
     id: string;
@@ -71,7 +72,7 @@ function channelBadge(c: string) {
     return ({ paystack: 'info', bank_transfer: 'neutral', manual: 'warn' } as Record<string, string>)[c] ?? 'neutral';
 }
 
-const CSV_COLUMNS: Column<Funding>[] = [
+const fundingExportColumns: WalletExportColumn<Funding>[] = [
     { key: 'created_at', header: 'Date', value: (row) => row.created_at },
     { key: 'channel', header: 'Channel', value: (row) => row.channel },
     { key: 'reference', header: 'Reference', value: (row) => row.funding_reference ?? '' },
@@ -80,10 +81,6 @@ const CSV_COLUMNS: Column<Funding>[] = [
     { key: 'approved_at', header: 'Approved At', value: (row) => row.approved_at ?? '' },
     { key: 'rejection_reason', header: 'Rejection Reason', value: (row) => row.rejection_reason ?? '' },
 ];
-
-function exportFunding() {
-    exportCsv('beverly-vendor-funding-history', filtered.value, CSV_COLUMNS);
-}
 
 onMounted(load);
 </script>
@@ -109,7 +106,7 @@ onMounted(load);
         <div class="bw-table-actions funding-head-actions">
           <WalletDataViewSwitch v-model="viewMode" :modes="['list','table']" label="Funding display view" />
           <button class="bw-btn sm" :class="{ active: showFilters }" :aria-expanded="showFilters" @click="showFilters = !showFilters">Filter <span v-if="activeFilterCount">{{ activeFilterCount }}</span></button>
-          <button class="bw-btn sm" :disabled="!filtered.length" @click="exportFunding">Export CSV</button>
+          <WalletExportWizard :rows="filtered" :columns="fundingExportColumns" filename="beverly-vendor-funding-history" title="Vendor Funding History" subtitle="Choose funding records and fields." :loading="loading" :formats="['pdf']" :date-value="row => row.created_at" :status-value="row => row.status" :status-options="[{value:'approved',label:'Approved'},{value:'proof_uploaded',label:'Proof uploaded'},{value:'under_review',label:'Under review'},{value:'rejected',label:'Rejected'}]" />
         </div>
       </div>
       <section v-if="showFilters" class="funding-filter-panel" aria-label="Funding filters">

@@ -106,10 +106,15 @@ async function submitPhonePassword() {
             expiresAt: r.expires_at,
             expiresIn: r.expires_in,
         });
-        await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+        if (r.customer?.email && !r.customer?.email_verified_at) {
+            await router.replace('/verify-email');
+        } else {
+            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+        }
     } catch (e: any) {
         handleError(e);
-        if (errorCode.value === 'email_in_use' || errorCode.value === 'phone_in_use') {
+        if ((accountMode.value === 'phone' && errorCode.value === 'phone_in_use')
+            || (accountMode.value === 'email' && errorCode.value === 'email_in_use')) {
             step.value = 'details';
         }
     } finally {
@@ -196,9 +201,13 @@ function handleError(e: any) {
         if (e.code === 'rate_limit') {
             error.value = 'Too many requests. Wait a few minutes and try again.';
         } else if (e.code === 'email_in_use') {
-            error.value = 'An account already exists for this email.';
+            error.value = accountMode.value === 'phone'
+                ? 'This email belongs to another account. Change it, or sign in.'
+                : 'An account already exists for this email. Sign in instead.';
         } else if (e.code === 'phone_in_use') {
-            error.value = 'An account already exists for this phone.';
+            error.value = accountMode.value === 'email'
+                ? 'This phone has an account. Use its current password, or sign in.'
+                : 'An account already exists for this phone. Sign in instead.';
         } else if (e.code === 'weak_password') {
             error.value = 'Password must be at least 8 characters.';
         } else {

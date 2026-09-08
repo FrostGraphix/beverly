@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import Stepper from '../components/Stepper.vue';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
 const auth   = useAuthStore();
@@ -81,6 +81,27 @@ const nin          = ref('');
 const loading2     = ref(false);
 const error2       = ref<string | null>(null);
 const tier2Skipped = ref(false);
+const ninAvailable = ref<boolean | null>(null);
+const ninStatusMessage = ref('Checking NIN verification availability…');
+
+async function loadNinAvailability() {
+    ninAvailable.value = null;
+    ninStatusMessage.value = 'Checking NIN verification availability…';
+    try {
+        const result = await api.get<{ available: boolean; message?: string }>('/api/v1/customer/kyc/tier2/nin/status');
+        ninAvailable.value = result.available;
+        ninStatusMessage.value = result.message ?? (result.available
+            ? 'NIN verification is available.'
+            : 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.');
+    } catch {
+        ninAvailable.value = false;
+        ninStatusMessage.value = 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
+    }
+}
+
+watch(tier, (nextTier) => {
+    if (nextTier >= 1 && nextTier < 2) void loadNinAvailability();
+});
 
 const nigerianStates = [
     'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno',
@@ -96,6 +117,7 @@ const dobMax = computed(() =>
 
 // ── On mount: restore draft ───────────────────────────────────────
 onMounted(() => {
+    if (tier.value >= 1 && tier.value < 2) void loadNinAvailability();
     if (tier.value >= 1) return; // Tier 1 already done — no draft needed
     try {
         const raw = sessionStorage.getItem(DRAFT_KEY);
@@ -165,6 +187,10 @@ async function submitTier1() {
 }
 
 async function submitTier2() {
+    if (ninAvailable.value !== true) {
+        error2.value = 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
+        return;
+    }
     const clean = nin.value.replace(/\s/g, '');
     if (clean.length !== 11) {
         error2.value = 'NIN must be exactly 11 digits.';
@@ -178,8 +204,10 @@ async function submitTier2() {
         });
         tier.value = r.kyc_tier;
         if (auth.customer) auth.customer.kyc_tier = r.kyc_tier;
-    } catch (e: any) {
-        error2.value = e?.message ?? 'NIN verification failed. Please check your number and try again.';
+    } catch (e: unknown) {
+        error2.value = e instanceof ApiError && e.code === 'nin_service_unavailable'
+            ? 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.'
+            : 'NIN verification could not be completed. Check your number and try again.';
     } finally { loading2.value = false; }
 }
 
@@ -364,26 +392,42 @@ function skipTier2() {
       <div class="card-head">
         <div>
           <p class="card-title">Tier 2 — NIN verification</p>
-          <p class="card-sub">Unlock up to ₦200,000/day. Your NIN is verified via Paystack Identity — we never store it.</p>
+          <p class="card-sub">Unlock up to ₦200,000/day after secure NIN verification.</p>
         </div>
         <span class="optional-badge">Optional</span>
       </div>
 
-      <form class="step-pane" @submit.prevent="submitTier2">
+      <div
+        v-if="ninAvailable !== true"
+        class="bw-alert"
+        :class="ninAvailable === null ? 'info' : 'warning'"
+        role="status"
+        aria-live="polite"
+      >
+        {{ ninStatusMessage }}
+        <button v-if="ninAvailable === false" type="button" class="later-link status-retry" @click="loadNinAvailability">
+          Check again
+        </button>
+      </div>
+
+      <form v-else class="step-pane" @submit.prevent="submitTier2">
         <div>
-          <label class="bw-label">National ID number (NIN)</label>
+          <label class="bw-label" for="nin">National ID number (NIN)</label>
           <input
+            id="nin"
             class="bw-input bw-mono"
             v-model="nin"
             inputmode="numeric"
+            autocomplete="off"
             maxlength="11"
             placeholder="00000000000"
+            aria-describedby="nin-help nin-error"
             style="letter-spacing: 0.14em; font-size: var(--t-lg)"
           />
-          <p class="field-hint">Find your 11-digit NIN on your slip, NIN card, or dial <strong>*346#</strong>.</p>
+          <p id="nin-help" class="field-hint">Find your 11-digit NIN on your slip, NIN card, or dial <strong>*346#</strong>.</p>
         </div>
 
-        <div v-if="error2" class="bw-alert danger">{{ error2 }}</div>
+        <div v-if="error2" id="nin-error" class="bw-alert danger" role="alert">{{ error2 }}</div>
 
         <button
           class="bw-btn primary lg full"
@@ -565,6 +609,7 @@ function skipTier2() {
 .nav-row { display: flex; gap: var(--s-2); }
 .nav-row .bw-btn { flex: 1; justify-content: center; }
 .full { width: 100%; justify-content: center; }
+.status-retry { margin-top: var(--s-2); color: inherit; }
 
 /* Save for later link */
 .later-link {

@@ -190,6 +190,7 @@ onMounted(loadDetail);
             <h1 class="head-name">{{ detail.customer.full_name || 'Unnamed customer' }}</h1>
             <p class="head-meta bw-mono">{{ detail.customer.phone }} · {{ detail.customer.email || 'no email' }}</p>
             <div class="head-badges">
+              <span class="bw-badge info bw-mono">Station ID{{ detail.customer.station_ids?.length === 1 ? '' : 's' }} · {{ detail.customer.station_ids?.join(', ') || 'Unassigned' }}</span>
               <span :class="['bw-badge', statusBadge(detail.customer.status)]">{{ detail.customer.status }}</span>
               <span :class="['bw-badge', tierBadge(detail.customer.kyc_tier)]">KYC Tier {{ detail.customer.kyc_tier }}</span>
               <span class="bw-badge neutral">{{ detail.customer.kyc_status }}</span>

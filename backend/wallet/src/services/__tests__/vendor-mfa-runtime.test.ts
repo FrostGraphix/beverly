@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, any>;
-type Filter = { key: string; op: 'eq' | 'is' | 'gt'; value: any };
+type Filter = { key: string; op: 'eq' | 'is' | 'gt' | 'in'; value: any };
 
 const tables: Record<string, Row[]> = {
     vendor_mfa_factors: [],
@@ -13,6 +13,7 @@ const tables: Record<string, Row[]> = {
 
 const auditEvents: Row[] = [];
 let nextId = 1;
+let failSessionUpsert = false;
 
 function clone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
@@ -23,6 +24,7 @@ function matches(row: Row, filters: Filter[]): boolean {
         if (filter.op === 'eq') return row[filter.key] === filter.value;
         if (filter.op === 'is') return row[filter.key] === filter.value;
         if (filter.op === 'gt') return new Date(row[filter.key]).getTime() > new Date(filter.value).getTime();
+        if (filter.op === 'in') return filter.value.includes(row[filter.key]);
         return false;
     });
 }
@@ -83,6 +85,11 @@ class QueryBuilder {
 
     gt(key: string, value: any) {
         this.filters.push({ key, op: 'gt', value });
+        return this;
+    }
+
+    in(key: string, value: any[]) {
+        this.filters.push({ key, op: 'in', value });
         return this;
     }
 
@@ -163,6 +170,9 @@ class QueryBuilder {
         }
 
         if (this.operation === 'upsert') {
+            if (this.tableName === 'vendor_mfa_sessions' && failSessionUpsert) {
+                return { data: null, error: { message: 'simulated session persistence failure' } };
+            }
             const key = this.conflictKey;
             const existing = key ? table.find((row) => row[key] === this.payload[key]) : null;
             if (existing) Object.assign(existing, this.payload);
@@ -220,11 +230,17 @@ function totp(secret: string, now = Date.now()): string {
     return String(binary % 1_000_000).padStart(6, '0');
 }
 
+function accessToken(sessionId: string, nonce: string): string {
+    const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ session_id: sessionId, nonce })}.signature`;
+}
+
 describe('vendor MFA runtime flow', () => {
     beforeEach(() => {
         Object.values(tables).forEach((rows) => rows.splice(0));
         auditEvents.splice(0);
         nextId = 1;
+        failSessionUpsert = false;
     });
 
     it('runs setup, enforcement session, recovery, replacement, and disable end to end', async () => {
@@ -267,5 +283,41 @@ describe('vendor MFA runtime flow', () => {
         expect(auditEvents.map((event) => event.eventType)).toEqual(
             expect.arrayContaining(['mfa_enabled', 'mfa_failure', 'mfa_disabled']),
         );
+    });
+
+    it('keeps an MFA grant valid when Supabase refreshes the access token for the same login session', async () => {
+        const service = await import('../vendor-mfa.js');
+        const actor = { actorId: 'vendor-user-2', userId: 'auth-user-2', email: 'vendor2@example.test' };
+        tables.vendor_users.push({ id: actor.actorId, auth_user_id: actor.userId, mfa_enrolled: false });
+
+        const beforeRefresh = accessToken('session-2', 'first-token');
+        const afterRefresh = accessToken('session-2', 'refreshed-token');
+        const anotherLogin = accessToken('session-3', 'other-session');
+        const setup = await service.beginVendorMfaEnrollment(actor);
+        await service.verifyVendorMfaEnrollment(actor, beforeRefresh, totp(setup.secret));
+
+        expect(await service.vendorMfaSessionVerified(actor.userId, beforeRefresh)).toBe(true);
+        expect(await service.vendorMfaSessionVerified(actor.userId, afterRefresh)).toBe(true);
+        expect(await service.vendorMfaSessionVerified(actor.userId, anotherLogin)).toBe(false);
+    });
+
+    it('fails verification when the security-session grant cannot be saved', async () => {
+        const service = await import('../vendor-mfa.js');
+        const actor = { actorId: 'vendor-user-3', userId: 'auth-user-3', email: 'vendor3@example.test' };
+        tables.vendor_users.push({ id: actor.actorId, auth_user_id: actor.userId, mfa_enrolled: false });
+
+        const setup = await service.beginVendorMfaEnrollment(actor);
+        failSessionUpsert = true;
+
+        await expect(service.verifyVendorMfaEnrollment(
+            actor,
+            accessToken('session-4', 'enrollment-token'),
+            totp(setup.secret),
+        )).rejects.toMatchObject({ code: 'mfa_session_save_failed' });
+        expect(tables.vendor_mfa_sessions).toHaveLength(0);
+        expect(tables.vendor_mfa_factors).toEqual(expect.arrayContaining([
+            expect.objectContaining({ status: 'pending' }),
+        ]));
+        expect(tables.vendor_users[0].mfa_enrolled).toBe(false);
     });
 });

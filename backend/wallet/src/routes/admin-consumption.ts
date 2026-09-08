@@ -1,15 +1,9 @@
 /**
  * Admin consumption and alarm analytics routes — /api/v1/admin/consumption/* & /api/v1/admin/abnormal-alarms
  */
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import { adminClient } from '../db/supabase.js';
-
-function staffStations(req: FastifyRequest): string[] | null {
-    if (req.actor?.role === 'super-admin') return null;
-    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-        .map((value) => String(value ?? '').trim().toUpperCase())
-        .filter(Boolean))];
-}
+import { staffStations } from '../services/staff-station-scope.js';
 
 export const adminConsumptionRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.get('/consumption', async (req, reply) => {

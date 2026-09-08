@@ -2,7 +2,7 @@
 /**
  * Admin — Funding History
  *
- * Shows all vendor funding requests (bank_transfer + paystack + manual)
+ * Shows all customer and vendor funding requests (bank_transfer + paystack + manual)
  * across all statuses: initiated, proof_uploaded, under_review, approved, rejected.
  *
  * GET /api/v1/admin/funding/history
@@ -29,7 +29,9 @@ interface VendorOrg {
 
 interface FundingRow {
     id: string;
-    vendor_organization_id: string;
+    owner_type: 'customer' | 'vendor';
+    vendor_organization_id: string | null;
+    customer_id: string | null;
     amount_minor: number;
     channel: 'bank_transfer' | 'paystack' | 'manual';
     status: string;
@@ -41,6 +43,7 @@ interface FundingRow {
     created_at: string;
     approved_at: string | null;
     vendor_organizations?: VendorOrg | null;
+    customers?: { full_name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface Summary {
@@ -84,14 +87,17 @@ const activeFilterCount = computed(() => [
 ].filter(Boolean).length);
 
 // ── helpers ───────────────────────────────────────────────────────
-function vendorName(f: FundingRow) {
+function ownerName(f: FundingRow) {
+    if (f.owner_type === 'customer') {
+        return f.customers?.full_name || f.customers?.email || `Customer #${String(f.customer_id).slice(0, 8)}`;
+    }
     return f.vendor_organizations?.trading_name
         || f.vendor_organizations?.legal_name
-        || `Vendor #${f.vendor_organization_id.slice(0, 8)}`;
+        || `Vendor #${String(f.vendor_organization_id).slice(0, 8)}`;
 }
 
-function vendorEmail(f: FundingRow) {
-    return f.vendor_organizations?.contact_email || '';
+function ownerEmail(f: FundingRow) {
+    return f.owner_type === 'customer' ? (f.customers?.email || '') : (f.vendor_organizations?.contact_email || '');
 }
 
 function statusBadge(s: string) {
@@ -175,8 +181,9 @@ onMounted(load);
 // ── export ────────────────────────────────────────────────────────
 const CSV_COLS: Column<FundingRow>[] = [
     { key: 'created_at',  header: 'Date',      value: (r) => r.created_at },
-    { key: 'vendor',      header: 'Vendor',     value: vendorName },
-    { key: 'email',       header: 'Email',      value: vendorEmail },
+    { key: 'owner_type',  header: 'Owner type', value: (r) => r.owner_type },
+    { key: 'owner',       header: 'Wallet owner', value: ownerName },
+    { key: 'email',       header: 'Email',      value: ownerEmail },
     { key: 'channel',     header: 'Channel',    value: (r) => r.channel },
     { key: 'reference',   header: 'Reference',  value: (r) => r.funding_reference ?? '' },
     { key: 'amount',      header: 'Amount (₦)', value: (r) => (r.amount_minor / 100).toFixed(2) },
@@ -315,7 +322,7 @@ function printFundingReceipt(f: FundingRow) {
           <thead>
             <tr>
               <th>Date</th>
-              <th>Vendor</th>
+              <th>Wallet owner</th>
               <th>Channel</th>
               <th>Reference</th>
               <th>Proof</th>
@@ -330,8 +337,8 @@ function printFundingReceipt(f: FundingRow) {
                 {{ shortDate(f.created_at) }}
               </td>
               <td>
-                <strong>{{ vendorName(f) }}</strong>
-                <div class="fh-sub" v-if="vendorEmail(f)">{{ vendorEmail(f) }}</div>
+                <strong>{{ ownerName(f) }}</strong>
+                <div class="fh-sub">{{ f.owner_type }}<span v-if="ownerEmail(f)"> · {{ ownerEmail(f) }}</span></div>
                 <div class="fh-sub" v-if="f.submitted_by">by {{ f.submitted_by }}</div>
               </td>
               <td><span :class="['bw-badge', channelBadge(f.channel)]">{{ f.channel }}</span></td>
@@ -369,8 +376,8 @@ function printFundingReceipt(f: FundingRow) {
           <div class="fh-card-top">
             <div>
               <div class="fh-card-amount">{{ naira(f.amount_minor) }}</div>
-              <div class="fh-card-vendor">{{ vendorName(f) }}</div>
-              <div class="fh-sub" v-if="vendorEmail(f)">{{ vendorEmail(f) }}</div>
+              <div class="fh-card-vendor">{{ ownerName(f) }}</div>
+              <div class="fh-sub">{{ f.owner_type }}<span v-if="ownerEmail(f)"> · {{ ownerEmail(f) }}</span></div>
             </div>
             <span :class="['bw-badge', statusBadge(f.status)]">{{ statusLabel(f.status) }}</span>
           </div>

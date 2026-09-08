@@ -6,7 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
-const constants = read("backend/wallet/src/routes/admin-access-constants.ts");
+const constants = read("backend/wallet/src/services/rbac.ts");
 const admin = read("backend/wallet/src/routes/admin.ts");
 const policy = read("backend/wallet/src/contracts/route-policy.ts");
 const auth = read("backend/wallet/src/plugins/auth.ts");
@@ -15,7 +15,8 @@ const service = read("backend/wallet/src/services/vendor-transfers.ts");
 const migration = read("supabase/migrations/20260812145901_admin_vendor_balance_transfers.sql");
 
 assert.ok(constants.includes("wallet.vendor_transfers.manage"), "critical transfer permission must be in the catalog");
-assert.ok(constants.includes("developer: ['dev.console', 'wallet.vendor_transfers.manage']"), "developer defaults must be minimal and explicit");
+assert.ok(constants.includes("developer: ['dev.console']"), "developer defaults must exclude operational money controls");
+assert.ok(constants.includes("'wallet.vendor_transfers.manage'"), "finance checker must own vendor transfer controls");
 assert.ok(auth.includes("'developer'"), "developer must resolve as a staff role from the database");
 assert.ok(env.includes("FEATURE_VENDOR_BALANCE_TRANSFERS"), "environment gate must exist and default off");
 assert.ok(admin.includes("await fastify.register(adminVendorTransferRoutes)"), "admin must register transfer routes inside its auth chain");

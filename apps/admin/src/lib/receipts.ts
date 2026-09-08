@@ -421,7 +421,11 @@ export function printReceipt(model: ReceiptModel): void {
 }
 
 export function fundingReceipt(row: any, mode: 'request' | 'history' = 'request'): ReceiptModel {
-    const vendor = row.vendor_organizations?.trading_name || row.vendor_organizations?.legal_name || row.vendor_organization_id;
+    const isCustomer = row.owner_type === 'customer' || Boolean(row.customer_id);
+    const owner = isCustomer
+        ? row.customers?.full_name || row.customers?.email || row.customer_id
+        : row.vendor_organizations?.trading_name || row.vendor_organizations?.legal_name || row.vendor_organization_id;
+    const ownerEmail = isCustomer ? row.customers?.email : row.vendor_organizations?.contact_email;
     return {
         title: mode === 'history' ? 'Funding History Receipt' : 'Funding Review Receipt',
         receiptId: id(row.funding_reference || row.id),
@@ -430,8 +434,9 @@ export function fundingReceipt(row: any, mode: 'request' | 'history' = 'request'
         issuedAt: date(row.approved_at || row.created_at),
         subject: 'Funding Amount',
         fields: [
-            field('Vendor', vendor),
-            field('Vendor Email', row.vendor_organizations?.contact_email),
+            field('Wallet Owner', owner),
+            field('Owner Type', isCustomer ? 'Customer' : 'Vendor'),
+            field('Owner Email', ownerEmail),
             field('Channel', row.channel),
             field('Funding Reference', row.funding_reference || row.id),
             field('Submitted By', row.submitted_by),

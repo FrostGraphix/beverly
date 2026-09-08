@@ -53,8 +53,22 @@ export function validateWriteForm(action, route, form, fields) {
     .map((field) => field.name);
 
   for (const name of requiredFieldNames) {
-    if (!String(values[name] || "").trim()) {
+    if (values[name] === undefined || values[name] === null || !String(values[name]).trim()) {
       return `${name} is required`;
+    }
+  }
+
+  if (route?.hash === "#/admin/meter" && ["Add", "Edit"].includes(action)) {
+    if (!["0", "1", "2"].includes(String(values.type))) return "type must be 0, 1, or 2";
+    if (!["0", "1"].includes(String(values.isThreePhase))) return "isThreePhase must be 0 or 1";
+    if (!["0", "1"].includes(String(values.communicationWay))) return "communicationWay must be 0 or 1";
+    if (values.lat !== "" && values.lat !== undefined && values.lat !== null) {
+      const latitude = Number(values.lat);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return "lat must be between -90 and 90";
+    }
+    if (values.lng !== "" && values.lng !== undefined && values.lng !== null) {
+      const longitude = Number(values.lng);
+      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return "lng must be between -180 and 180";
     }
   }
 
@@ -102,6 +116,12 @@ function normalizeWriteValue(endpoint, key, value) {
     if (["true", "active", "1", "enabled"].includes(normalized)) return true;
     if (["false", "inactive", "0", "disabled"].includes(normalized)) return false;
   }
+  if (/\/api\/meter\/(?:create|update|import)\b/i.test(endpoint)) {
+    if (["type", "isThreePhase", "communicationWay"].includes(key)) return Number(value);
+    if (["lat", "lng"].includes(key)) return Number(value);
+    if (key === "stationId") return String(value).trim().toUpperCase();
+    if (typeof value === "string") return value.trim();
+  }
   return value;
 }
 
@@ -127,7 +147,8 @@ export function buildWritePayload(endpoint, form = {}, fields = []) {
   }
   for (const key of Object.keys(payload)) {
     const value = pruneEmpty(payload[key]);
-    if (value === "" || value === undefined || value === null) {
+    const preserveEmptyMeterRemark = key === "remark" && /\/api\/meter\/update\b/i.test(endpoint);
+    if ((value === "" && !preserveEmptyMeterRemark) || value === undefined || value === null) {
       delete payload[key];
       continue;
     }

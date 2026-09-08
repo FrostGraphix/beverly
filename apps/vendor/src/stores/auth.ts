@@ -139,6 +139,18 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
             const storage = remember ? localStorage : sessionStorage;
             storage.setItem(USER_KEY, JSON.stringify(user));
         },
+        rotateSession(token: string, tokenOptions: VendorTokenOptions = {}) {
+            const remember = (() => {
+                try { return localStorage.getItem(TOKEN_KEY) !== null; } catch { return true; }
+            })();
+            const user = this.user ? {
+                ...this.user,
+                password_reset_required: false,
+                mfa_verified: this.user.mfa_enrolled ? false : true,
+            } : null;
+            if (!user) return;
+            this.setSession(token, user, remember, tokenOptions);
+        },
         async refreshMe() {
             const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');
             this.user = me;

@@ -33,7 +33,9 @@ const auth = useStaffAuthStore();
 
 interface FundingRequest {
     id: string;
-    vendor_organization_id: string;
+    owner_type: 'vendor' | 'customer';
+    vendor_organization_id: string | null;
+    customer_id: string | null;
     amount_minor: number;
     channel: 'bank_transfer' | 'paystack' | 'manual';
     status: string;
@@ -47,6 +49,7 @@ interface FundingRequest {
         contact_email?: string | null;
         contact_phone?: string | null;
     } | null;
+    customers?: { full_name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface FundingApprovalResponse {
@@ -64,7 +67,7 @@ const busyId = ref<string | null>(null);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const canApproveFunding = computed(() => auth.hasPermission('wallet.funding.approve'));
 const pendingAmountMinor = computed(() => items.value.reduce((total, item) => total + item.amount_minor, 0));
-const pendingVendorCount = computed(() => new Set(items.value.map((item) => item.vendor_organization_id)).size);
+const pendingOwnerCount = computed(() => new Set(items.value.map((item) => `${item.owner_type}:${item.customer_id ?? item.vendor_organization_id}`)).size);
 const proofCount = computed(() => items.value.filter((item) => item.proof_view_url || item.proof_file_path).length);
 
 // ─ Approve modal ──────────────────────────────────────────────
@@ -90,8 +93,8 @@ async function doApprove() {
         banner.value = {
             tone: 'success',
             text: balance !== undefined
-                ? `Approved ${naira(f.amount_minor)}. Vendor balance is now ${naira(balance)}.`
-                : `Approved ${naira(f.amount_minor)}. The vendor wallet has been credited.`,
+                ? `Approved ${naira(f.amount_minor)}. Wallet balance is now ${naira(balance)}.`
+                : `Approved ${naira(f.amount_minor)}. The wallet has been credited.`,
         };
         await load();
     } catch (e: any) {
@@ -127,7 +130,7 @@ async function doReject() {
         rejectOpen.value = false;
         rejectTarget.value = null;
         rejectReason.value = '';
-        banner.value = { tone: 'success', text: 'Funding request rejected. Vendor will see the reason in their wallet history.' };
+        banner.value = { tone: 'success', text: 'Funding request rejected. The wallet owner will see the reason in funding history.' };
         await load();
     } catch (e: any) {
         const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Reject failed.';
@@ -163,7 +166,7 @@ async function repairApprovedCredits() {
         banner.value = {
             tone: 'success',
             text: result.repaired
-                ? `Repaired ${result.repaired} approved funding credits. Vendors can refresh their wallets now.`
+                ? `Repaired ${result.repaired} approved funding credits. Wallet owners can refresh their balances now.`
                 : `Checked ${result.checked} approved funding credits. No repairs needed.`,
         };
         await load();
@@ -253,14 +256,15 @@ function statusBadge(s: string) {
     } as Record<string, string>)[s] ?? 'neutral';
 }
 
-function vendorName(f: FundingRequest) {
+function ownerName(f: FundingRequest) {
+    if (f.owner_type === 'customer') return f.customers?.full_name || f.customers?.email || `Customer #${String(f.customer_id).slice(0, 8)}`;
     return f.vendor_organizations?.trading_name
         || f.vendor_organizations?.legal_name
-        || `Vendor #${f.vendor_organization_id.slice(0, 8)}`;
+        || `Vendor #${String(f.vendor_organization_id).slice(0, 8)}`;
 }
 
-function vendorEmail(f: FundingRequest) {
-    return f.vendor_organizations?.contact_email || 'No email on file';
+function ownerEmail(f: FundingRequest) {
+    return f.owner_type === 'customer' ? (f.customers?.email || 'No email on file') : (f.vendor_organizations?.contact_email || 'No email on file');
 }
 
 function viewFundingReceipt(f: FundingRequest) {
@@ -297,7 +301,7 @@ const filteredItems = computed(() => {
     const query = searchQuery.value.trim().toLowerCase();
     return items.value.filter((item) => {
         const matchesChannel = channelFilter.value === 'all' || item.channel === channelFilter.value;
-        const matchesSearch = !query || [vendorName(item), vendorEmail(item), item.status, item.channel]
+        const matchesSearch = !query || [ownerName(item), ownerEmail(item), item.owner_type, item.status, item.channel]
             .some((value) => String(value).toLowerCase().includes(query));
         return matchesChannel && matchesSearch;
     });
@@ -305,8 +309,9 @@ const filteredItems = computed(() => {
 
 const fundingExportColumns: WalletExportColumn<FundingRequest>[] = [
     { key: 'created_at', header: 'Submitted', value: (item) => shortDate(item.created_at) },
-    { key: 'vendor', header: 'Vendor', value: (item) => vendorName(item) },
-    { key: 'email', header: 'Email', value: (item) => vendorEmail(item) },
+    { key: 'owner_type', header: 'Owner type', value: (item) => item.owner_type },
+    { key: 'owner', header: 'Wallet owner', value: (item) => ownerName(item) },
+    { key: 'email', header: 'Email', value: (item) => ownerEmail(item) },
     { key: 'channel', header: 'Channel', value: (item) => item.channel.replace(/_/g, ' ') },
     { key: 'amount_minor', header: 'Amount', value: (item) => naira(item.amount_minor) },
     { key: 'status', header: 'Status', value: (item) => item.status },
@@ -349,9 +354,9 @@ onMounted(() => {
         <span class="bw-kpi-note">requested funding</span>
       </article>
       <article class="bw-kpi info-tone">
-        <span class="bw-kpi-label">Vendors</span>
-        <strong class="bw-kpi-value">{{ pendingVendorCount }}</strong>
-        <span class="bw-kpi-note">unique organizations</span>
+        <span class="bw-kpi-label">Wallet owners</span>
+        <strong class="bw-kpi-value">{{ pendingOwnerCount }}</strong>
+        <span class="bw-kpi-note">customers and vendors</span>
       </article>
       <article class="bw-kpi warn-tone">
         <span class="bw-kpi-label">Proof supplied</span>
@@ -458,7 +463,7 @@ onMounted(() => {
           <thead>
             <tr>
               <th>Submitted</th>
-              <th>Vendor</th>
+              <th>Wallet owner</th>
               <th>Channel</th>
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
@@ -471,8 +476,8 @@ onMounted(() => {
             <tr v-for="f in paginatedItems" :key="f.id" :class="{ 'row-busy': busyId === f.id }">
               <td class="bw-mono bw-muted">{{ shortDate(f.created_at) }}</td>
               <td>
-                <strong>{{ vendorName(f) }}</strong>
-                <div class="vendor-email">{{ vendorEmail(f) }}</div>
+                <strong>{{ ownerName(f) }}</strong>
+                <div class="vendor-email">{{ f.owner_type }} · {{ ownerEmail(f) }}</div>
               </td>
               <td><span :class="['bw-badge', channelBadge(f.channel)]">{{ f.channel }}</span></td>
               <td>
@@ -510,8 +515,8 @@ onMounted(() => {
           <div class="fc-head">
             <div>
               <div class="fc-amount">{{ naira(f.amount_minor) }}</div>
-              <div class="fc-meta">{{ vendorName(f) }}</div>
-              <div class="fc-email">{{ vendorEmail(f) }}</div>
+              <div class="fc-meta">{{ ownerName(f) }}</div>
+              <div class="fc-email">{{ f.owner_type }} · {{ ownerEmail(f) }}</div>
             </div>
             <span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span>
           </div>
@@ -551,7 +556,7 @@ onMounted(() => {
       v-model:open="approveOpen"
       title="Approve funding"
       :description="approveTarget
-        ? `Credit ${naira(approveTarget.amount_minor)} to ${vendorName(approveTarget)} (${vendorEmail(approveTarget)}) via ${approveTarget.channel}. This writes one immutable ledger entry and cannot be undone.`
+        ? `Credit ${naira(approveTarget.amount_minor)} to ${ownerName(approveTarget)} (${ownerEmail(approveTarget)}) via ${approveTarget.channel}. This writes one immutable ledger entry and cannot be undone.`
         : ''"
       confirm-label="Approve & credit wallet"
       tone="brand"
@@ -564,7 +569,7 @@ onMounted(() => {
       v-model:open="rejectOpen"
       title="Reject funding"
       :description="rejectTarget
-        ? `${naira(rejectTarget.amount_minor)} · ${rejectTarget.channel}. The vendor will see the reason below in their wallet history.`
+        ? `${naira(rejectTarget.amount_minor)} · ${rejectTarget.channel}. The wallet owner will see the reason below in funding history.`
         : ''"
       confirm-label="Reject request"
       cancel-label="Keep open"
@@ -573,14 +578,14 @@ onMounted(() => {
       :disable-confirm="rejectDisabled"
       @confirm="doReject"
     >
-      <label class="cd-input-label">Reason (visible to vendor) *</label>
+      <label class="cd-input-label">Reason (visible to wallet owner) *</label>
       <textarea
         v-model="rejectReason"
         rows="3"
         class="cd-input"
         placeholder="e.g. Proof receipt doesn't match the stated amount."
       />
-      <p class="cd-input-hint">Minimum 4 characters. Be specific so the vendor can resubmit correctly.</p>
+      <p class="cd-input-hint">Minimum 4 characters. Be specific so the customer or vendor can resubmit correctly.</p>
     </ConfirmDialog>
 
   </AppShell>

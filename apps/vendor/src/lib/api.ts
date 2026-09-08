@@ -31,6 +31,7 @@ const REFRESH_SKEW_MS = 60_000;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 let authRedirecting = false;
+let mfaRedirecting = false;
 let refreshPromise: Promise<string | null> | null = null;
 
 export class ApiError extends Error {
@@ -98,6 +99,25 @@ function redirectToLogin(): void {
 function handleUnauthorized(): void {
     clearVendorSession();
     redirectToLogin();
+}
+
+function currentPortalPath(): string {
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const base = portalBasePath();
+    if (base !== '/' && current.startsWith(base)) {
+        return `/${current.slice(base.length).replace(/^\/+/, '')}`;
+    }
+    return current || '/';
+}
+
+function redirectToMfaVerification(path: string): void {
+    if (typeof window === 'undefined' || mfaRedirecting) return;
+    if (path.startsWith('/api/v1/vendor/mfa/') || currentPortalPath().startsWith('/security')) return;
+    mfaRedirecting = true;
+    const securityUrl = new URL(`${portalBasePath()}security`, window.location.origin);
+    securityUrl.searchParams.set('mode', 'verify');
+    securityUrl.searchParams.set('redirect', currentPortalPath());
+    window.location.assign(securityUrl.toString());
 }
 
 function shouldRedirectUnauthorized(path: string): boolean {
@@ -213,6 +233,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const json = parseJson(text);
         if (!res.ok) {
             if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
+            if (res.status === 403 && json?.error === 'mfa_required') redirectToMfaVerification(path);
             throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details ?? json);
         }
         return unwrapEnvelope<T>(json);

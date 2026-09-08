@@ -92,3 +92,5 @@ tools/consumption-raw-gap-archive.cjs
 tools/strip_row_json*.mjs
 tools/execute_*.mjs
 tools/execute_*.js
+tools/move_*.cjs
+.codex-audit/

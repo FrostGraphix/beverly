@@ -19,7 +19,7 @@ assert.match(migration, /where lower\(role\) in \('vendor_manager', 'vendor-mana
 assert.match(migration, /jsonb_build_object\('role', 'vendor', 'role_key', 'vendor'\)/);
 assert.match(migration, /when 'vendor_manager' then 'vendor'/);
 assert.match(migration, /select public\.normalized_role_key\(vu\.role\)/);
-assert.match(onboarding, /user_metadata: \{ role: 'vendor'/);
+assert.match(onboarding, /(user_metadata|data):\s*\{\s*role:\s*'vendor'/);
 assert.match(onboarding, /role: 'vendor'/);
 assert.match(auth, /function normalizeVendorRole/);
 assert.match(auth, /role: normalizeVendorRole/);

@@ -15,11 +15,13 @@
  *                  wallet_security_events { event_type=temp_password_used }
  */
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { evaluateVendorPassword } from '@beverly/tokens/password-policy';
 import { api, ApiError } from '../lib/api';
 import { useVendorAuthStore } from '../stores/auth';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useVendorAuthStore();
 
 const current = ref('');
@@ -40,22 +42,15 @@ interface Strength {
 }
 
 const strength = computed<Strength>(() => {
-    const p = next.value;
-    const checks = [
-        { ok: p.length >= 12,                      label: 'At least 12 characters' },
-        { ok: /[A-Z]/.test(p) && /[a-z]/.test(p),  label: 'Mixed case letters' },
-        { ok: /\d/.test(p),                        label: 'A number' },
-        { ok: /[^A-Za-z0-9]/.test(p),              label: 'A symbol (! # $ …)' },
-        { ok: !/(123|abc|password|qwerty|beverly)/i.test(p), label: 'Not a common pattern' },
-    ];
-    const passed = checks.filter((c) => c.ok).length;
-    const score = (passed === 0 ? 0 : Math.min(4, Math.max(1, passed - 1))) as 0 | 1 | 2 | 3 | 4;
+    const evaluation = evaluateVendorPassword(next.value);
+    const checks = evaluation.checks;
+    const score = evaluation.score as 0 | 1 | 2 | 3 | 4;
     const labels = ['Empty', 'Weak', 'Fair', 'Good', 'Strong'];
     const colors = ['var(--text-faint)', 'var(--danger)', 'var(--warn)', 'oklch(70% 0.13 145)', 'var(--brand)'];
     return { score, label: labels[score], color: colors[score], checks };
 });
 
-const allValid = computed(() => strength.value.score >= 3 && next.value === confirm.value && current.value.length > 0);
+const allValid = computed(() => evaluateVendorPassword(next.value).valid && next.value === confirm.value && current.value.length > 0);
 const passwordsMatch = computed(() => !confirm.value || next.value === confirm.value);
 
 async function submit() {
@@ -66,8 +61,8 @@ async function submit() {
         error.value = 'New passwords do not match.';
         return;
     }
-    if (strength.value.score < 3) {
-        error.value = 'Choose a stronger password (Good or Strong).';
+    if (!evaluateVendorPassword(next.value).valid) {
+        error.value = 'Meet every password requirement before continuing.';
         return;
     }
     if (current.value === next.value) {
@@ -77,14 +72,28 @@ async function submit() {
 
     loading.value = true;
     try {
-        await api.post('/api/v1/vendor/password-change', {
+        const response = await api.post<{
+            access_token: string;
+            refresh_token: string | null;
+            expires_at: number | null;
+            expires_in: number | null;
+        }>('/api/v1/vendor/password-change', {
             current: current.value,
             next: next.value,
         });
-        if (auth.user) auth.user.password_reset_required = false;
+        auth.rotateSession(response.access_token, {
+            refreshToken: response.refresh_token,
+            expiresAt: response.expires_at,
+            expiresIn: response.expires_in,
+        });
         success.value = true;
         // Brief success state, then route
-        setTimeout(() => router.push('/'), 1200);
+        const destination = typeof route.query.redirect === 'string'
+            && route.query.redirect.startsWith('/')
+            && !route.query.redirect.startsWith('//')
+            ? route.query.redirect
+            : '/';
+        setTimeout(() => router.push(destination), 1200);
     } catch (e: any) {
         if (e instanceof ApiError) {
             error.value = e.message ?? 'Update failed.';
@@ -165,7 +174,15 @@ function logout() {
 
             <!-- Strength meter -->
             <div v-if="next" class="meter">
-              <div class="meter-bar" :aria-label="`Password strength: ${strength.label}`">
+              <div
+                class="meter-bar"
+                role="progressbar"
+                aria-label="Password strength"
+                aria-valuemin="0"
+                aria-valuemax="4"
+                :aria-valuenow="strength.score"
+                :aria-valuetext="strength.label"
+              >
                 <span v-for="i in 4" :key="i" :class="['meter-seg', { active: i <= strength.score }]" :style="i <= strength.score ? { background: strength.color } : {}" />
               </div>
               <span class="meter-label" :style="{ color: strength.color }">{{ strength.label }}</span>
@@ -218,7 +235,7 @@ function logout() {
 
         <footer class="pc-foot">
           Trouble signing in? Contact your Beverly account manager.
-          We never reset passwords by email — beware phishing.
+          Password-reset links are sent only after you request one. Beverly will never ask you to email your password.
         </footer>
       </template>
     </div>

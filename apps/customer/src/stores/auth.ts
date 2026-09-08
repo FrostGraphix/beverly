@@ -12,6 +12,7 @@ export interface CustomerProfile {
     kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected';
     kyc_data?: Record<string, unknown> | null;
     status: 'active' | 'suspended' | 'closed';
+    auth_provider?: 'phone_otp' | 'email_password' | 'phone_password';
     email_verified_at?: string | null;
     customer_code?: string | null;
     site?: string | null;

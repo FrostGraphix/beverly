@@ -49,7 +49,7 @@ const expandedStaff = ref<string[]>([]);
 /* invite */
 const inviteOpen = ref(false);
 const inviteStep = ref(1);
-const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], tempPassword: '' });
+const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], allStations: false, tempPassword: '' });
 
 /* custom role editor */
 const roleEditor = ref({ open: false, creating: true, roleKey: '', name: '', description: '', permissions: [] as string[] });
@@ -99,7 +99,7 @@ const staffByRole = computed(() => {
  * a second hardcoded list that can drift from SYSTEM_ROLE_KEYS on the backend.
  * The literal is only a pre-load fallback.
  */
-const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'finance-checker', 'account']);
+const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'finance-checker', 'account', 'developer']);
 const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey);
 
 /* Permissions the backend refuses to grant to a custom role — mirrors
@@ -107,7 +107,7 @@ const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey)
 const RESTRICTED_TO_SYSTEM_ROLES = ['dev.console'];
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
-const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'finance-checker': 'fc', account: 'ac' };
+const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'finance-checker': 'fc', account: 'ac', developer: 'c1' };
 /* Custom roles get a stable colour derived from their key, so two custom roles
    are visually distinguishable instead of all inheriting the amber of Account. */
 const CUSTOM_ROLE_COLORS = ['c1', 'c2', 'c3', 'c4'];
@@ -116,6 +116,7 @@ const ROLE_DESCS: Record<string, string> = {
     'operations-manager':   'Monitors vending activity, resolves disputes, reviews vendors, and runs reconciliation.',
     'finance-checker':      'Reviews and approves funding, manages refunds, and views settlement reports.',
     account:                'Day-to-day account officer — views funding queue, monitors vending, and reads settlements.',
+    developer:              'Developer tooling access without operational or money movement controls.',
 };
 
 function rc(key: string) {
@@ -379,7 +380,7 @@ function closeInvite() {
 
 function continueInvite() {
     if (inviteStep.value === 1 && (!draft.value.fullName.trim() || !draft.value.email.trim())) return;
-    if (inviteStep.value === 2 && !draft.value.stationIds.length) return;
+    if (inviteStep.value === 2 && !draft.value.allStations && !draft.value.stationIds.length) return;
     inviteStep.value = Math.min(3, inviteStep.value + 1);
 }
 
@@ -387,8 +388,9 @@ async function updateStaffStations(user: StaffRow, stationIds: string[]) {
     if (!canManage.value || !user.auth_user_id || !stationIds.length) return;
     saving.value = true;
     try {
-        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/station`, { stationIds });
-        toast(`${user.user_name || user.email} assigned to ${stationIds.length} stations.`);
+        const allStations = stationIds.includes('*');
+        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/station`, { stationIds: allStations ? [] : stationIds, allStations });
+        toast(`${user.user_name || user.email} assigned to ${allStations ? 'all current and future stations' : `${stationIds.length} stations`}.`);
         await load();
     } catch (e: any) { toast(e?.message ?? 'Could not update station', 'err'); }
     finally { saving.value = false; }
@@ -399,16 +401,20 @@ async function createStaff() {
     if (!canManage.value) return;
     saving.value = true;
     try {
-        const res = await api.post<{ temporaryPassword: string }>('/api/v1/admin/access/users', {
+        const res = await api.post<{
+            temporaryPassword: string;
+            invitationDelivery: { status: 'sent' | 'not_sent'; reason?: 'disabled' | 'not_configured' | 'provider_error' };
+        }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
-            roleKey: draft.value.roleKey, stationIds: draft.value.stationIds,
+            roleKey: draft.value.roleKey, stationIds: draft.value.stationIds, allStations: draft.value.allStations,
             temporaryPassword: draft.value.tempPassword || undefined,
         });
+        const invitedEmail = draft.value.email;
         closeInvite();
-        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], tempPassword: '' };
+        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], allStations: false, tempPassword: '' };
         await load();
         revealTempPw(res.temporaryPassword);
-        toast('Staff user created.');
+        toast(`Staff user created. Verification and welcome emails sent to ${invitedEmail}.`);
     } catch (e: any) { toast(e?.message ?? 'Could not create user', 'err'); }
     finally { saving.value = false; }
 }
@@ -617,7 +623,8 @@ onMounted(() => { void load(); });
                 </div>
                 <div class="ac-field">
                   <label class="bw-label">Work email</label>
-                  <input v-model="draft.email" class="bw-input" type="email" placeholder="ada@company.ng" required />
+                  <input v-model="draft.email" class="bw-input" type="email" inputmode="email" pattern=".+@acoblighting\.com$" placeholder="ada@acoblighting.com" required />
+                  <p class="ac-field-help">Only @acoblighting.com work email addresses are accepted.</p>
                 </div>
               </div>
 
@@ -642,8 +649,12 @@ onMounted(() => { void load(); });
 
                 <div class="ac-field ac-field--full">
                   <label class="bw-label">Assigned stations</label>
-                  <StationMultiSelect v-model="draft.stationIds" placeholder="Search stations" />
-                  <p class="ac-field-help">This staff member only sees assigned stations.</p>
+                  <label class="ac-all-stations">
+                    <input v-model="draft.allStations" type="checkbox" @change="draft.allStations && (draft.stationIds = [])" />
+                    <span><strong>All stations</strong><small>Includes every current station and automatically covers future stations.</small></span>
+                  </label>
+                  <StationMultiSelect v-if="!draft.allStations" v-model="draft.stationIds" placeholder="Search stations" />
+                  <p class="ac-field-help">{{ draft.allStations ? 'Estate-wide station scope stays current automatically.' : 'This staff member only sees selected stations.' }}</p>
                 </div>
               </div>
 
@@ -671,13 +682,14 @@ onMounted(() => { void load(); });
                   <div><dt>Staff</dt><dd>{{ draft.fullName }}</dd></div>
                   <div><dt>Email</dt><dd>{{ draft.email }}</dd></div>
                   <div><dt>Role</dt><dd>{{ roles.find(r => r.role_key === draft.roleKey)?.role_name }}</dd></div>
-                  <div><dt>Stations</dt><dd>{{ draft.stationIds.join(', ') }}</dd></div>
+                  <div><dt>Stations</dt><dd>{{ draft.allStations ? 'All current and future stations' : draft.stationIds.join(', ') }}</dd></div>
+                  <div class="ac-invite-email"><dt>Email invitation</dt><dd>Creation completes only after Resend confirms both the verification and welcome emails. The welcome message lists the assigned role, permissions, station scope, and Beverly Admin link.</dd></div>
                 </dl>
               </div>
 
               <div class="ac-invite-actions">
                 <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
-                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName : !draft.stationIds.length" @click="continueInvite">Continue</button>
+                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@acoblighting\.com$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
                 <button v-else class="bw-btn primary" :disabled="saving">
                   {{ saving ? 'Creating…' : 'Create staff user' }}
                 </button>
@@ -985,7 +997,7 @@ onMounted(() => { void load(); });
               </div>
               <div>
                 <dt>Stations</dt>
-                <dd>{{ (u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []).join(', ') || 'Unassigned' }}</dd>
+                <dd>{{ u.station_ids?.includes('*') ? 'All current and future stations' : ((u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []).join(', ') || 'Unassigned') }}</dd>
               </div>
             </dl>
 
@@ -1655,6 +1667,10 @@ onMounted(() => { void load(); });
   background: var(--surface); box-shadow: var(--shadow-xl);
 }
 .ac-editor-permissions { margin-top: 1rem; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.ac-all-stations { display:flex; gap:var(--s-3); align-items:flex-start; padding:var(--s-3); margin-bottom:var(--s-2); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-1); cursor:pointer; }
+.ac-all-stations input { margin-top:3px; accent-color:var(--brand); }
+.ac-all-stations span { display:grid; gap:3px; }
+.ac-all-stations small { color:var(--text-muted); font-weight:400; line-height:1.4; }
 .ac-editor-label { display: flex; justify-content: space-between; padding: .75rem 1rem; background: var(--surface-2); }
 .ac-editor-label span { color: var(--text-muted); font-size: var(--t-xs); }
 .ac-editor-group { padding: .75rem 1rem; border-top: 1px solid var(--border); }

@@ -1,11 +1,12 @@
 /**
  * Admin customer-meter approval & onboarding search routes — /api/v1/admin/*
  */
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { auditFromRequest, logAction } from '../services/audit.js';
 import { notifyMeterLinkUpdate } from '../services/notifications.js';
+import { staffStations } from '../services/staff-station-scope.js';
 
 const meterStatusSchema = z.enum(['pending', 'approved', 'rejected']);
 const listStatusSchema = z.enum(['all', 'pending', 'approved', 'rejected']);
@@ -22,13 +23,6 @@ const unlinkSchema = z.object({ reason: z.string().trim().min(10).max(500) });
 
 function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[%_,()]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
-}
-
-function staffStations(req: FastifyRequest): string[] | null {
-    if (req.actor?.role === 'super-admin') return null;
-    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-        .map((value) => String(value ?? '').trim().toUpperCase())
-        .filter(Boolean))];
 }
 
 function requireStationAssignment(reply: FastifyReply, stationIds: string[] | null): boolean {

@@ -141,6 +141,7 @@ onMounted(load);
             title="Customer Consumption"
             :subtitle="`${periodLabel({ period_start: new Date().toISOString().slice(0, 10), period_type: period } as AggRow)} view`"
             :loading="loading"
+            :formats="['pdf']"
           />
           <select v-model="period" aria-label="Period" class="select">
             <option v-for="option in PERIODS" :key="option.value" :value="option.value">{{ option.label }}</option>

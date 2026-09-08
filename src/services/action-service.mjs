@@ -67,8 +67,9 @@ const IMPORT_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 function importPayload(endpoint, importRows = []) {
   const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
   const emptyFieldDefaults = IMPORT_EMPTY_FIELD_DEFAULTS[endpoint] || new Set();
-  return importRows.map((row) => Object.entries(row).reduce((mapped, [key, value]) => {
-    if (IMPORT_SYSTEM_FIELDS.has(key)) return mapped;
+  return importRows.map((row, index) => {
+    const mapped = Object.entries(row).reduce((result, [key, value]) => {
+      if (IMPORT_SYSTEM_FIELDS.has(key)) return result;
     const target = aliases[key] || key;
     let text = String(value ?? "").trim();
     if (target === "ctRatio") {
@@ -81,9 +82,23 @@ function importPayload(endpoint, importRows = []) {
       }
       text = Number.isFinite(numVal) && numVal > 0 ? String(numVal) : "1";
     }
-    if (text || emptyFieldDefaults.has(target)) mapped[target] = text;
-    return mapped;
-  }, {}));
+      if (text || emptyFieldDefaults.has(target)) result[target] = text;
+      return result;
+    }, {});
+    if (endpoint !== "/api/meter/import") return mapped;
+
+    for (const field of ["type", "isThreePhase", "communicationWay", "stationId"]) {
+      if (Object.prototype.hasOwnProperty.call(mapped, field)) mapped[field] = meterValue(field, mapped[field]);
+    }
+    const required = ["meterId", "type", "isThreePhase", "communicationWay", "protocolVersion", "stationId"]
+      .map((name) => ({ name, required: true }));
+    const validationError = validateWriteForm("Add", { hash: "#/admin/meter" }, {
+      ...mapped,
+      authorizationPassword: "import-row-validation"
+    }, required);
+    if (validationError) throw new Error(`row ${index + 2}: ${validationError}`);
+    return buildWritePayload(endpoint, mapped, Object.keys(mapped).map((name) => ({ name })))[0];
+  });
 }
 
 function requestHeaders(route, action) {
@@ -131,6 +146,52 @@ function isRemoteTaskConfirmAccepted(response, route, action) {
   const responseCode = Number(response?.code);
   const reason = String(response?.reason || response?.msg || response?.message || "").toLowerCase();
   return responseCode === 99 && reason.includes("no data has been changed");
+}
+
+function isMeterEdit(route, action) {
+  return action === "Edit" && route?.hash === "#/admin/meter";
+}
+
+function isNoChangeMeterEdit(response, route, action) {
+  if (!isMeterEdit(route, action)) return false;
+  const reason = String(response?.reason || response?.msg || response?.message || "").toLowerCase();
+  return Number(response?.code) === 99 && reason.includes("no data has been changed");
+}
+
+function meterValue(field, value) {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (field === "type") return ({ "0": "0", electricity: "0", "1": "1", water: "1", "2": "2", gas: "2" })[normalized] ?? normalized;
+  if (field === "isThreePhase") return ({ "0": "0", false: "0", single: "0", singlephase: "0", "1": "1", true: "1", three: "1", threephase: "1" })[normalized] ?? normalized;
+  if (field === "communicationWay") return ({ "0": "0", gprs: "0", "1": "1", lorawan: "1" })[normalized] ?? normalized;
+  if (field === "stationId") return normalized.toUpperCase();
+  if (["lat", "lng"].includes(field)) return value === "" || value == null ? "" : String(Number(value));
+  return String(value ?? "").trim();
+}
+
+async function verifyMeterEdit(payload, api, headers) {
+  const expected = Array.isArray(payload) ? payload[0] : payload;
+  const meterId = String(expected?.meterId || "").trim();
+  const response = await api.postApi("/api/meter/read", { meterId, pageNumber: 1, pageSize: 20 }, { headers });
+  const actual = normalizeRows(response).find((row) => String(row?.meterId || row?.id || "").trim() === meterId);
+  if (!actual) throw new Error("Meter update was accepted but verification failed: meter not found");
+
+  const actualValues = {
+    type: actual.type ?? actual.meterType,
+    isThreePhase: actual.isThreePhase,
+    communicationWay: actual.communicationWayCode ?? actual.communicationWay,
+    protocolVersion: actual.protocolVersion,
+    lat: actual.lat,
+    lng: actual.lng,
+    stationId: actual.stationId ?? actual.station,
+    remark: actual.remark
+  };
+  const mismatches = Object.keys(actualValues)
+    .filter((field) => Object.prototype.hasOwnProperty.call(expected, field))
+    .filter((field) => meterValue(field, actualValues[field]) !== meterValue(field, expected[field]));
+  if (mismatches.length) {
+    throw new Error(`Meter update was accepted but verification failed: ${mismatches.join(", ")}`);
+  }
+  return true;
 }
 
 async function deleteCustomerDependencies(form, api) {
@@ -237,9 +298,14 @@ export async function submitRouteAction(route, action, form, options = {}) {
   // 207 means some rows went live and some were rejected; both counts are
   // reported rather than collapsing the batch into one success or one failure.
   const partial = responseCode === 207;
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !queued && !partial && !isRemoteTaskConfirmAccepted(response, route, action)) {
+  const acceptedNoChange = isNoChangeMeterEdit(response, route, action);
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !queued && !partial && !acceptedNoChange && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
   }
+
+  const verified = isMeterEdit(route, action)
+    ? await verifyMeterEdit(payload, api, requestHeaders(route, action))
+    : false;
 
   // After successful user create, reset on upstream so the password is registered there too.
   // The upstream UserCreateRequest schema has no password field, so a reset call is needed
@@ -276,6 +342,7 @@ export async function submitRouteAction(route, action, form, options = {}) {
     queuedCount,
     syncedCount,
     failedCount,
+    verified,
     resultText
   };
 }

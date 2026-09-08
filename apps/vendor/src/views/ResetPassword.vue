@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import VendorAuthShell from '../components/VendorAuthShell.vue';
+import { evaluateVendorPassword } from '@beverly/tokens/password-policy';
 
 const route  = useRoute();
 const router = useRouter();
@@ -16,15 +17,10 @@ const loading     = ref(false);
 const error       = ref<string | null>(null);
 const success     = ref(false);
 
-const checks = computed(() => [
-    { ok: password.value.length >= 12,                                   label: 'At least 12 characters' },
-    { ok: /[A-Z]/.test(password.value) && /[a-z]/.test(password.value), label: 'Mixed case letters' },
-    { ok: /\d/.test(password.value),                                     label: 'A number' },
-    { ok: /[^A-Za-z0-9]/.test(password.value),                          label: 'A symbol (! # $ …)' },
-    { ok: !/(123|abc|password|qwerty|beverly)/i.test(password.value),   label: 'Not a common pattern' },
-]);
+const evaluation = computed(() => evaluateVendorPassword(password.value));
+const checks = computed(() => evaluation.value.checks);
 const score   = computed(() => checks.value.filter((c) => c.ok).length as 0|1|2|3|4|5);
-const strong  = computed(() => score.value >= 3);
+const strong  = computed(() => evaluation.value.valid);
 const match   = computed(() => confirm.value === '' || password.value === confirm.value);
 const canSubmit = computed(() => strong.value && password.value === confirm.value && confirm.value !== '');
 
@@ -122,7 +118,7 @@ async function submit() {
 
         <!-- Strength bar + checklist -->
         <div v-if="password" class="strength-wrap">
-          <div class="strength-bar" :aria-label="`Password strength: ${strengthLabel}`">
+          <div class="strength-bar" role="progressbar" aria-label="Password strength" aria-valuemin="0" aria-valuemax="5" :aria-valuenow="score" :aria-valuetext="strengthLabel">
             <div v-for="i in 5" :key="i" class="strength-seg" :style="{ background: i <= score ? strengthColor : 'var(--border)' }" />
           </div>
           <span v-if="strengthLabel" class="strength-label" :style="{ color: strengthColor }">{{ strengthLabel }}</span>

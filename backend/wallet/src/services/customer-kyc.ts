@@ -3,7 +3,7 @@
  *
  * Tier 0  → unverified (phone OTP only)
  * Tier 1  → basic profile: full_name + date_of_birth + address submitted
- * Tier 2  → NIN verified via Paystack Identity API
+ * Tier 2  → NIN verified through an approved identity provider
  *
  * Tier caps (enforced in routes via requireKycTier):
  *   Tier 0: read-only, no purchases
@@ -11,9 +11,19 @@
  *   Tier 2: purchases up to ₦200,000/day
  */
 import { adminClient } from '../db/supabase.js';
-import { resolveNin } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
 import { notifyKycUpdate } from './notifications.js';
+
+export const NIN_VERIFICATION_UNAVAILABLE_MESSAGE =
+    'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
+
+export function getNinVerificationAvailability() {
+    return {
+        available: false,
+        code: 'nin_service_unavailable' as const,
+        message: NIN_VERIFICATION_UNAVAILABLE_MESSAGE,
+    };
+}
 
 export class KycError extends Error {
     constructor(message: string, public code: string) {
@@ -115,75 +125,5 @@ export interface KycTier2Input {
 
 export async function submitKycTier2Nin(input: KycTier2Input): Promise<void> {
     if (!/^\d{11}$/.test(input.nin)) throw new KycError('NIN must be 11 digits.', 'invalid_nin');
-
-    const { data: cu } = await adminClient.from('customers').select('id, kyc_tier, full_name').eq('id', input.customerId).single();
-    if (!cu) throw new KycError('Customer not found.', 'not_found');
-    const customer = cu as { kyc_tier: number; full_name: string | null };
-
-    if (customer.kyc_tier < 1) {
-        throw new KycError('Tier 1 KYC is required before Tier 2.', 'tier1_required');
-    }
-
-    // Resolve NIN
-    let ninData: Awaited<ReturnType<typeof resolveNin>>;
-    try {
-        ninData = await resolveNin(input.nin);
-    } catch (e: any) {
-        throw new KycError(`NIN verification failed: ${e.message}`, 'nin_resolve_failed');
-    }
-
-    // Soft name match — first OR last name must match
-    const storedName = (customer.full_name ?? '').toLowerCase();
-    const ninFirst = ninData.first_name.toLowerCase();
-    const ninLast = ninData.last_name.toLowerCase();
-    if (!storedName.includes(ninFirst) && !storedName.includes(ninLast)) {
-        throw new KycError(
-            'NIN name does not match your registered name. Contact support if this is incorrect.',
-            'name_mismatch',
-        );
-    }
-
-    // Write the essential kyc_tier/kyc_status first (these columns always exist).
-    const { error: baseError } = await adminClient.from('customers').update({
-        kyc_tier: 2,
-        kyc_status: 'verified',
-    }).eq('id', input.customerId);
-    if (baseError) throw new KycError(baseError.message, 'update_failed');
-
-    // Optionally write supplementary JSONB (column added in migration 20260520110000).
-    // Fails silently if the column hasn't been applied yet — data is in the audit log.
-    await adminClient.from('customers').update({
-        kyc_data: {
-            tier2: {
-                nin_last4: input.nin.slice(-4),
-                nin_name: `${ninData.first_name} ${ninData.last_name}`,
-                verified_at: new Date().toISOString(),
-            },
-        },
-    } as any).eq('id', input.customerId);
-
-    // Raise wallet cap for Tier 2
-    const { data: wallet } = await adminClient
-        .from('wallets')
-        .select('id')
-        .eq('owner_type', 'customer')
-        .eq('owner_id', input.customerId)
-        .maybeSingle();
-    if (wallet) {
-        await adminClient.from('wallets').update({
-            daily_debit_cap_minor: 20_000_000,   // ₦200,000
-            monthly_debit_cap_minor: 500_000_000, // ₦5,000,000
-        }).eq('id', (wallet as { id: string }).id);
-    }
-
-    await logAction({
-        actorUserId: input.actorUserId,
-        actorType: 'customer',
-        action: 'kyc.tier2.nin',
-        targetType: 'customer',
-        targetId: input.customerId,
-        after: { kyc_tier: 2, nin_last4: input.nin.slice(-4) },
-    });
-
-    notifyKycUpdate(input.customerId, { tier: 2 }).catch(() => undefined);
+    throw new KycError(NIN_VERIFICATION_UNAVAILABLE_MESSAGE, 'nin_service_unavailable');
 }

@@ -269,6 +269,23 @@ async function main() {
       assert.strictEqual(spoofedRouteHashWrite.status, 403);
       assert.strictEqual(spoofedRouteHashWrite.body.reason, "Route permission required");
       assert.strictEqual(spoofedRouteHashWrite.body._proxy.source, "authz");
+
+      const spoofedMeterWrite = await request(port, "POST", "/api/meter/update", [{
+        meterId: "4700",
+        type: 0,
+        isThreePhase: 0,
+        communicationWay: 1,
+        protocolVersion: "2.2",
+        stationId: "UMAISHA"
+      }], {
+        Authorization: "Bearer vendor-token",
+        Cookie: sessionCookie("vendor-token"),
+        "X-Route-Hash": "#/remote-operation/remote-meter-token",
+        "X-Route-Action": "Edit"
+      });
+      assert.strictEqual(spoofedMeterWrite.status, 403);
+      assert.strictEqual(spoofedMeterWrite.body.reason, "Route permission required");
+      assert.strictEqual(spoofedMeterWrite.body._proxy.source, "authz");
     });
 
     console.log(JSON.stringify({

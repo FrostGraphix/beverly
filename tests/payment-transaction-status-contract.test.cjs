@@ -114,7 +114,7 @@ assert.match(migration, /payment_webhooks_unprocessed_reference_idx/);
 assert.match(migration, /wallet service role all payment webhooks/);
 
 assert.match(customerFundingHistory, /isSuccessfulStatus/);
-assert.match(customerFundingHistory, /\['succeeded', 'success'\]/);
+assert.match(customerFundingHistory, /\['succeeded', 'success', 'approved'\]/);
 assert.match(customerFundingHistory, /succeeded:\s*'success'/);
 
 assert.match(reconciliation, /\.gte\('completed_at', since\)/);

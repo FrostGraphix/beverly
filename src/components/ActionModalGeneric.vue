@@ -8,7 +8,7 @@
           </div>
           <h2 class="modal-title">{{ modalHeading }}</h2>
         </div>
-        <BaseIconButton class="modal-close" aria-label="Close" @click="$emit('close')">
+        <BaseIconButton class="modal-close" aria-label="Close" :disabled="submitting" @click="$emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </BaseIconButton>
       </div>
@@ -159,8 +159,8 @@
 
     <template #footer>
       <div class="modal-actions">
-        <BaseButton variant="danger" @click="$emit('close')">Cancel</BaseButton>
-        <BaseButton :variant="action === 'Delete' ? 'danger' : 'primary'" native-type="submit">{{ action === 'Delete' ? 'Delete' : 'Confirm' }}</BaseButton>
+        <BaseButton variant="danger" :disabled="submitting" @click="$emit('close')">Cancel</BaseButton>
+        <BaseButton :variant="action === 'Delete' ? 'danger' : 'primary'" native-type="submit" :loading="submitting">{{ action === 'Delete' ? 'Delete' : 'Confirm' }}</BaseButton>
       </div>
     </template>
   </BaseModalShell>
@@ -231,7 +231,8 @@ export default {
       rolesLoading: false,
       showPwField: false,
       permOpen: false,
-      activePickerField: null
+      activePickerField: null,
+      submitting: false
     };
   },
   computed: {
@@ -445,26 +446,32 @@ export default {
         this.error = importErrorMessage(this.importErrors);
         return;
       }
+      if (this.submitting) return;
+      this.submitting = true;
       this.error = "";
       if (this.action === "Export") {
-        const timestamp = new Date().toISOString().split("T")[0];
-        const baseFilename = `Beverly_${this.route.title.replace(/\s+/g, "_")}_${timestamp}`;
-        const csvText = exportCsvText(this.route, this.rows, columnKey);
-        const excelXml = exportExcelXml(this.route, this.rows, columnKey);
-        downloadTextFile(`${baseFilename}.csv`, csvText, "text/csv;charset=utf-8");
-        downloadTextFile(`${baseFilename}.xls`, excelXml, "application/vnd.ms-excel");
-        await logExportJob(this.route, this.rows, "csv", {
-          fileName: `${baseFilename}.csv`,
-          content: csvText,
-          contentType: "text/csv;charset=utf-8"
-        });
-        await logExportJob(this.route, this.rows, "xls", {
-          fileName: `${baseFilename}.xls`,
-          content: excelXml,
-          contentType: "application/vnd.ms-excel"
-        });
-        this.result = `Export ready: ${this.rows.length} rows`;
-        toastSuccess(`Export ready — ${this.rows.length} rows downloaded`);
+        try {
+          const timestamp = new Date().toISOString().split("T")[0];
+          const baseFilename = `Beverly_${this.route.title.replace(/\s+/g, "_")}_${timestamp}`;
+          const csvText = exportCsvText(this.route, this.rows, columnKey);
+          const excelXml = exportExcelXml(this.route, this.rows, columnKey);
+          downloadTextFile(`${baseFilename}.csv`, csvText, "text/csv;charset=utf-8");
+          downloadTextFile(`${baseFilename}.xls`, excelXml, "application/vnd.ms-excel");
+          await logExportJob(this.route, this.rows, "csv", {
+            fileName: `${baseFilename}.csv`,
+            content: csvText,
+            contentType: "text/csv;charset=utf-8"
+          });
+          await logExportJob(this.route, this.rows, "xls", {
+            fileName: `${baseFilename}.xls`,
+            content: excelXml,
+            contentType: "application/vnd.ms-excel"
+          });
+          this.result = `Export ready: ${this.rows.length} rows`;
+          toastSuccess(`Export ready — ${this.rows.length} rows downloaded`);
+        } finally {
+          this.submitting = false;
+        }
         return;
       }
       try {
@@ -537,6 +544,8 @@ export default {
         const msg = userFacingError(error, "Action failed");
         this.error = msg;
         toastError(msg);
+      } finally {
+        this.submitting = false;
       }
     }
   }

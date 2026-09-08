@@ -130,6 +130,7 @@ const ledgerExportColumns: WalletExportColumn<any>[] = [
             title="Customer Recent Activity"
             subtitle="Filtered wallet movements"
             :loading="loading"
+            :formats="['pdf']"
           />
           <WalletDataViewSwitch
             v-model="viewMode"

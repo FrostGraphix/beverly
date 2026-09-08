@@ -35,6 +35,8 @@
     "wallet-export-wizard.ts",
     "wallet-export.js",
     "wallet-export.d.ts",
+    "password-policy.js",
+    "password-policy.d.ts",
     "ai-message.js",
     "ai-message.d.ts",
     "PwaUpdateToast.vue",
@@ -44,6 +46,7 @@
     "i18n.js",
     "i18n.d.ts",
     "push-notifications.ts",
+    "use-assistant-voice.ts",
     "index.js",
     "index.d.ts",
     "pwaInstall.js"
@@ -125,6 +128,15 @@
     "./push-notifications": {
       "types": "./push-notifications.ts",
       "import": "./push-notifications.ts"
+    },
+    "./password-policy": {
+      "types": "./password-policy.d.ts",
+      "import": "./password-policy.js",
+      "default": "./password-policy.js"
+    },
+    "./use-assistant-voice": {
+      "types": "./use-assistant-voice.ts",
+      "import": "./use-assistant-voice.ts"
     },
     "./ai-message": {
       "types": "./ai-message.d.ts",

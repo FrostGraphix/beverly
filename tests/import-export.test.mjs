@@ -24,6 +24,51 @@ const validated = validateImportRows(route, [
 const preview = buildImportPreview(rows, validated.rows.slice(0, 1));
 const report = buildErrorReport(validated.errors);
 
+const meterRoute = {
+  title: "Meter",
+  hash: "#/admin/meter",
+  columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"]
+};
+const validMeters = validateImportRows(meterRoute, [{
+  "Meter Id": "M-2001",
+  "Meter Type": "Electricity",
+  "Is Three Phase": "0",
+  "Communication Way": "LoraWan",
+  "Protocol Version": "2.2",
+  Lat: "9.08",
+  Lng: "7.49",
+  "Station Id": "umaisha",
+  Remark: " QA "
+}], columnKey);
+assert.deepStrictEqual(validMeters.errors, []);
+assert.deepStrictEqual(validMeters.rows[0], {
+  meterId: "M-2001",
+  meterType: "Electricity",
+  isThreePhase: "0",
+  communicationWay: "LoraWan",
+  protocolVersion: "2.2",
+  lat: "9.08",
+  lng: "7.49",
+  stationId: "umaisha",
+  remark: "QA"
+});
+
+const invalidMeters = validateImportRows(meterRoute, [{
+  "Meter Id": "M-2002",
+  "Meter Type": "Steam",
+  "Is Three Phase": "maybe",
+  "Communication Way": "Radio",
+  "Protocol Version": "2.2",
+  Lat: "91",
+  Lng: "181",
+  "Station Id": "UMAISHA"
+}], columnKey);
+assert(invalidMeters.errors.some((error) => error.message.includes("Meter Type")));
+assert(invalidMeters.errors.some((error) => error.message.includes("Is Three Phase")));
+assert(invalidMeters.errors.some((error) => error.message.includes("Communication Way")));
+assert(invalidMeters.errors.some((error) => error.message.includes("Lat")));
+assert(invalidMeters.errors.some((error) => error.message.includes("Lng")));
+
 assert(csv.includes("\"Id\",\"Name\",\"Phone\""));
 assert(csv.includes("\"Report\",\"Customer\""));
 assert(csv.includes("'=unsafe"));

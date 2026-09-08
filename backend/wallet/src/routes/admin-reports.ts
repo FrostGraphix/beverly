@@ -5,6 +5,7 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
+import { staffStations } from '../services/staff-station-scope.js';
 
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -35,13 +36,6 @@ function resolveRange(query: Record<string, string | undefined>) {
 
 function dayKey(iso: string): string {
     return String(iso).slice(0, 10);
-}
-
-function staffStations(req: FastifyRequest): string[] | null {
-    if (req.actor?.role === 'super-admin') return null;
-    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-        .map((value) => String(value ?? '').trim().toUpperCase())
-        .filter(Boolean))];
 }
 
 type ReportAudience = 'all' | 'vendor' | 'customer';
