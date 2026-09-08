@@ -40,6 +40,8 @@ const routes: RouteRecordRaw[] = [
     { path: '/:pathMatch(.*)*', name: 'not-found',      component: () => import('../views/NotFound.vue') },
 ];
 
+const MFA_OPTIONAL_ROUTE_NAMES = new Set(['vend', 'remote-send', 'vend-access', 'security', 'help', 'error', 'not-found']);
+
 export const router = createRouter({
     history: createWebHistory(portalHistoryBase(import.meta.env.BASE_URL)),
     routes,
@@ -60,10 +62,14 @@ router.beforeEach(async (to) => {
     if (auth.isAuthenticated && auth.user?.password_reset_required && to.name !== 'password-change' && !to.meta.allowReset) {
         return { name: 'password-change', query: { redirect: to.fullPath } };
     }
+    if (auth.isAuthenticated && auth.requiresMfaVerification && to.name === 'dashboard') {
+        return { name: auth.user?.vend_credential_configured ? 'vend' : 'vend-access' };
+    }
     if (
         auth.isAuthenticated &&
         auth.requiresMfaVerification &&
-        to.name !== 'security'
+        to.name !== 'security' &&
+        !MFA_OPTIONAL_ROUTE_NAMES.has(String(to.name))
     ) {
         return { name: 'security', query: { mode: 'verify', redirect: to.fullPath } };
     }

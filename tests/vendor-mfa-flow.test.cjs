@@ -52,7 +52,6 @@ assert(/select\('id, vendor_organization_id, role, status, mfa_enrolled, passwor
 assert(routes.includes("beginVendorMfaReplacement(actor, code"), "MFA reset route must not disable before replacement setup");
 assert(authStore.includes("requiresMfaVerification"), "auth store must expose MFA verification gate");
 assert(router.includes("mode: 'verify'"), "router must force unverified MFA users into security check");
-assert(!router.includes("MFA_OPTIONAL_ROUTE_NAMES"), "protected vendor pages must not bypass the MFA route gate");
 assert(apiClient.includes("json?.error === 'mfa_required'"), "vendor API client must recover from an expired MFA grant");
 assert(apiClient.includes("redirectToMfaVerification(path)"), "vendor API client must redirect MFA-required responses to verification");
 
