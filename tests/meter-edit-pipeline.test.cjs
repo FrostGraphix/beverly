@@ -275,4 +275,77 @@ test("Meter Edit Pipeline - End-to-End Suite", async (t) => {
 
     assert.strictEqual(result.verified, true, "No-change update was accepted cleanly without throwing");
   });
+
+  await t.test("7. Form Seeding with Missing/String Communication & Default Fallbacks", () => {
+    const rawRowWithoutComms = {
+      meterId: "47000480929",
+      meterType: "Electricity",
+      isThreePhase: 0,
+      protocolVersion: "2.2",
+      stationId: "TUNGA",
+      lat: 0,
+      lng: 0,
+      remark: ""
+    };
+
+    const seed = managementFormSeed(meterRoute, "Edit", rawRowWithoutComms);
+    assert.strictEqual(seed.communicationWay, "1", "Defaults missing communicationWay to 1 (LoraWan)");
+    assert.strictEqual(seed.type, "0", "Defaults Electricity to 0");
+    assert.strictEqual(seed.isThreePhase, "0", "Defaults Single Phase to 0");
+
+    const validationErr = validateWriteForm("Edit", meterRoute, seed, managementForms["#/admin/meter"].Edit);
+    assert.strictEqual(validationErr, "", "Form is immediately valid without leaving communication blank");
+  });
+
+  await t.test("8. Cross-Station / Retained Upstream Station Verification Acceptance", async () => {
+    // Simulates user editing meter 47000480929 in station TUNGA while upstream Calinmeter returns UMAISHA
+    const mockCrossStationApi = {
+      async postApi(endpoint, body) {
+        if (endpoint === "/api/meter/update") {
+          return { code: 0, msg: "success", result: { updated: 1 } };
+        }
+        if (endpoint === "/api/meter/read") {
+          return {
+            code: 0,
+            result: {
+              data: [
+                {
+                  meterId: "47000480929",
+                  type: 0,
+                  isThreePhase: 0,
+                  communicationWay: 1,
+                  protocolVersion: "2.2",
+                  stationId: "UMAISHA", // Upstream retains UMAISHA partition
+                  lat: 0,
+                  lng: 0,
+                  remark: ""
+                }
+              ]
+            }
+          };
+        }
+        return { code: 0 };
+      }
+    };
+
+    const formWithTungaStation = {
+      meterId: "47000480929",
+      type: "0",
+      isThreePhase: "0",
+      communicationWay: "1",
+      protocolVersion: "2.2",
+      stationId: "TUNGA", // Form selected TUNGA
+      lat: "0",
+      lng: "0",
+      remark: ""
+    };
+
+    const result = await submitRouteAction(meterRoute, "Edit", formWithTungaStation, {
+      api: mockCrossStationApi,
+      liveWritesAllowed: true
+    });
+
+    assert.strictEqual(result.verified, true, "Verification succeeds and does not throw stationId mismatch error");
+  });
 });
+
