@@ -15,6 +15,7 @@ import { adminClient } from '../db/supabase.js';
 import { sendEmail } from '../adapters/resend.js';
 import { env } from '../config/env.js';
 import { passwordResetLinkEmail } from '../emails/templates.js';
+import { vendorPasswordError } from '@beverly/tokens/password-policy';
 
 export type ResetUserType = 'customer' | 'vendor_user';
 
@@ -175,9 +176,9 @@ export async function confirmPasswordReset(
     if (newPassword.length < 8) {
         throw new PasswordResetError('Password must be at least 8 characters.', 'weak_password');
     }
-    // Vendors need 12-char minimum (matches PasswordChange.vue policy)
-    if (userType === 'vendor_user' && newPassword.length < 12) {
-        throw new PasswordResetError('Password must be at least 12 characters.', 'weak_password');
+    if (userType === 'vendor_user') {
+        const policyError = vendorPasswordError(newPassword);
+        if (policyError) throw new PasswordResetError(policyError, 'weak_password');
     }
 
     const hash = hashToken(rawToken);

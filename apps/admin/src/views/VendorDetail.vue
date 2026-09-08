@@ -38,6 +38,39 @@ const tab = ref<Tab>('overview');
 const detail     = ref<any>(null);
 const loading    = ref(true);
 const banner     = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const invitationBusy = ref(false);
+const resentTemporaryPassword = ref<string | null>(null);
+
+async function resendInvitation() {
+    invitationBusy.value = true;
+    resentTemporaryPassword.value = null;
+    banner.value = null;
+    try {
+        const response = await api.post<{ temporaryPassword?: string | null; invitationDelivery?: { status: string } }>(
+            `/api/v1/admin/vendors/${id}/invitation/resend`,
+            {},
+            { headers: { 'Idempotency-Key': crypto.randomUUID() } },
+        );
+        resentTemporaryPassword.value = response.temporaryPassword ?? null;
+        await loadDetail();
+        banner.value = {
+            tone: response.invitationDelivery?.status === 'sent' ? 'success' : 'error',
+            text: response.invitationDelivery?.status === 'sent'
+                ? 'A fresh verification invitation was sent. The previous temporary password and sessions are no longer valid.'
+                : 'The invitation could not be delivered. Review the delivery status before retrying.',
+        };
+    } catch (error: unknown) {
+        banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Invitation resend failed.' };
+    } finally {
+        invitationBusy.value = false;
+    }
+}
+
+async function copyTemporaryPassword() {
+    if (!resentTemporaryPassword.value) return;
+    await navigator.clipboard.writeText(resentTemporaryPassword.value);
+    banner.value = { tone: 'success', text: 'Temporary password copied. Share it through an approved secure channel.' };
+}
 
 interface StationOption {
     stationId: string;
@@ -593,11 +626,41 @@ onMounted(loadDetail);
           <template v-if="detail.vendor.station_id">
             <dt>Station</dt>        <dd class="bw-mono">{{ detail.vendor.station_id }}</dd>
           </template>
+          <template v-if="detail.invitation">
+            <dt>Email ownership</dt>
+            <dd>
+              <span :class="['bw-badge', detail.invitation.email_verified_at ? 'success' : 'warning']">
+                {{ detail.invitation.email_verified_at ? 'verified' : 'awaiting verification' }}
+              </span>
+            </dd>
+            <dt>Invitation delivery</dt>
+            <dd>
+              <span :class="['bw-badge', detail.invitation.invitation_status === 'sent' ? 'success' : detail.invitation.invitation_status === 'failed' ? 'danger' : 'warning']">
+                {{ detail.invitation.invitation_status || 'pending' }}
+              </span>
+              <span v-if="detail.invitation.invitation_sent_at" class="bw-muted"> · {{ new Date(detail.invitation.invitation_sent_at).toLocaleString() }}</span>
+              <p v-if="detail.invitation.invitation_error" class="invitation-error">{{ detail.invitation.invitation_error }}</p>
+            </dd>
+            <dt v-if="canManageVendors && detail.invitation.password_reset_required">Invitation action</dt>
+            <dd v-if="canManageVendors && detail.invitation.password_reset_required">
+              <button class="bw-btn sm" type="button" :disabled="invitationBusy" @click="resendInvitation">
+                {{ invitationBusy ? 'Sending…' : 'Resend invitation' }}
+              </button>
+            </dd>
+          </template>
           <template v-if="detail.vendor.bank_name">
             <dt>Bank</dt>           <dd>{{ detail.vendor.bank_name }}</dd>
             <dt>Account</dt>        <dd class="bw-mono">{{ detail.vendor.account_number }} · {{ detail.vendor.account_name }}</dd>
           </template>
         </dl>
+        <div v-if="resentTemporaryPassword" class="bw-alert warning invitation-secret" role="status">
+          <div>
+            <strong>New temporary password</strong>
+            <p class="bw-mono">{{ resentTemporaryPassword }}</p>
+            <small>This is shown once. The vendor must verify their email and replace it at first sign-in.</small>
+          </div>
+          <button class="bw-btn sm" type="button" @click="copyTemporaryPassword">Copy</button>
+        </div>
       </div>
 
       <!-- ── Wallet ─────────────────────────────────────────── -->

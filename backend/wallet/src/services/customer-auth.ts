@@ -542,20 +542,130 @@ export async function signupWithEmail(
 
     const { data: existingEmail, error: existingEmailErr } = await adminClient
         .from('customers')
-        .select('id')
+        .select('*')
         .eq('email', email)
         .maybeSingle();
     if (existingEmailErr) throw new AuthError(existingEmailErr.message, 'email_lookup_failed');
-    if (existingEmail) throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+    if (existingEmail) {
+        const existing = existingEmail as CustomerProfile & { email_verified_at?: string | null };
+        if (existing.email_verified_at || existing.status !== 'active') {
+            throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+        }
+
+        let session: Awaited<ReturnType<typeof emailPasswordToken>>;
+        try {
+            session = await emailPasswordToken(email, password);
+        } catch {
+            throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+        }
+        if (session.userId !== customerAuthUserId(existing)) {
+            throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+        }
+
+        await getOrCreateWallet('customer', existing.id, {
+            dailyCapMinor: 10_000_000,
+            monthlyCapMinor: 50_000_000,
+        });
+        await logAction({
+            actorUserId: session.userId,
+            actorType: 'customer',
+            action: 'customer.email_signup_resumed',
+            targetType: 'customer',
+            targetId: existing.id,
+            after: { email },
+        }).catch(() => undefined);
+
+        return {
+            access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
+            customer: shapeAuthCustomer(existing),
+            isNew: false,
+        };
+    }
 
     if (phone) {
         const { data: existingPhone, error: existingPhoneErr } = await adminClient
             .from('customers')
-            .select('id')
+            .select('*')
             .eq('phone', phone)
             .maybeSingle();
         if (existingPhoneErr) throw new AuthError(existingPhoneErr.message, 'phone_lookup_failed');
-        if (existingPhone) throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+        if (existingPhone) {
+            const existing = existingPhone as CustomerProfile & {
+                auth_provider?: string;
+                email_verified_at?: string | null;
+            };
+            if (existing.status !== 'active' || existing.auth_provider !== 'phone_password') {
+                throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+            }
+
+            let session: Awaited<ReturnType<typeof phonePasswordToken>>;
+            try {
+                session = await phonePasswordToken(phone, password);
+            } catch {
+                throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+            }
+            const authUserId = customerAuthUserId(existing);
+            if (session.userId !== authUserId) {
+                throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+            }
+
+            const previous = {
+                email: existing.email,
+                full_name: existing.full_name,
+                auth_provider: existing.auth_provider,
+                email_verified_at: existing.email_verified_at ?? null,
+            };
+            const { data: converted, error: conversionError } = await adminClient
+                .from('customers')
+                .update({
+                    email,
+                    full_name: fullName,
+                    auth_provider: 'email_password',
+                    email_verified_at: null,
+                })
+                .eq('id', existing.id)
+                .select('*')
+                .single();
+            if (conversionError || !converted) {
+                throw new AuthError(conversionError?.message ?? 'Could not convert this account.', 'account_conversion_failed');
+            }
+
+            const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(authUserId, {
+                email,
+                email_confirm: true,
+                user_metadata: { role: 'customer', full_name: fullName, phone },
+            });
+            if (authUpdateError) {
+                await adminClient.from('customers').update(previous).eq('id', existing.id);
+                throw new AuthError(authUpdateError.message, 'account_conversion_failed');
+            }
+
+            await getOrCreateWallet('customer', existing.id, {
+                dailyCapMinor: 10_000_000,
+                monthlyCapMinor: 50_000_000,
+            });
+            await logAction({
+                actorUserId: authUserId,
+                actorType: 'customer',
+                action: 'customer.phone_account_converted_to_email',
+                targetType: 'customer',
+                targetId: existing.id,
+                before: { email: previous.email, auth_provider: previous.auth_provider },
+                after: { email, auth_provider: 'email_password' },
+            }).catch(() => undefined);
+
+            return {
+                access_token: session.accessToken,
+                refresh_token: session.refreshToken,
+                expires_at: session.expiresAt,
+                expires_in: session.expiresIn,
+                customer: shapeAuthCustomer(converted),
+                isNew: false,
+            };
+        }
     }
 
     const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
@@ -568,7 +678,17 @@ export async function signupWithEmail(
         throw new AuthError(authErr?.message ?? 'User creation failed.', 'user_create_failed');
     }
 
+    let customerId: string | null = null;
+    let walletId: string | null = null;
     try {
+        // Supabase confirms this auth identity so the application-owned OTP
+        // page can operate through its authenticated, restricted portal session.
+        // Establish that session before creating durable profile records.
+        const session = await emailPasswordToken(email, password);
+        if (session.userId !== authData.user.id) {
+            throw new AuthError('Created account identity did not match its session.', 'auth_identity_mismatch');
+        }
+
         const customer = await createCustomerRow({
             authUserId: authData.user.id,
             email,
@@ -576,10 +696,21 @@ export async function signupWithEmail(
             fullName,
             authProvider: 'email_password',
         });
+        customerId = customer.id;
 
-        await getOrCreateWallet('customer', customer.id, {
+        const wallet = await getOrCreateWallet('customer', customer.id, {
             dailyCapMinor: 10_000_000,
             monthlyCapMinor: 50_000_000,
+        });
+        walletId = wallet.id;
+
+        await logAction({
+            actorUserId: authData.user.id,
+            actorType: 'customer',
+            action: 'customer.email_signup',
+            targetType: 'customer',
+            targetId: customer.id,
+            after: { email, phone },
         });
 
         try {
@@ -591,19 +722,6 @@ export async function signupWithEmail(
             }
         } catch { /* non-fatal */ }
 
-        sendEmailVerification(email, fullName).catch(() => undefined);
-
-        await logAction({
-            actorUserId: authData.user.id,
-            actorType: 'customer',
-            action: 'customer.email_signup',
-            targetType: 'customer',
-            targetId: customer.id,
-            after: { email, phone },
-        });
-
-        const session = await emailPasswordToken(email, password);
-
         return {
             access_token: session.accessToken,
             refresh_token: session.refreshToken,
@@ -613,7 +731,13 @@ export async function signupWithEmail(
             isNew: true,
         };
     } catch (error) {
-        await adminClient.auth.admin.deleteUser(authData.user.id);
+        if (walletId) {
+            try { await adminClient.from('wallets').delete().eq('id', walletId); } catch { /* continue compensation */ }
+        }
+        if (customerId) {
+            try { await adminClient.from('customers').delete().eq('id', customerId); } catch { /* continue compensation */ }
+        }
+        await adminClient.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
         throw error;
     }
 }
@@ -691,11 +815,87 @@ export async function signupWithPhone(
 
     const { data: existingPhone, error: existingPhoneErr } = await adminClient
         .from('customers')
-        .select('id')
+        .select('*')
         .eq('phone', phone)
         .maybeSingle();
     if (existingPhoneErr) throw new AuthError(existingPhoneErr.message, 'phone_lookup_failed');
-    if (existingPhone) throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+    if (existingPhone) {
+        const existing = existingPhone as CustomerProfile & {
+            auth_provider?: string;
+            email_verified_at?: string | null;
+        };
+        if (existing.status !== 'active') {
+            throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+        }
+
+        let session: Awaited<ReturnType<typeof phonePasswordToken>>;
+        try {
+            session = await phonePasswordToken(phone, password);
+        } catch {
+            throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+        }
+        if (session.userId !== customerAuthUserId(existing)) {
+            throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+        }
+
+        let resumedCustomer: CustomerProfile = existing;
+        if (email && email !== existing.email) {
+            const { data: emailOwner, error: emailOwnerError } = await adminClient
+                .from('customers')
+                .select('id')
+                .eq('email', email)
+                .maybeSingle();
+            if (emailOwnerError) throw new AuthError(emailOwnerError.message, 'email_lookup_failed');
+            if (emailOwner && (emailOwner as any).id !== existing.id) {
+                throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+            }
+
+            const previous = {
+                email: existing.email,
+                full_name: existing.full_name,
+                email_verified_at: existing.email_verified_at ?? null,
+            };
+            const { data: updated, error: updateError } = await adminClient
+                .from('customers')
+                .update({ email, full_name: fullName, email_verified_at: null })
+                .eq('id', existing.id)
+                .select('*')
+                .single();
+            if (updateError || !updated) {
+                throw new AuthError(updateError?.message ?? 'Could not update this account.', 'account_conversion_failed');
+            }
+            const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(session.userId, {
+                user_metadata: { role: 'customer', full_name: fullName, email },
+            });
+            if (authUpdateError) {
+                await adminClient.from('customers').update(previous).eq('id', existing.id);
+                throw new AuthError(authUpdateError.message, 'account_conversion_failed');
+            }
+            resumedCustomer = updated as CustomerProfile;
+        }
+
+        await getOrCreateWallet('customer', existing.id, {
+            dailyCapMinor: 10_000_000,
+            monthlyCapMinor: 50_000_000,
+        });
+        await logAction({
+            actorUserId: session.userId,
+            actorType: 'customer',
+            action: 'customer.phone_signup_resumed',
+            targetType: 'customer',
+            targetId: existing.id,
+            after: { phone },
+        }).catch(() => undefined);
+
+        return {
+            access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
+            customer: shapeAuthCustomer(resumedCustomer),
+            isNew: false,
+        };
+    }
 
     if (email) {
         const { data: existingEmail, error: existingEmailErr } = await adminClient
@@ -717,7 +917,14 @@ export async function signupWithPhone(
         throw new AuthError(authErr?.message ?? 'User creation failed.', 'user_create_failed');
     }
 
+    let customerId: string | null = null;
+    let walletId: string | null = null;
     try {
+        const session = await phonePasswordToken(phone, password);
+        if (session.userId !== authData.user.id) {
+            throw new AuthError('Created account identity did not match its session.', 'auth_identity_mismatch');
+        }
+
         const customer = await createCustomerRow({
             authUserId: authData.user.id,
             email,
@@ -725,10 +932,21 @@ export async function signupWithPhone(
             fullName,
             authProvider: 'phone_password',
         });
+        customerId = customer.id;
 
-        await getOrCreateWallet('customer', customer.id, {
+        const wallet = await getOrCreateWallet('customer', customer.id, {
             dailyCapMinor: 10_000_000,
             monthlyCapMinor: 50_000_000,
+        });
+        walletId = wallet.id;
+
+        await logAction({
+            actorUserId: authData.user.id,
+            actorType: 'customer',
+            action: 'customer.phone_signup',
+            targetType: 'customer',
+            targetId: customer.id,
+            after: { email, phone },
         });
 
         if (email) {
@@ -740,19 +958,7 @@ export async function signupWithPhone(
                     await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
                 }
             } catch { /* non-fatal */ }
-            sendEmailVerification(email, fullName).catch(() => undefined);
         }
-
-        await logAction({
-            actorUserId: authData.user.id,
-            actorType: 'customer',
-            action: 'customer.phone_signup',
-            targetType: 'customer',
-            targetId: customer.id,
-            after: { email, phone },
-        });
-
-        const session = await phonePasswordToken(phone, password);
 
         return {
             access_token: session.accessToken,
@@ -763,7 +969,13 @@ export async function signupWithPhone(
             isNew: true,
         };
     } catch (error) {
-        await adminClient.auth.admin.deleteUser(authData.user.id);
+        if (walletId) {
+            try { await adminClient.from('wallets').delete().eq('id', walletId); } catch { /* continue compensation */ }
+        }
+        if (customerId) {
+            try { await adminClient.from('customers').delete().eq('id', customerId); } catch { /* continue compensation */ }
+        }
+        await adminClient.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
         throw error;
     }
 }

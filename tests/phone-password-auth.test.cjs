@@ -36,8 +36,8 @@ function main() {
 
   // 4. Vendor Onboarding Service
   const vendorOnboarding = read("backend/wallet/src/services/vendor-onboarding.ts");
-  assert(vendorOnboarding.includes("phone: phone || undefined"), "vendor-onboarding.ts must pass phone to admin.createUser");
-  assert(vendorOnboarding.includes("phone_confirm: phone ? true : undefined"), "vendor-onboarding.ts must pass phone_confirm to admin.createUser");
+  assert(vendorOnboarding.includes("type: 'signup'"), "vendor-onboarding.ts must use the unconfirmed signup-link flow");
+  assert(!vendorOnboarding.includes("phone_confirm: true"), "vendor-onboarding.ts must not mark an unverified vendor phone as confirmed");
 
   // 5. Vendor Login View
   const vendorLogin = read("apps/vendor/src/views/Login.vue");

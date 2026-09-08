@@ -30,6 +30,10 @@ assert.match(reference, /crm\.live_writes\.\$\{liveWriteEnvironment\(\)\}\.enabl
 assert.match(reference, /allowLiveWrites: liveWriteControl\.enabled === true/);
 assert.match(reference, /X-Route-Hash,X-Route-Action/);
 assert.match(reference, /function routeHashForWritePath\(pathname\)/);
+assert.strictEqual(_test.routeHashForWritePath("/api/meter/update"), "#/admin/meter");
+assert.strictEqual(_test.routeHashForWritePath("/API/meter/create"), "#/admin/meter");
+assert.strictEqual(_test.routeHashForWritePath("/api/meter/delete"), "#/admin/meter");
+assert.strictEqual(_test.routeHashForWritePath("/api/meter/import"), "#/admin/meter");
 assert.match(reference, /createreadingtask"\)\) return "#\/remote-operation\/remote-meter-reading"/);
 assert.match(reference, /createtokentask"\)\) return "#\/remote-operation\/remote-meter-token"/);
 assert.deepStrictEqual(

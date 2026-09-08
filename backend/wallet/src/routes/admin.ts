@@ -8,9 +8,9 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
-import { assertClientIdempotencyKey } from '../services/idempotency.js';
+import { abandonWalletIdempotency, assertClientIdempotencyKey, claimWalletIdempotency, completeWalletIdempotency, hashIdempotency } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
-import { createVendorOrganization, setVendorStatus } from '../services/vendor-onboarding.js';
+import { createVendorOrganization, resendVendorInvitation, setVendorStatus } from '../services/vendor-onboarding.js';
 import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls } from '../services/funding.js';
 import { getBalance, captureHold, releaseHold } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
@@ -435,6 +435,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'PATCH /vendor-applications/:id/status': 'wallet.vendors.manage',
     'DELETE /vendor-applications/:id': 'wallet.vendors.manage',
     'POST /vendors': 'wallet.vendors.manage',
+    'POST /vendors/:id/invitation/resend': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
     'GET /vendors/summary': 'wallet.vendors.review',
     'GET /vendors/analytics': 'wallet.vendors.review',
@@ -1582,7 +1583,9 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── create vendor organization ──
-    fastify.post('/vendors', async (req) => {
+    fastify.post('/vendors', async (req, reply) => {
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return undefined;
         const schema = z.object({
             legalName: z.string().min(2),
             tradingName: z.string().optional(),
@@ -1592,22 +1595,46 @@ const route: FastifyPluginAsync = async (fastify) => {
             contactEmail: z.string().email(),
             contactPhone: z.string().min(8),
             operatingAddress: z.string().optional(),
-            stationId: z.string().optional(),
-            operatingStations: z.array(z.string()).optional(),
+            stationId: z.string().trim().min(1).optional(),
+            operatingStations: z.array(z.string().trim().min(1)).max(1).optional(),
             primaryUserEmail: z.string().email(),
             primaryUserFullName: z.string().min(2),
             primaryUserPhone: z.string().optional(),
             dailyLimitMinor: z.number().int().min(100000).optional(),
             sourceApplicationId: z.string().uuid().optional(),
-        });
+        }).refine((value) => {
+            const stations = [...new Set([value.stationId, ...(value.operatingStations ?? [])].filter(Boolean))];
+            return stations.length === 1;
+        }, { message: 'Choose exactly one operating station.', path: ['stationId'] });
         const body = schema.parse(req.body);
-        const result = await createVendorOrganization({
-            ...body,
-            createdByStaffId: req.actor!.userId,
-        });
-        // NOTE: temporaryPassword is in the response ONCE. Caller must hand it off
-        // through the approved secure channel and never store it server-side.
-        return result;
+        const scope = `vendor.provision:${req.actor!.userId}`;
+        const fingerprint = hashIdempotency([JSON.stringify(body)]);
+        const claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+        if (claim.state === 'pending') {
+            return reply.code(409).send({ error: 'vendor_provisioning_in_progress', message: 'This vendor is already being created.' });
+        }
+        if (claim.state === 'replay') {
+            return { ...(claim.responsePayload as object), temporaryPassword: null, replayed: true };
+        }
+        try {
+            const result = await createVendorOrganization({
+                ...body,
+                createdByStaffId: req.actor!.userId,
+                provisioningKey: `${req.actor!.userId}:${idempotencyKey}`,
+            });
+            const replayPayload = {
+                organizationId: result.organizationId,
+                primaryVendorUserId: result.primaryVendorUserId,
+                authUserId: result.authUserId,
+                walletId: result.walletId,
+                invitationDelivery: result.invitationDelivery,
+            };
+            await completeWalletIdempotency(scope, idempotencyKey, replayPayload);
+            return result;
+        } catch (error) {
+            await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
+            throw error;
+        }
     });
 
     // ── vendor list ──
@@ -1863,7 +1890,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('vendor_organizations').select('*').eq('id', id).maybeSingle();
         if (error || !vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
         const { data: vendorUser } = await adminClient
-            .from('vendor_users').select('profile_picture_url').eq('vendor_organization_id', id).limit(1).maybeSingle();
+            .from('vendor_users').select('profile_picture_url, email, email_verified_at, status, password_reset_required, invitation_status, invitation_message_id, invitation_sent_at, invitation_error').eq('vendor_organization_id', id).limit(1).maybeSingle();
 
         const { data: wallet } = await adminClient
             .from('wallets').select('*').eq('owner_type', 'vendor').eq('owner_id', id).maybeSingle();
@@ -1888,6 +1915,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         return {
             vendor: { ...vendor, profile_picture_url: (vendorUser as any)?.profile_picture_url ?? null },
+            invitation: vendorUser ?? null,
             wallet: wallet ?? null,
             balance_minor:   balance?.ledgerBalanceMinor   ?? 0,
             holds_minor:     balance?.activeHoldsMinor     ?? 0,
@@ -1906,6 +1934,25 @@ const route: FastifyPluginAsync = async (fastify) => {
                 stationCount,
             },
         };
+    });
+
+    fastify.post('/vendors/:id/invitation/resend', async (req, reply) => {
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return undefined;
+        const id = z.string().uuid().parse((req.params as { id: string }).id);
+        const scope = `vendor.invitation.resend:${id}`;
+        const fingerprint = hashIdempotency([id, req.actor!.userId]);
+        const claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+        if (claim.state === 'pending') return reply.code(409).send({ error: 'invitation_resend_in_progress', message: 'Invitation resend is already in progress.' });
+        if (claim.state === 'replay') return { ...(claim.responsePayload as object), temporaryPassword: null, replayed: true };
+        try {
+            const result = await resendVendorInvitation(id);
+            await completeWalletIdempotency(scope, idempotencyKey, { invitationDelivery: result.invitationDelivery });
+            return result;
+        } catch (error) {
+            await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
+            throw error;
+        }
     });
 
     fastify.patch('/vendors/:id/profile-picture', async (req, reply) => {

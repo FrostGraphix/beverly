@@ -52,7 +52,7 @@ function otpStorageError(message: string, fallbackCode: string): EmailOtpError {
 }
 
 async function assertNotRateLimited(email: string, purpose: OtpPurpose): Promise<void> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('customer_email_otp')
         .select('created_at')
         .eq('email', email)
@@ -60,6 +60,7 @@ async function assertNotRateLimited(email: string, purpose: OtpPurpose): Promise
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+    if (error) throw otpStorageError(error.message, 'challenge_lookup_failed');
     if (!data) return;
     const elapsed = Date.now() - new Date((data as any).created_at).getTime();
     if (elapsed < RESEND_COOLDOWN_MS) {
@@ -67,16 +68,21 @@ async function assertNotRateLimited(email: string, purpose: OtpPurpose): Promise
     }
 }
 
-async function createChallenge(email: string, purpose: OtpPurpose): Promise<string> {
+async function createChallenge(email: string, purpose: OtpPurpose): Promise<{ id: string; otp: string }> {
     const otp = generateOtp();
-    const { error } = await adminClient.from('customer_email_otp').insert({
-        email,
-        otp_hash: hashOtp(email, purpose, otp),
-        purpose,
-        expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
-    });
+    const { data, error } = await adminClient
+        .from('customer_email_otp')
+        .insert({
+            email,
+            otp_hash: hashOtp(email, purpose, otp),
+            purpose,
+            expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
+        })
+        .select('id')
+        .single();
     if (error) throw otpStorageError(error.message, 'challenge_create_failed');
-    return otp;
+    if (!(data as any)?.id) throw new EmailOtpError('Could not create an email code.', 'challenge_create_failed');
+    return { id: String((data as any).id), otp };
 }
 
 async function consumeChallenge(email: string, purpose: OtpPurpose, otp: string): Promise<void> {
@@ -100,28 +106,40 @@ async function consumeChallenge(email: string, purpose: OtpPurpose, otp: string)
         throw new EmailOtpError('Too many attempts. Request a new code.', 'otp_locked');
     }
     if (c.otp_hash !== hashOtp(email, purpose, otp)) {
-        await adminClient.from('customer_email_otp').update({ attempts: c.attempts + 1 }).eq('id', c.id);
+        const { error: attemptError } = await adminClient
+            .from('customer_email_otp')
+            .update({ attempts: c.attempts + 1 })
+            .eq('id', c.id);
+        if (attemptError) throw otpStorageError(attemptError.message, 'challenge_update_failed');
         throw new EmailOtpError('Incorrect code.', 'otp_incorrect');
     }
-    await adminClient.from('customer_email_otp').update({ consumed_at: new Date().toISOString() }).eq('id', c.id);
+    const { error: consumeError } = await adminClient
+        .from('customer_email_otp')
+        .update({ consumed_at: new Date().toISOString() })
+        .eq('id', c.id);
+    if (consumeError) throw otpStorageError(consumeError.message, 'challenge_update_failed');
 }
 
 // ── Email verification ──────────────────────────────────────────────────────
 
 export async function sendEmailVerification(email: string, fullName: string): Promise<void> {
     const normalized = normalizeEmail(email);
-    await assertNotRateLimited(normalized, 'verify');
-    const otp = await createChallenge(normalized, 'verify');
-
     let flagOn = false;
-    try { flagOn = await isFlagEnabled('notifications.email.verification'); } catch { /* flag missing = disabled */ }
-    if (!flagOn) return;
+    try { flagOn = await isFlagEnabled('notifications.email.verification'); } catch { /* handled below */ }
+    if (!flagOn) {
+        throw new EmailOtpError('Email verification is temporarily unavailable.', 'email_delivery_disabled');
+    }
+
+    await assertNotRateLimited(normalized, 'verify');
+    const challenge = await createChallenge(normalized, 'verify');
 
     try {
-        const content = verificationEmail({ fullName, code: otp });
+        const content = verificationEmail({ fullName, code: challenge.otp });
         await sendEmail({ to: normalized, subject: content.subject, html: content.html, text: content.text, tag: 'email-verification' });
     } catch (err) {
         console.error('[customer-email-otp] verification email send failed:', err);
+        await adminClient.from('customer_email_otp').delete().eq('id', challenge.id);
+        throw new EmailOtpError('Could not send the verification email. Please retry.', 'otp_send_failed');
     }
 }
 
@@ -141,10 +159,11 @@ export async function confirmEmailVerification(email: string, otp: string): Prom
         .maybeSingle();
     if (error || !customer) throw new EmailOtpError('No account found for this email.', 'customer_not_found');
 
-    await adminClient
+    const { error: updateError } = await adminClient
         .from('customers')
         .update({ email_verified_at: new Date().toISOString() })
         .eq('id', (customer as any).id);
+    if (updateError) throw otpStorageError(updateError.message, 'verification_update_failed');
 
     await logAction({
         actorUserId: (customer as any).id,
@@ -167,19 +186,20 @@ export async function sendPasswordRecoveryEmail(email: string): Promise<void> {
     // Do not reveal whether the account exists.
     if (!customer) return;
 
-    await assertNotRateLimited(normalized, 'recovery');
-    const otp = await createChallenge(normalized, 'recovery');
-
     let flagOn = false;
-    try { flagOn = await isFlagEnabled('notifications.email.password_recovery'); } catch { /* flag missing = disabled */ }
+    try { flagOn = await isFlagEnabled('notifications.email.password_recovery'); } catch { /* disabled below */ }
     if (!flagOn) return;
+
+    await assertNotRateLimited(normalized, 'recovery');
+    const challenge = await createChallenge(normalized, 'recovery');
 
     try {
         const fullName = (customer as any).full_name ?? normalized;
-        const content = passwordRecoveryEmail({ fullName, code: otp });
+        const content = passwordRecoveryEmail({ fullName, code: challenge.otp });
         await sendEmail({ to: normalized, subject: content.subject, html: content.html, text: content.text, tag: 'password-recovery' });
     } catch (err) {
         console.error('[customer-email-otp] password recovery email send failed:', err);
+        await adminClient.from('customer_email_otp').delete().eq('id', challenge.id);
     }
 }
 

@@ -21,6 +21,7 @@ import fp from 'fastify-plugin';
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
+import { tokenAllowedAfterPasswordChange } from '../services/vendor-password-change.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
 import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
 
@@ -52,7 +53,7 @@ declare module 'fastify' {
         requireAuth: () => preHandlerHookHandler;
         requireStaff: () => preHandlerHookHandler;
         requireVendor: (options?: { requireMfa?: boolean }) => preHandlerHookHandler;
-        requireCustomer: () => preHandlerHookHandler;
+        requireCustomer: (options?: { allowUnverified?: boolean }) => preHandlerHookHandler;
         requireKycTier: (min: number) => preHandlerHookHandler;
     }
 }
@@ -96,14 +97,14 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 1. Vendor user lookup
     let vuResult = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, password_changed_at, password_session_id, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
     if (!vuResult.data && email) {
         vuResult = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
+            .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, password_changed_at, password_session_id, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
             .eq('email', email)
             .maybeSingle();
     }
@@ -121,6 +122,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
     }
 
     if (vu && (vu as any).status === 'active') {
+        if (!tokenAllowedAfterPasswordChange(token, (vu as any).password_changed_at, (vu as any).password_session_id)) return null;
         const organization = (vu as any).vendor_organizations;
         if (organization?.status !== 'approved') return null;
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
@@ -153,13 +155,13 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 2. Customer lookup
     let customerResult = await adminClient
         .from('customers')
-        .select('id, kyc_tier, status')
+        .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
         .eq('auth_user_id', userId)
         .maybeSingle();
     if (customerResult.error && isMissingColumn(customerResult.error.message, 'auth_user_id')) {
         customerResult = await adminClient
             .from('customers')
-            .select('id, kyc_tier, status')
+            .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
             .eq('user_id', userId)
             .maybeSingle();
     }
@@ -175,6 +177,8 @@ async function resolveActor(token: string): Promise<Actor | null> {
             customerId: (cu as any).id,
             mfaVerified,
             kycTier: (cu as any).kyc_tier,
+            emailVerified: (cu as any).auth_provider !== 'email_password'
+                || Boolean((cu as any).email_verified_at),
         };
     }
 
@@ -287,12 +291,18 @@ const plugin: FastifyPluginAsync = async (fastify) => {
         };
     });
 
-    fastify.decorate('requireCustomer', (): preHandlerHookHandler => {
+    fastify.decorate('requireCustomer', (options: { allowUnverified?: boolean } = {}): preHandlerHookHandler => {
         return async (req: FastifyRequest, reply: FastifyReply) => {
             await (fastify.requireAuth() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
             if (reply.sent) return undefined;
             if (req.actor?.type !== 'customer') {
                 return reply.code(403).send({ error: 'forbidden', message: 'Customer session required.' });
+            }
+            if (!options.allowUnverified && req.actor.emailVerified === false) {
+                return reply.code(403).send({
+                    error: 'email_verification_required',
+                    message: 'Verify your email before continuing.',
+                });
             }
             return undefined;
         };

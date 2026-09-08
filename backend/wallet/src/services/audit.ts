@@ -16,7 +16,7 @@ export type ActorType = 'staff' | 'vendor_user' | 'customer' | 'system' | 'webho
 
 export type SecurityEventType =
     | 'login_success' | 'login_failure' | 'logout'
-    | 'password_change' | 'mfa_enabled' | 'mfa_disabled' | 'mfa_failure'
+    | 'password_change' | 'password_change_failure' | 'mfa_enabled' | 'mfa_disabled' | 'mfa_failure'
     | 'suspicious_activity' | 'rate_limit_hit' | 'permission_denied'
     | 'impersonation_start' | 'impersonation_end' | 'session_revoked'
     | 'session_timeout' | 'temp_password_issued' | 'temp_password_used'

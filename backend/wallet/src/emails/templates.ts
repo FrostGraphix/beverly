@@ -429,13 +429,14 @@ export function adminAnnouncementEmail(opts: { name: string; title: string; body
 // ── Vendor onboarding ─────────────────────────────────────────────────────────
 
 export function vendorOnboardingEmail(opts: {
-    contactName: string; legalName: string; loginEmail: string; temporaryPassword: string; loginUrl: string;
+    contactName: string; legalName: string; loginEmail: string; temporaryPassword: string; loginUrl: string; verificationUrl: string;
 }): EmailContent {
     const name = firstName(opts.contactName);
     const heading = `${esc(opts.legalName)} is live on Beverly`;
     const body = `<p>Hi ${esc(name)},</p>
         <p>You're onboarded as a Beverly vendor — which means you can vend electricity tokens, manage funding, and track every transaction from your own portal.</p>
-        <p>Sign in with the credentials below. You'll be asked to set a password of your own on first login — the one below is temporary and shown only this once, so keep it safe until then.</p>`;
+        <p>First verify that this email belongs to you. Then sign in with the credentials below. You'll be asked to set a password of your own on first login.</p>
+        <p><a href="${esc(opts.verificationUrl)}" style="color:${BRAND};font-weight:700;">Verify your email address</a></p>`;
     const highlight = `<span style="display:block;font-size:12px;font-weight:600;color:${MUTED};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Your sign-in details</span>
         <span style="display:block;font-size:14px;color:${INK};margin-bottom:6px;">Email &nbsp;<strong>${esc(opts.loginEmail)}</strong></span>
         <span style="display:block;font-size:14px;color:${INK};">Temporary password &nbsp;<strong style="font-family:'SF Mono',SFMono-Regular,Consolas,monospace;">${esc(opts.temporaryPassword)}</strong></span>`;
@@ -451,7 +452,7 @@ export function vendorOnboardingEmail(opts: {
             ctaUrl: opts.loginUrl,
             footerNote: 'Looking forward to working with you.',
         }),
-        text: `Hi ${name},\n\n${opts.legalName} is onboarded as a Beverly vendor. You can now vend electricity tokens, manage funding, and track every transaction from your own portal.\n\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nSign in and set your own password: ${opts.loginUrl}\n\nLooking forward to working with you.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+        text: `Hi ${name},\n\n${opts.legalName} is onboarded as a Beverly vendor.\n\nVerify your email: ${opts.verificationUrl}\n\nSign-in details:\nEmail: ${opts.loginEmail}\nTemporary password: ${opts.temporaryPassword}\n\nAfter verification, sign in and set your own password: ${opts.loginUrl}\n\nLooking forward to working with you.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
     };
 }
 

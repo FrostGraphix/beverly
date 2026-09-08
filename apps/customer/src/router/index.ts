@@ -58,6 +58,12 @@ router.beforeEach(async (to) => {
     if (to.meta.auth && !auth.isAuthenticated) {
         return { name: 'login', query: { redirect: to.fullPath } };
     }
+    const needsEmailVerification = auth.isAuthenticated
+        && auth.customer?.auth_provider === 'email_password'
+        && !auth.customer.email_verified_at;
+    if (needsEmailVerification && to.name !== 'verify-email') {
+        return { name: 'verify-email' };
+    }
     if (to.meta.guest && auth.isAuthenticated) {
         return { name: 'home' };
     }

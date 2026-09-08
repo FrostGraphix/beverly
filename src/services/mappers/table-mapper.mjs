@@ -142,8 +142,11 @@ function mapRowShape(row, route) {
     if (record.meterType === 0 || record.meterType === "0") record.meterType = "Electricity";
     if (record.meterType === 1 || record.meterType === "1") record.meterType = "Water";
     if (record.meterType === 2 || record.meterType === "2") record.meterType = "Gas";
-    if (record.communicationWay === 0) record.communicationWay = "GPRS";
-    if (record.communicationWay === 1) record.communicationWay = "LoraWan";
+    if (record.communicationWayCode == null && [0, 1, "0", "1"].includes(record.communicationWay)) {
+      record.communicationWayCode = Number(record.communicationWay);
+    }
+    if (record.communicationWay === 0 || record.communicationWay === "0") record.communicationWay = "GPRS";
+    if (record.communicationWay === 1 || record.communicationWay === "1") record.communicationWay = "LoraWan";
     if (record.status === true) record.status = "Online";
     if (record.status === false) record.status = "Offline";
   }

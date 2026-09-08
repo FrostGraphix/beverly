@@ -66,9 +66,9 @@ describe('password-reset service', () => {
         expect(src).toContain('length < 8');
     });
 
-    it('confirmPasswordReset enforces 12-char minimum for vendor_users', () => {
+    it('confirmPasswordReset delegates vendor validation to the shared password policy', () => {
         expect(src).toContain("userType === 'vendor_user'");
-        expect(src).toContain('length < 12');
+        expect(src).toContain('vendorPasswordError(newPassword)');
     });
 
     it('uses adminClient.auth.admin.updateUserById to change password', () => {

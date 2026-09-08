@@ -5,6 +5,7 @@
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { vendorPasswordError } from '@beverly/tokens/password-policy';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
 import { resolveFundingCallbackUrl } from '../config/funding-callbacks.js';
@@ -70,6 +71,7 @@ import {
     hashIdempotency,
 } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
+import { replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -614,7 +616,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch {
             return reply.code(503).send({ error: 'auth_upstream_unreachable', message: 'Authentication service is temporarily unavailable. Try again shortly.' });
         }
-        const tokData = await tokRes.json().catch(() => ({})) as { access_token?: string; user?: { id?: string } };
+        const tokData = await tokRes.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number; user?: { id?: string; email_confirmed_at?: string | null } };
         if (!tokRes.ok || !tokData.access_token || !tokData.user?.id) {
             return reply.code(401).send({ error: 'invalid_credentials', message: 'Invalid email or password.' });
         }
@@ -623,11 +625,44 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, email_verified_at, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
             .eq('auth_user_id', userId)
             .maybeSingle();
         if (!vu) {
             return reply.code(403).send({ error: 'not_vendor', message: 'This account is not linked to a vendor.' });
+        }
+        let confirmedAt = tokData.user.email_confirmed_at ?? null;
+        if (!confirmedAt) {
+            const { data: authoritativeUser, error: authoritativeUserError } = await adminClient.auth.admin.getUserById(userId);
+            if (authoritativeUserError) {
+                await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+                return reply.code(503).send({ error: 'email_verification_check_failed', message: 'Email verification could not be confirmed. Try again shortly.' });
+            }
+            confirmedAt = authoritativeUser.user?.email_confirmed_at ?? null;
+        }
+        if ((vu as any).status === 'invited' && confirmedAt) {
+            const { error: activateUserError } = await adminClient.from('vendor_users').update({
+                status: 'active',
+                email_verified_at: confirmedAt,
+            }).eq('id', (vu as any).id);
+            if (activateUserError) return reply.code(503).send({ error: 'vendor_activation_failed', message: 'Your verified account could not be activated. Contact support.' });
+            const { error: activateOrgError } = await adminClient.from('vendor_organizations').update({
+                status: 'approved',
+                approved_at: new Date().toISOString(),
+            }).eq('id', (vu as any).vendor_organization_id);
+            if (activateOrgError) {
+                // Keep the transition retryable. Email ownership remains proven,
+                // while the invited state causes the next login to retry both writes.
+                await adminClient.from('vendor_users').update({ status: 'invited' }).eq('id', (vu as any).id);
+                return reply.code(503).send({ error: 'vendor_activation_failed', message: 'Your verified organization could not be activated. Try again or contact support.' });
+            }
+            (vu as any).status = 'active';
+            (vu as any).email_verified_at = confirmedAt;
+            if ((vu as any).vendor_organizations) (vu as any).vendor_organizations.status = 'approved';
+        }
+        if (!confirmedAt && !(vu as any).email_verified_at) {
+            await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+            return reply.code(403).send({ error: 'email_verification_required', message: 'Verify your email from the invitation before signing in.' });
         }
         if ((vu as any).status !== 'active') {
             return reply.code(403).send({ error: 'account_inactive', message: 'This vendor account is not active.' });
@@ -651,6 +686,9 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         return {
             access_token: accessToken,
+            refresh_token: tokData.refresh_token ?? null,
+            expires_at: tokData.expires_at ?? null,
+            expires_in: tokData.expires_in ?? null,
             vendor: {
                 id: (vu as any).id,
                 vendor_organization_id: (vu as any).vendor_organization_id,
@@ -744,6 +782,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const { current, next } = schema.parse(req.body);
 
+        const policyError = vendorPasswordError(next);
+        if (policyError) {
+            return reply.code(422).send({ error: 'weak_password', message: policyError });
+        }
+
         if (current === next) {
             return reply.code(400).send({
                 error: 'same_password',
@@ -751,64 +794,20 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
-        const wasTempPassword = actor.passwordResetRequired === true;
-
-        // Verify current password by re-authenticating
-        if (!actor.email) {
-            return reply.code(400).send({ error: 'no_email', message: 'Account has no email.' });
-        }
-        const verifyRes = await fetch(
-            `${process.env.SUPABASE_URL}/auth/v1/token?grant_type=password`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': process.env.SUPABASE_ANON_KEY ?? '',
-                },
-                body: JSON.stringify({ email: actor.email, password: current }),
-            },
-        );
-        if (!verifyRes.ok) {
-            await logSecurityEvent('mfa_failure', {
-                actorUserId: actor.userId,
-                severity: 'medium',
+        try {
+            return await replaceVendorPassword({
+                actor,
+                currentPassword: current,
+                nextPassword: next,
                 ip: req.ip,
-                userAgent: req.headers['user-agent'],
-                metadata: { reason: 'current_password_invalid_on_change' },
+                userAgent: req.headers['user-agent'] as string | undefined,
             });
-            return reply.code(400).send({
-                error: 'invalid_current_password',
-                message: 'Current password is incorrect.',
-            });
+        } catch (error) {
+            if (error instanceof VendorPasswordChangeError) {
+                return reply.code(error.status).send({ error: error.code, message: error.message });
+            }
+            throw error;
         }
-
-        // Update via service role
-        const { error: authErr } = await adminClient.auth.admin.updateUserById(actor.userId, {
-            password: next,
-        });
-        if (authErr) return reply.code(400).send({ error: 'password_update_failed', message: authErr.message });
-
-        await adminClient.from('vendor_users')
-            .update({ password_reset_required: false })
-            .eq('id', actor.actorId);
-
-        await logSecurityEvent('password_change', {
-            actorUserId: actor.userId,
-            severity: 'info',
-            ip: req.ip,
-            userAgent: req.headers['user-agent'],
-            metadata: { was_temp_password: wasTempPassword },
-        });
-        if (wasTempPassword) {
-            await logSecurityEvent('temp_password_used', {
-                actorUserId: actor.userId,
-                severity: 'info',
-                ip: req.ip,
-                userAgent: req.headers['user-agent'],
-            });
-        }
-
-        return { ok: true, was_temp_password: wasTempPassword };
     });
 
     // ── wallet summary ──

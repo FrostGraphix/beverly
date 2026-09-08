@@ -104,7 +104,7 @@ export const ROLE_PERMISSIONS = [
   }
 ];
 
-const managementForms = {
+export const managementForms = {
   "#/management/gateway": {
     Add: [
       field("gatewayId", "Gateway Id", { required: true }),
@@ -342,6 +342,7 @@ const managementForms = {
     Edit: [
       field("meterId",       "Meter Id",     { required: true, readonly: true }),
       field("type", "Meter Type", {
+        required: true,
         type: "select",
         options: [
           { value: "0", label: "Electricity" },
@@ -350,6 +351,7 @@ const managementForms = {
         ]
       }),
       field("isThreePhase", "Phase", {
+        required: true,
         type: "select",
         options: [
           { value: "0", label: "Single Phase" },
@@ -357,13 +359,14 @@ const managementForms = {
         ]
       }),
       field("communicationWay", "Communication", {
+        required: true,
         type: "select",
         options: [
           { value: "0", label: "GPRS" },
           { value: "1", label: "LoraWan" }
         ]
       }),
-      field("protocolVersion", "Protocol Version"),
+      field("protocolVersion", "Protocol Version", { required: true }),
       field("lat", "Latitude"),
       field("lng", "Longitude"),
       field("stationId",     "StationId",    { required: true, type: "select" }),
@@ -447,6 +450,22 @@ export function managementFields(route, action) {
   return managementForms[route.hash]?.[action] || [];
 }
 
+function meterSelectValue(name, value) {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  if (name === "type") {
+    return ({ "0": "0", electricity: "0", "1": "1", water: "1", "2": "2", gas: "2" })[normalized] ?? "";
+  }
+  if (name === "isThreePhase") {
+    if (value === true) return "1";
+    if (value === false) return "0";
+    return ({ "0": "0", false: "0", single: "0", singlephase: "0", "1": "1", true: "1", three: "1", threephase: "1" })[normalized] ?? "";
+  }
+  if (name === "communicationWay") {
+    return ({ "0": "0", gprs: "0", "1": "1", lorawan: "1" })[normalized] ?? "";
+  }
+  return value;
+}
+
 export function managementFormSeed(route, action, row = {}) {
   if (!isManagementRoute(route)) return {};
   const fields = managementFields(route, action);
@@ -459,9 +478,10 @@ export function managementFormSeed(route, action, row = {}) {
       if (actualKey) value = row[actualKey];
     }
     if (value === undefined || value === null) {
-      if (currentField.name === "customerId") value = row.customerId || row.id;
-      else if (currentField.name === "tariffId") value = row.tariffId || row.id;
-      else if (currentField.name === "roleId") value = row.roleId || row.id;
+      if (currentField.name === "meterId") value = row.meterId || row.id || row.meter_id || row.meter_sn;
+      else if (currentField.name === "customerId") value = row.customerId || row.id || row.customer_id;
+      else if (currentField.name === "tariffId") value = row.tariffId || row.id || row.tariff_id;
+      else if (currentField.name === "roleId") value = row.roleId || row.id || row.role_id;
       else if (currentField.name === "itemType") value = row.itemType || row.id;
       else if (currentField.name === "itemName") value = row.itemName || row.name;
       else if (currentField.name === "dlmsId") value = row.dlmsId || row.id;
@@ -469,16 +489,17 @@ export function managementFormSeed(route, action, row = {}) {
       else if (currentField.name === "nameEN") value = row.nameEN || row.name;
       else if (currentField.name === "email") value = row.email || row.loginEmail || row.userEmail;
       else if (currentField.name === "nickName") value = row.nickName || row.fullName || row.name;
-      else if (["gatewayId", "userId"].includes(currentField.name)) value = row.id || row.userId;
-      else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name;
-      else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || "";
+      else if (["gatewayId", "userId"].includes(currentField.name)) value = row.id || row.userId || row.gatewayId;
+      else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name || row.customerName || row.gatewayName;
+      else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || row.station_id || "";
       else if (currentField.name === "status" && route.hash === "#/admin/user") value = "true";
-      else if (currentField.name === "type") value = row.type ?? row.meterType ?? "";
-      else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? "";
-      else if (currentField.name === "communicationWay") value = row.communicationWay ?? "";
-      else if (currentField.name === "protocolVersion") value = row.protocolVersion ?? "";
+      else if (currentField.name === "type") value = row.type ?? row.meterType ?? row.meter_type ?? "";
+      else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? row.is_three_phase ?? row.phase ?? "";
+      else if (currentField.name === "communicationWay") value = row.communicationWayCode ?? row.communicationWay ?? row.communication_way ?? "";
+      else if (currentField.name === "protocolVersion") value = row.protocolVersion ?? row.protocol_version ?? "2.2";
       else if (currentField.name === "lat") value = row.lat ?? "";
       else if (currentField.name === "lng") value = row.lng ?? "";
+      else if (currentField.name === "remark") value = row.remark ?? row.Remark ?? "";
     }
     if (currentField.name === "stationId" && typeof value === "string") {
       value = value.toUpperCase();
@@ -488,8 +509,8 @@ export function managementFormSeed(route, action, row = {}) {
         ? "true"
         : "false";
     }
-    if (route.hash === "#/admin/meter" && ["type", "isThreePhase", "communicationWay"].includes(currentField.name) && value !== "") {
-      value = String(value);
+    if (route.hash === "#/admin/meter" && ["type", "isThreePhase", "communicationWay"].includes(currentField.name)) {
+      value = meterSelectValue(currentField.name, value);
     }
     seed[currentField.name] = value ?? "";
   }

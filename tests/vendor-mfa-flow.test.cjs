@@ -13,6 +13,7 @@ const auth = read("backend/wallet/src/plugins/auth.ts");
 const securityView = read("apps/vendor/src/views/Security.vue");
 const router = read("apps/vendor/src/router/index.ts");
 const authStore = read("apps/vendor/src/stores/auth.ts");
+const apiClient = read("apps/vendor/src/lib/api.ts");
 const migration = read("supabase/migrations/20260519120000_vendor_mfa_foundation.sql");
 
 for (const table of [
@@ -28,6 +29,8 @@ for (const table of [
 assert(service.includes("createHmac('sha1'"), "TOTP must use HMAC-SHA1");
 assert(service.includes("aes-256-gcm"), "MFA secrets must be encrypted at rest");
 assert(service.includes("vendorMfaSessionVerified"), "MFA sessions must be token-bound");
+assert(service.includes("claims.session_id"), "MFA sessions must survive access-token refresh within one login session");
+assert(service.includes("mfa_session_save_failed"), "MFA verification must fail closed when its session cannot be persisted");
 assert(service.includes("generateRecoveryCodes"), "recovery codes must be generated");
 assert(service.includes("recoveryHash"), "recovery codes must be hashed");
 assert(service.includes("beginVendorMfaReplacement"), "MFA reset must keep the active factor until replacement verifies");
@@ -49,6 +52,9 @@ assert(/select\('id, vendor_organization_id, role, status, mfa_enrolled, passwor
 assert(routes.includes("beginVendorMfaReplacement(actor, code"), "MFA reset route must not disable before replacement setup");
 assert(authStore.includes("requiresMfaVerification"), "auth store must expose MFA verification gate");
 assert(router.includes("mode: 'verify'"), "router must force unverified MFA users into security check");
+assert(!router.includes("MFA_OPTIONAL_ROUTE_NAMES"), "protected vendor pages must not bypass the MFA route gate");
+assert(apiClient.includes("json?.error === 'mfa_required'"), "vendor API client must recover from an expired MFA grant");
+assert(apiClient.includes("redirectToMfaVerification(path)"), "vendor API client must redirect MFA-required responses to verification");
 
 for (const marker of [
   "Recovery vault",

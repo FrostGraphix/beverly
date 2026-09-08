@@ -1194,6 +1194,109 @@ assert(meterAddFields.some((field) => field.name === "meterId" && field.required
 assert(meterAddFields.some((field) => field.name === "type" && field.type === "select"));
 assert(meterAddFields.some((field) => field.name === "communicationWay" && field.type === "select"));
 assert(meterAddFields.some((field) => field.name === "stationId" && field.required));
+const meterEditFields = managementFields(meterRoute, "Edit");
+for (const name of ["meterId", "type", "isThreePhase", "communicationWay", "protocolVersion", "stationId"]) {
+  assert(meterEditFields.some((field) => field.name === name && field.required), `${name} must be required for meter updates`);
+}
+assert.deepStrictEqual(
+  managementFormSeed(meterRoute, "Edit", {
+    meterId: "M-1002",
+    meterType: "Electricity",
+    isThreePhase: false,
+    communicationWay: "LoraWan",
+    protocolVersion: "2.2",
+    lat: 0,
+    lng: 0,
+    stationId: "umaisha",
+    remark: ""
+  }),
+  {
+    meterId: "M-1002",
+    type: "0",
+    isThreePhase: "0",
+    communicationWay: "1",
+    protocolVersion: "2.2",
+    lat: 0,
+    lng: 0,
+    stationId: "UMAISHA",
+    remark: ""
+  }
+);
+const mappedMeter = mapTableCollection({ code: 0, result: { data: [{ meterId: "M-1002", type: 0, isThreePhase: 0, communicationWay: 1, stationId: "UMAISHA" }], total: 1 } }, meterRoute).rows[0];
+assert.strictEqual(mappedMeter.communicationWay, "LoraWan");
+assert.strictEqual(mappedMeter.communicationWayCode, 1);
+
+const verifiedMeterCalls = [];
+const verifiedMeterUpdate = await submitRouteAction(meterRoute, "Edit", {
+  meterId: "M-1002",
+  type: "0",
+  isThreePhase: "0",
+  communicationWay: "1",
+  protocolVersion: "2.2",
+  lat: "0",
+  lng: "0",
+  stationId: "UMAISHA",
+  remark: ""
+}, {
+  fields: meterEditFields,
+  liveWritesAllowed: true,
+  api: {
+    async postApi(path, payload, options) {
+      verifiedMeterCalls.push({ path, payload, options });
+      if (path === "/api/meter/update") return { code: 0, msg: "success" };
+      if (path === "/api/meter/read") return { code: 0, result: { data: [{ meterId: "M-1002", type: 0, isThreePhase: 0, communicationWay: 1, protocolVersion: "2.2", lat: 0, lng: 0, stationId: "UMAISHA", remark: "" }] } };
+      throw new Error(`Unexpected path ${path}`);
+    }
+  }
+});
+assert.strictEqual(verifiedMeterUpdate.verified, true);
+assert.deepStrictEqual(verifiedMeterCalls.map((call) => call.path), ["/api/meter/update", "/api/meter/read"]);
+assert.deepStrictEqual(verifiedMeterCalls[0].payload, [{ meterId: "M-1002", type: 0, isThreePhase: 0, communicationWay: 1, protocolVersion: "2.2", lat: 0, lng: 0, stationId: "UMAISHA", remark: "" }]);
+assert.strictEqual(verifiedMeterCalls[0].options.headers["X-Route-Hash"], "#/admin/meter");
+
+const meterImportCalls = [];
+await submitRouteAction(meterRoute, "Import", { authorizationPassword: "secret" }, {
+  importRows: [{
+    meterId: " M-2001 ", meterType: "Electricity", isThreePhase: "false",
+    communicationWay: "LoraWan", protocolVersion: " 2.2 ", lat: "9.08",
+    lng: "7.49", stationId: "umaisha", remark: " QA "
+  }],
+  liveWritesAllowed: true,
+  api: {
+    async postApi(path, payload, options) {
+      meterImportCalls.push({ path, payload, options });
+      return { code: 0, msg: "success" };
+    }
+  }
+});
+assert.deepStrictEqual(meterImportCalls[0].payload, [{
+  meterId: "M-2001", type: 0, isThreePhase: 0, communicationWay: 1,
+  protocolVersion: "2.2", lat: 9.08, lng: 7.49, stationId: "UMAISHA", remark: "QA"
+}]);
+await assert.rejects(
+  () => submitRouteAction(meterRoute, "Import", { authorizationPassword: "secret" }, {
+    importRows: [{ meterId: "M-2002", meterType: "Steam", isThreePhase: "0", communicationWay: "1", protocolVersion: "2.2", stationId: "UMAISHA" }],
+    liveWritesAllowed: true,
+    api: { async postApi() { throw new Error("API must not receive invalid rows"); } }
+  }),
+  /row 2: type must be 0, 1, or 2/
+);
+
+await assert.rejects(
+  () => submitRouteAction(meterRoute, "Edit", {
+    meterId: "M-1002", type: "0", isThreePhase: "0", communicationWay: "1", protocolVersion: "2.2", stationId: "UMAISHA"
+  }, {
+    fields: meterEditFields,
+    liveWritesAllowed: true,
+    api: {
+      async postApi(path) {
+        if (path === "/api/meter/update") return { code: 0, msg: "success" };
+        return { code: 0, result: { data: [{ meterId: "M-1002", type: 0, isThreePhase: 0, communicationWay: 0, protocolVersion: "2.2", stationId: "UMAISHA" }] } };
+      }
+    }
+  }),
+  /accepted but verification failed: communicationWay/
+);
 const accountAddFields = managementFields(accountRoute, "Add");
 assert(accountAddFields.some((field) => field.name === "ctRatio"));
 assert(accountAddFields.some((field) => field.name === "stationId" && field.required));

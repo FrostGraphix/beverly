@@ -5,7 +5,7 @@
  *   • initializeTransaction      — creates a Paystack init for redirect/inline
  *   • verifyTransaction          — server-side verification by reference
  *   • verifyWebhookSignature     — HMAC-SHA512 signature check
- *   • verifyIdentity             — Paystack Identity API (NIN, BVN)
+ *   • customer validation        — Paystack-supported identity checks
  *
  * Never trust gateway-supplied success in webhook without verify-API double-check.
  */
@@ -196,12 +196,6 @@ export async function createPaystackCustomer(opts: {
             metadata:   opts.metadata,
         }),
     });
-}
-
-// ── Identity API ──
-export interface NinResult { first_name: string; last_name: string; phone: string; gender: string; date_of_birth: string; }
-export async function resolveNin(nin: string): Promise<NinResult> {
-    return call<NinResult>(`/identity/verify_nin?nin=${encodeURIComponent(nin)}`, { method: 'GET' });
 }
 
 export interface BvnResult { first_name: string; last_name: string; date_of_birth: string; phone: string; }

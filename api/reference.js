@@ -37,7 +37,9 @@ const {
   upsertOemCredentials,
   listOemEndpointConfigs,
   upsertOemEndpointConfig,
-  deleteOemEndpointConfig
+  deleteOemEndpointConfig,
+  upsertMeterRecord,
+  deleteMeterRecord
 } = require("../backend/src/services/storage-adapter");
 const oemRegistry = require("../backend/src/services/oem-registry-service");
 
@@ -506,6 +508,7 @@ function routeHeaderHash(request) {
 
 function routeHashForWritePath(pathname) {
   const lowerPath = String(pathname || "").toLowerCase();
+  if (/\/api\/meter\/(?:create|update|delete|import)$/.test(lowerPath)) return "#/admin/meter";
   if (lowerPath.endsWith("/remotemetertask/createreadingtask")) return "#/remote-operation/remote-meter-reading";
   if (lowerPath.endsWith("/remotemetertask/createcontroltask")) return "#/remote-operation/remote-meter-control";
   if (lowerPath.endsWith("/remotemetertask/createtokentask")) return "#/remote-operation/remote-meter-token";
@@ -5030,7 +5033,33 @@ async function proxyLive(request, pathname, requestData) {
           invalidateMeterStatsCache();
         }
         // Meter writes change the station/status the KPI counts are built from.
-        if (/^\/api\/meter\/(create|update|delete)$/i.test(candidate)) {
+        if (/^\/api\/meter\/(create|update)$/i.test(candidate) && liveResult.ok) {
+          try {
+            const parsed = requestData?.parsedBody;
+            const items = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+            for (const item of items) {
+              if (item?.meterId) {
+                await upsertMeterRecord(item);
+              }
+            }
+          } catch (syncErr) {
+            console.warn('[meter-live-sync-warn]', syncErr instanceof Error ? syncErr.message : String(syncErr));
+          }
+          invalidateMeterStatsCache();
+          invalidateAccountTotalCache();
+        }
+        if (/^\/api\/meter\/delete$/i.test(candidate) && liveResult.ok) {
+          try {
+            const parsed = requestData?.parsedBody;
+            const items = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+            for (const item of items) {
+              if (item?.meterId) {
+                await deleteMeterRecord(item.meterId);
+              }
+            }
+          } catch (syncErr) {
+            console.warn('[meter-live-delete-warn]', syncErr instanceof Error ? syncErr.message : String(syncErr));
+          }
           invalidateMeterStatsCache();
           invalidateAccountTotalCache();
         }
@@ -5722,6 +5751,7 @@ module.exports._test = {
   refreshTargets,
   stationAnalyticsRequestScope,
   upstreamCapabilitiesFromRows,
+  routeHashForWritePath,
   authorizeRequest,
   runRefreshJob,
   resetContractCache() {

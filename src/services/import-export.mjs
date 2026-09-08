@@ -262,6 +262,19 @@ export function downloadTextFile(filename, text, mimeType) {
 }
 
 export function importTemplateFields(route, columnKey) {
+  if (route?.hash === "#/admin/meter") {
+    return [
+      { header: "Meter Id", key: "meterId" },
+      { header: "Meter Type", key: "meterType" },
+      { header: "Is Three Phase", key: "isThreePhase" },
+      { header: "Communication Way", key: "communicationWay" },
+      { header: "Protocol Version", key: "protocolVersion" },
+      { header: "Lat", key: "lat" },
+      { header: "Lng", key: "lng" },
+      { header: "Station Id", key: "stationId" },
+      { header: "Remark", key: "remark" }
+    ];
+  }
   return exportHeaders(route)
     .filter((header) => !["Status", "Success Rate"].includes(header))
     .map((header) => ({ header, key: columnKey(header) }));
@@ -278,7 +291,8 @@ const IMPORT_DUPLICATE_KEYS = {
 };
 
 const OPTIONAL_IMPORT_FIELDS = {
-  "#/management/account": new Set(["tariffId", "communicationWay", "ctRatio", "remark", "createDate", "updateDate", "stationId"])
+  "#/management/account": new Set(["tariffId", "communicationWay", "ctRatio", "remark", "createDate", "updateDate", "stationId"]),
+  "#/admin/meter": new Set(["lat", "lng", "remark"])
 };
 
 const IMPORT_NUMBER_FIELDS = {
@@ -357,6 +371,26 @@ export function validateImportRows(route, importedRows, columnKey) {
           }
         }
         errors.push({ row: index + 2, field: field.label, message: `${field.label} must be a positive number` });
+      }
+    }
+    if (routeHash === "#/admin/meter") {
+      const meterType = String(mapped.meterType || "").trim().toLowerCase();
+      const phase = String(mapped.isThreePhase || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+      const communication = String(mapped.communicationWay || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+      if (mapped.meterType && !["0", "1", "2", "electricity", "water", "gas"].includes(meterType)) {
+        errors.push({ row: index + 2, field: "Meter Type", message: "Meter Type must be Electricity, Water, Gas, 0, 1, or 2" });
+      }
+      if (mapped.isThreePhase && !["0", "1", "false", "true", "single", "singlephase", "three", "threephase"].includes(phase)) {
+        errors.push({ row: index + 2, field: "Is Three Phase", message: "Is Three Phase must be Single, Three, 0, or 1" });
+      }
+      if (mapped.communicationWay && !["0", "1", "gprs", "lorawan"].includes(communication)) {
+        errors.push({ row: index + 2, field: "Communication Way", message: "Communication Way must be GPRS, LoraWan, 0, or 1" });
+      }
+      if (mapped.lat && (!Number.isFinite(Number(mapped.lat)) || Number(mapped.lat) < -90 || Number(mapped.lat) > 90)) {
+        errors.push({ row: index + 2, field: "Lat", message: "Lat must be between -90 and 90" });
+      }
+      if (mapped.lng && (!Number.isFinite(Number(mapped.lng)) || Number(mapped.lng) < -180 || Number(mapped.lng) > 180)) {
+        errors.push({ row: index + 2, field: "Lng", message: "Lng must be between -180 and 180" });
       }
     }
     return mapped;

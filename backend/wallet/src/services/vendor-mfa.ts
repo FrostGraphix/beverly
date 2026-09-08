@@ -117,7 +117,25 @@ function hashValue(value: string): string {
     return crypto.createHash('sha256').update(`${value}:beverly-vendor-mfa`).digest('hex');
 }
 
+function sessionIdentity(accessToken: string): string {
+    try {
+        const payload = accessToken.split('.')[1];
+        if (payload) {
+            const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { session_id?: unknown };
+            const sessionId = typeof claims.session_id === 'string' ? claims.session_id.trim() : '';
+            if (sessionId) return `session:${sessionId}`;
+        }
+    } catch {
+        // Legacy or non-JWT tokens remain safely scoped to the exact access token.
+    }
+    return `token:${accessToken}`;
+}
+
 function sessionHash(accessToken: string): string {
+    return hashValue(sessionIdentity(accessToken));
+}
+
+function legacySessionHash(accessToken: string): string {
     return hashValue(accessToken);
 }
 
@@ -162,13 +180,16 @@ async function pendingFactor(vendorUserId: string) {
 }
 
 export async function vendorMfaSessionVerified(userId: string, accessToken: string): Promise<boolean> {
-    const { data } = await adminClient
+    const tokenHashes = [...new Set([sessionHash(accessToken), legacySessionHash(accessToken)])];
+    const { data, error } = await adminClient
         .from('vendor_mfa_sessions')
         .select('id')
         .eq('auth_user_id', userId)
-        .eq('token_hash', sessionHash(accessToken))
+        .in('token_hash', tokenHashes)
         .gt('expires_at', new Date().toISOString())
+        .limit(1)
         .maybeSingle();
+    if (error) throw new VendorMfaError('Could not verify this security session.', 'mfa_session_lookup_failed');
     return Boolean(data);
 }
 
@@ -255,13 +276,14 @@ export async function beginVendorMfaReplacement(actor: VendorMfaActor, code: str
 
 async function createVerifiedSession(actor: VendorMfaActor, accessToken: string): Promise<string> {
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-    await adminClient.from('vendor_mfa_sessions').upsert({
+    const { error } = await adminClient.from('vendor_mfa_sessions').upsert({
         auth_user_id: actor.userId,
         vendor_user_id: actor.actorId,
         token_hash: sessionHash(accessToken),
         expires_at: expiresAt,
         verified_at: new Date().toISOString(),
     }, { onConflict: 'token_hash' });
+    if (error) throw new VendorMfaError('Could not save this security check. Try again.', 'mfa_session_save_failed');
     return expiresAt;
 }
 
@@ -279,6 +301,10 @@ export async function verifyVendorMfaEnrollment(actor: VendorMfaActor, accessTok
         });
         throw new VendorMfaError('That authenticator code is not correct.', 'invalid_otp');
     }
+
+    // Persist the grant before activating the factor so a transient database
+    // failure leaves enrollment retryable instead of half-completed.
+    const session_expires_at = await createVerifiedSession(actor, accessToken);
 
     await adminClient.from('vendor_mfa_factors').update({
         status: 'replaced',
@@ -299,7 +325,6 @@ export async function verifyVendorMfaEnrollment(actor: VendorMfaActor, accessTok
         auth_user_id: actor.userId,
         code_hash: recoveryHash(recoveryCode),
     })));
-    const session_expires_at = await createVerifiedSession(actor, accessToken);
 
     await logSecurityEvent('mfa_enabled', {
         actorUserId: actor.userId,
