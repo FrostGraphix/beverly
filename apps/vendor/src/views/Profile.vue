@@ -104,6 +104,7 @@ const profileSections = computed<ProfileSection[]>(() => {
         {
             title: 'KYC Status',
             rows: [
+                { label: 'KYC Tier', value: `Tier ${user?.kyc_tier ?? 1}` },
                 { label: 'KYC Status', value: titleCase(user?.kyc_status), tone: statusTone(user?.kyc_status) },
                 { label: 'CAC Number', value: user?.cac_number },
                 { label: 'Tax ID (TIN)', value: user?.tin },

@@ -21,6 +21,8 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
     { key: 'wallet.vendors.manage', label: 'Create and manage vendors', group: 'Vendors', risk: 'high' },
     { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
     { key: 'wallet.meters.approve', label: 'Approve customer meter links', group: 'Customers', risk: 'high' },
+    { key: 'wallet.kyc.view', label: 'View customer and vendor KYC', group: 'Compliance', risk: 'high' },
+    { key: 'wallet.kyc.review', label: 'Approve or reject KYC tiers', group: 'Compliance', risk: 'critical' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve customer and vendor funding', group: 'Money', risk: 'critical' },
     { key: 'wallet.vendor_transfers.manage', label: 'Transfer balances between vendor wallets', group: 'Money', risk: 'critical' },
@@ -47,7 +49,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     developer: ['dev.console'],
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.meters.approve', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.customers.view', 'wallet.meters.approve', 'wallet.kyc.view', 'wallet.kyc.review', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view', 'wallet.reports.view',
     ],
     'finance-checker': [

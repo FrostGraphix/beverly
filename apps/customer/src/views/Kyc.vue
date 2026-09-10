@@ -3,12 +3,15 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import Stepper from '../components/Stepper.vue';
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
 const auth   = useAuthStore();
 const router = useRouter();
 const tier   = ref(auth.kycTier);
+const kycStatus = ref(auth.customer?.kyc_status ?? 'unverified');
+const latestReview = ref<any>(null);
+const basicInfoComplete = ref(Boolean((auth.customer as any)?.kyc_data?.basic_info?.completed_at));
 
 // ── Draft persistence ─────────────────────────────────────────────
 const DRAFT_KEY   = 'beverly.kyc.t1.draft';
@@ -44,7 +47,7 @@ function saveAndLeave() {
     void router.push('/');
 }
 
-// ── Tier 1 ────────────────────────────────────────────────────────
+// ── Tier 0 basic information ─────────────────────────────────────
 const T1_STEPS = [
     { key: 'identity', label: 'Identity' },
     { key: 'address',  label: 'Address' },
@@ -77,31 +80,15 @@ watch([fullName, dob, address, state, lga, t1Index], () => {
 });
 
 // ── Tier 2 ────────────────────────────────────────────────────────
-const nin          = ref('');
 const loading2     = ref(false);
 const error2       = ref<string | null>(null);
 const tier2Skipped = ref(false);
-const ninAvailable = ref<boolean | null>(null);
-const ninStatusMessage = ref('Checking NIN verification availability…');
-
-async function loadNinAvailability() {
-    ninAvailable.value = null;
-    ninStatusMessage.value = 'Checking NIN verification availability…';
-    try {
-        const result = await api.get<{ available: boolean; message?: string }>('/api/v1/customer/kyc/tier2/nin/status');
-        ninAvailable.value = result.available;
-        ninStatusMessage.value = result.message ?? (result.available
-            ? 'NIN verification is available.'
-            : 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.');
-    } catch {
-        ninAvailable.value = false;
-        ninStatusMessage.value = 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
-    }
-}
-
-watch(tier, (nextTier) => {
-    if (nextTier >= 1 && nextTier < 2) void loadNinAvailability();
-});
+const identityFile = ref<File | null>(null);
+const identityDocumentType = ref<'national_id' | 'voters_card' | 'passport' | 'drivers_license'>('national_id');
+const selfieFile = ref<File | null>(null);
+const addressFile = ref<File | null>(null);
+const addressDocumentType = ref<'utility_bill' | 'bank_statement'>('utility_bill');
+const uploadProgress = ref('');
 
 const nigerianStates = [
     'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno',
@@ -115,10 +102,24 @@ const dobMax = computed(() =>
     new Date(Date.now() - 18 * 365.25 * 24 * 3600 * 1000).toISOString().slice(0, 10)
 );
 
+function tierComplete(level: number): boolean {
+    return level === 0 ? basicInfoComplete.value : tier.value >= level;
+}
+
 // ── On mount: restore draft ───────────────────────────────────────
+async function loadKycState() {
+    try {
+        const state = await api.get<any>('/api/v1/customer/kyc/status');
+        tier.value = Number(state.kyc_tier ?? 0);
+        kycStatus.value = state.kyc_status ?? 'unverified';
+        latestReview.value = state.review ?? null;
+        basicInfoComplete.value = Boolean(state.kyc_data?.basic_info?.completed_at);
+    } catch { /* profile remains authoritative */ }
+}
+
 onMounted(() => {
-    if (tier.value >= 1 && tier.value < 2) void loadNinAvailability();
-    if (tier.value >= 1) return; // Tier 1 already done — no draft needed
+    void loadKycState();
+    if (basicInfoComplete.value) return;
     try {
         const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) return;
@@ -165,12 +166,12 @@ function prev() {
     t1Index.value = Math.max(0, t1Index.value - 1);
 }
 
-async function submitTier1() {
+async function submitBasicInfo() {
     if (!validateT1Step(0) || !validateT1Step(1)) return;
     loading1.value = true;
     error1.value = null;
     try {
-        const r = await api.post<{ kyc_tier: number }>('/api/v1/customer/kyc/tier1', {
+        const r = await api.post<{ kyc_tier: number; kyc_status: string; basic_info: { completedAt: string } }>('/api/v1/customer/kyc/basic-info', {
             full_name:    fullName.value.trim(),
             date_of_birth: dob.value,
             address:      address.value.trim(),
@@ -178,7 +179,12 @@ async function submitTier1() {
             lga:          lga.value.trim(),
         });
         tier.value = r.kyc_tier;
-        if (auth.customer) auth.customer.kyc_tier = r.kyc_tier;
+        kycStatus.value = r.kyc_status as 'unverified' | 'pending' | 'verified' | 'rejected';
+        basicInfoComplete.value = true;
+        if (auth.customer) {
+            auth.customer.kyc_tier = r.kyc_tier;
+            auth.customer.kyc_status = r.kyc_status as any;
+        }
         clearDraft();
         t1Index.value = 0;
     } catch (e: any) {
@@ -186,29 +192,50 @@ async function submitTier1() {
     } finally { loading1.value = false; }
 }
 
-async function submitTier2() {
-    if (ninAvailable.value !== true) {
-        error2.value = 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
-        return;
-    }
-    const clean = nin.value.replace(/\s/g, '');
-    if (clean.length !== 11) {
-        error2.value = 'NIN must be exactly 11 digits.';
+async function uploadKycFile(file: File, documentType: 'national_id' | 'voters_card' | 'passport' | 'drivers_license' | 'selfie' | 'utility_bill' | 'bank_statement', requestedTier: 1 | 2): Promise<string> {
+    const created = await api.post<{ documentId: string; uploadUrl: string }>('/api/v1/customer/kyc/documents/upload-url', {
+        document_type: documentType,
+        requested_tier: requestedTier,
+        mime_type: file.type,
+        size_bytes: file.size,
+    });
+    const uploaded = await fetch(created.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+    if (!uploaded.ok) throw new Error('Secure document upload failed.');
+    await api.post(`/api/v1/customer/kyc/documents/${created.documentId}/activate`);
+    return created.documentId;
+}
+
+async function submitEvidence() {
+    const requestedTier = (tier.value + 1) as 1 | 2;
+    if (!identityFile.value || !selfieFile.value || (requestedTier === 2 && !addressFile.value)) {
+        error2.value = requestedTier === 2
+            ? 'Identity, selfie, and address evidence are required.'
+            : 'Identity document and selfie are required.';
         return;
     }
     loading2.value = true;
     error2.value = null;
     try {
-        const r = await api.post<{ kyc_tier: number }>('/api/v1/customer/kyc/tier2/nin', {
-            nin: clean,
-        });
-        tier.value = r.kyc_tier;
-        if (auth.customer) auth.customer.kyc_tier = r.kyc_tier;
-    } catch (e: unknown) {
-        error2.value = e instanceof ApiError && e.code === 'nin_service_unavailable'
-            ? 'NIN verification is temporarily unavailable. Your Tier 1 access remains active.'
-            : 'NIN verification could not be completed. Check your number and try again.';
-    } finally { loading2.value = false; }
+        uploadProgress.value = 'Uploading identity document…';
+        const identityId = await uploadKycFile(identityFile.value, identityDocumentType.value, requestedTier);
+        uploadProgress.value = 'Uploading selfie…';
+        const selfieId = await uploadKycFile(selfieFile.value, 'selfie', requestedTier);
+        const documentIds = [identityId, selfieId];
+        if (requestedTier === 2 && addressFile.value) {
+            uploadProgress.value = 'Uploading address evidence…';
+            documentIds.push(await uploadKycFile(addressFile.value, addressDocumentType.value, requestedTier));
+        }
+        uploadProgress.value = 'Submitting review…';
+        const result = await api.post<{ review: any }>(`/api/v1/customer/kyc/tier${requestedTier}/submit`, { document_ids: documentIds });
+        latestReview.value = result.review;
+        kycStatus.value = 'pending';
+        await auth.refreshProfile();
+    } catch (e: any) {
+        error2.value = e?.message ?? 'KYC submission failed.';
+    } finally {
+        loading2.value = false;
+        uploadProgress.value = '';
+    }
 }
 
 function skipTier2() {
@@ -227,18 +254,18 @@ function skipTier2() {
 
     <!-- Tier progress indicators -->
     <div class="tier-row">
-      <div v-for="n in [0, 1, 2]" :key="n" :class="['bw-kyc-tier', tier >= n ? `tier-active` : 'tier-pending']">
-        <span class="tier-check" v-if="tier >= n">✓</span>
+      <div v-for="n in [0, 1, 2]" :key="n" :class="['bw-kyc-tier', tierComplete(n) ? `tier-active` : 'tier-pending']">
+        <span class="tier-check" v-if="tierComplete(n)">✓</span>
         Tier {{ n }}
         <span class="tier-desc">
-          {{ n === 0 ? 'Registered' : n === 1 ? '₦50k/day' : '₦200k/day' }}
+          {{ n === 0 ? 'Basic' : n === 1 ? 'Identity' : 'Enhanced' }}
         </span>
       </div>
     </div>
 
     <!-- ─ Draft restored banner ───────────────────────────────────── -->
     <transition name="fade">
-      <div v-if="draftExists && tier < 1" class="draft-banner">
+      <div v-if="draftExists && !basicInfoComplete" class="draft-banner">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span>Your previous progress has been restored — continue from where you left off.</span>
         <button class="draft-clear" @click="clearDraft(); fullName=''; dob=''; address=''; state=''; lga=''; t1Index=0">
@@ -254,12 +281,12 @@ function skipTier2() {
       </div>
     </transition>
 
-    <!-- ─ TIER 1: multi-step ──────────────────────────────────────── -->
-    <div v-if="tier < 1" class="bw-card">
+    <!-- ─ TIER 0: basic information ──────────────────────────────── -->
+    <div v-if="!basicInfoComplete" class="bw-card">
       <div class="card-head">
         <div>
-          <p class="card-title">Tier 1 — Basic details</p>
-          <p class="card-sub">Required to start buying tokens (up to ₦50,000/day)</p>
+          <p class="card-title">Tier 0 — Basic details</p>
+          <p class="card-sub">Save your profile. Approval is not required.</p>
         </div>
       </div>
 
@@ -364,19 +391,32 @@ function skipTier2() {
         </div>
 
         <p class="legal-note">
-          By submitting you confirm this information is accurate. Providing false KYC information
-          may result in account suspension and is a crime under NDPR.
+          By submitting, you confirm this information is accurate. False information may cause
+          account restrictions or regulatory review.
         </p>
 
         <div v-if="error1" class="bw-alert danger">{{ error1 }}</div>
 
         <div class="nav-row">
           <button type="button" class="bw-btn" :disabled="loading1" @click="prev">← Back</button>
-          <button class="bw-btn primary" style="flex:2" :disabled="loading1" @click="submitTier1">
-            {{ loading1 ? 'Verifying…' : 'Submit Tier 1' }}
+          <button class="bw-btn primary" style="flex:2" :disabled="loading1" @click="submitBasicInfo">
+            {{ loading1 ? 'Saving…' : 'Save basic information' }}
           </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="kycStatus === 'pending'" class="bw-card pending-card" role="status">
+      <span class="pending-dot"></span>
+      <div>
+        <p class="card-title">Review in progress</p>
+        <p class="card-sub">Your Tier {{ latestReview?.requested_tier ?? tier + 1 }} request is awaiting Beverly approval.</p>
+      </div>
+      <button class="bw-btn" type="button" @click="loadKycState">Refresh status</button>
+    </div>
+
+    <div v-if="kycStatus === 'rejected' && latestReview?.reviewer_note" class="bw-alert danger" role="alert">
+      Changes requested: {{ latestReview.reviewer_note }}
     </div>
 
     <!-- ─ TIER 1 DONE → Tier 2 prompt ────────────────────────────── -->
@@ -387,59 +427,69 @@ function skipTier2() {
       </div>
     </div>
 
-    <!-- ─ TIER 2: NIN ─────────────────────────────────────────────── -->
-    <div v-if="tier >= 1 && tier < 2 && !tier2Skipped" class="bw-card">
+    <!-- ─ TIER 1+: manual evidence review ─────────────────────────── -->
+    <div v-if="basicInfoComplete && tier < 2 && !tier2Skipped && kycStatus !== 'pending'" class="bw-card">
       <div class="card-head">
         <div>
-          <p class="card-title">Tier 2 — NIN verification</p>
-          <p class="card-sub">Unlock up to ₦200,000/day after secure NIN verification.</p>
+          <p class="card-title">Tier {{ tier + 1 }} — {{ tier === 0 ? 'NIN identity review' : 'Enhanced identity review' }}</p>
+          <p class="card-sub">Every tier upgrade requires Beverly approval.</p>
         </div>
-        <span class="optional-badge">Optional</span>
+        <span v-if="tier >= 1" class="optional-badge">Optional</span>
       </div>
 
-      <div
-        v-if="ninAvailable !== true"
-        class="bw-alert"
-        :class="ninAvailable === null ? 'info' : 'warning'"
-        role="status"
-        aria-live="polite"
-      >
-        {{ ninStatusMessage }}
-        <button v-if="ninAvailable === false" type="button" class="later-link status-retry" @click="loadNinAvailability">
-          Check again
-        </button>
-      </div>
-
-      <form v-else class="step-pane" @submit.prevent="submitTier2">
-        <div>
-          <label class="bw-label" for="nin">National ID number (NIN)</label>
+      <form class="step-pane" @submit.prevent="submitEvidence">
+        <div class="upload-grid">
+          <label class="upload-field">
+            <span class="bw-label">Government identity</span>
+            <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type">
+              <option value="national_id">NIN slip</option>
+              <option value="voters_card">Voter card</option>
+              <option value="passport">Passport</option>
+              <option value="drivers_license">Driver's licence</option>
+            </select>
           <input
-            id="nin"
-            class="bw-input bw-mono"
-            v-model="nin"
-            inputmode="numeric"
-            autocomplete="off"
-            maxlength="11"
-            placeholder="00000000000"
-            aria-describedby="nin-help nin-error"
-            style="letter-spacing: 0.14em; font-size: var(--t-lg)"
+              type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+              @change="identityFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
           />
-          <p id="nin-help" class="field-hint">Find your 11-digit NIN on your slip, NIN card, or dial <strong>*346#</strong>.</p>
+            <small>{{ identityFile?.name || 'NIN slip, passport, licence, or voter card.' }}</small>
+          </label>
+          <label class="upload-field">
+            <span class="bw-label">Current selfie</span>
+            <input
+              type="file" accept="image/jpeg,image/png,image/webp"
+              @change="selfieFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
+            />
+            <small>{{ selfieFile?.name || 'Clear face photo. No filters.' }}</small>
+          </label>
+          <label v-if="tier === 1" class="upload-field">
+            <span class="bw-label">Address evidence</span>
+            <select v-model="addressDocumentType" class="bw-input">
+              <option value="utility_bill">Utility bill</option>
+              <option value="bank_statement">Bank statement</option>
+            </select>
+            <input
+              type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+              @change="addressFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
+            />
+            <small>{{ addressFile?.name || 'Recent proof matching your address.' }}</small>
+          </label>
         </div>
 
-        <div v-if="error2" id="nin-error" class="bw-alert danger" role="alert">{{ error2 }}</div>
+        <p class="field-hint">Files are private. Maximum 10 MB each.</p>
+        <div v-if="error2" class="bw-alert danger" role="alert">{{ error2 }}</div>
+        <div v-if="uploadProgress" class="bw-alert info" role="status" aria-live="polite">{{ uploadProgress }}</div>
 
         <button
           class="bw-btn primary lg full"
           type="submit"
-          :disabled="loading2 || nin.replace(/\s/g, '').length !== 11"
+          :disabled="loading2 || !identityFile || !selfieFile || (tier === 1 && !addressFile)"
         >
-          {{ loading2 ? 'Verifying…' : 'Verify NIN & unlock Tier 2' }}
+          {{ loading2 ? 'Submitting…' : `Submit Tier ${tier + 1} review` }}
         </button>
       </form>
 
       <!-- Skip / finish later -->
-      <div class="tier2-skip">
+      <div v-if="tier >= 1" class="tier2-skip">
         <button type="button" class="later-link" @click="skipTier2">
           Not now — I'll verify later
         </button>
@@ -634,6 +684,13 @@ function skipTier2() {
   color: var(--brand);
   margin-bottom: var(--s-3);
 }
+.pending-card { display:flex; align-items:center; gap:var(--s-3); margin-bottom:var(--s-3); border-color:oklch(from var(--warn) l c h / .35); }
+.pending-card > div { flex:1; }
+.pending-dot { width:10px; height:10px; flex:0 0 auto; border-radius:50%; background:var(--warn); box-shadow:0 0 0 5px oklch(from var(--warn) l c h / .12); }
+.upload-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--s-3); }
+.upload-field { display:flex; flex-direction:column; gap:8px; padding:var(--s-3); border:1px dashed var(--border); border-radius:var(--r-md); background:var(--surface-2); cursor:pointer; }
+.upload-field input { width:100%; color:var(--text-muted); }
+.upload-field small { color:var(--text-muted); overflow-wrap:anywhere; }
 
 /* Tier 2 skip section */
 .tier2-skip {
@@ -682,6 +739,8 @@ function skipTier2() {
 
 @media (max-width: 380px) {
   .row { grid-template-columns: 1fr; }
+  .upload-grid { grid-template-columns: 1fr; }
+  .pending-card { align-items:flex-start; flex-wrap:wrap; }
   .tier-row { flex-wrap: wrap; }
 }
 </style>

@@ -374,7 +374,15 @@ export async function setVendorStatus(
 
     const { error } = await adminClient
         .from('vendor_organizations')
-        .update({ status: newStatus, notes: reason ?? null })
+        .update({ status: newStatus,
+            notes: reason ?? null,
+            ...(newStatus === 'approved' ? {
+                kyc_tier: 1,
+                kyc_status: 'verified',
+                approved_at: new Date().toISOString(),
+                approved_by: staffId,
+            } : {}),
+        })
         .eq('id', vendorOrganizationId);
     if (error) throw new OnboardingError(error.message, 'status_update_failed');
 

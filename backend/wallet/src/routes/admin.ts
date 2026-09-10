@@ -47,6 +47,7 @@ import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
+import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -475,6 +476,10 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /customers/:id/wallet': 'wallet.customers.view',
     'GET /customers/:id/purchases': 'wallet.vending.monitor',
     'GET /customers/:id/funding': 'wallet.funding.view',
+    'GET /kyc/reviews': 'wallet.kyc.view',
+    'GET /kyc/documents/:id/url': 'wallet.kyc.view',
+    'POST /kyc/reviews/:id/approve': 'wallet.kyc.review',
+    'POST /kyc/reviews/:id/reject': 'wallet.kyc.review',
     'DELETE /customers/:id': 'wallet.funding.approve',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
     'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
@@ -711,6 +716,29 @@ async function enforceResourceStation(req: FastifyRequest, reply: FastifyReply):
     const routeUrl = req.routeOptions?.url ?? '';
     const id = (req.params as { id?: string })?.id;
     if (!id) return true;
+
+    if (routeUrl.startsWith('/kyc/reviews/:id')) {
+        const [{ data: review }, owners] = await Promise.all([
+            adminClient.from('kyc_review_requests').select('customer_id, vendor_organization_id, subject_type').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        const allowed = review?.subject_type === 'customer'
+            ? owners.customers.has(review.customer_id)
+            : owners.vendors.has(review?.vendor_organization_id);
+        if (allowed) return true;
+        reply.code(404).send({ error: 'not_found', message: 'KYC review not found for your assigned station.' });
+        return false;
+    }
+
+    if (routeUrl.startsWith('/kyc/documents/:id')) {
+        const [{ data: document }, owners] = await Promise.all([
+            adminClient.from('kyc_documents').select('customer_id, vendor_organization_id').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        if (document && (owners.customers.has(document.customer_id) || owners.vendors.has(document.vendor_organization_id))) return true;
+        reply.code(404).send({ error: 'not_found', message: 'KYC document not found for your assigned station.' });
+        return false;
+    }
 
     if (routeUrl.startsWith('/wallets/:id')) {
         const [{ data: wallet }, owners] = await Promise.all([
@@ -2459,6 +2487,72 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ════════════════════════════════════════════════════════════
     // CUSTOMERS — admin oversight of customer accounts + wallets
     // ════════════════════════════════════════════════════════════
+
+    fastify.get('/kyc/reviews', async (req, reply) => {
+        const query = z.object({
+            status: z.enum(['pending', 'approved', 'rejected', 'withdrawn']).optional(),
+            subjectType: z.enum(['customer', 'vendor']).optional(),
+            limit: z.coerce.number().int().min(1).max(100).optional(),
+            cursor: z.string().datetime().optional(),
+        }).safeParse(req.query);
+        if (!query.success) return reply.code(400).send({ error: 'invalid_query', message: query.error.message });
+        try {
+            const assignedStations = staffStations(req);
+            if (assignedStations === null) return listKycReviews(query.data);
+            if (!assignedStations.length) return { reviews: [], nextCursor: null };
+            const owners = await stationOwnerIds(assignedStations);
+            return listKycReviews({
+                ...query.data,
+                customerIds: [...owners.customers],
+                vendorIds: [...owners.vendors],
+            });
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.get('/kyc/documents/:id/url', async (req, reply) => {
+        const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+        if (!params.success) return reply.code(400).send({ error: 'invalid_document_id' });
+        try {
+            const url = await getKycReviewDocumentUrl(params.data.id);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'kyc.document.viewed',
+                targetType: 'kyc_document',
+                targetId: params.data.id,
+                metadata: { signedUrlExpiresInSeconds: 300 },
+            });
+            return { url, expiresIn: 300 };
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    const decideReview = async (req: FastifyRequest, reply: FastifyReply, decision: 'approved' | 'rejected') => {
+        const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+        const body = z.object({ note: z.string().trim().min(4).max(1000) }).safeParse(req.body);
+        if (!params.success || !body.success) return reply.code(400).send({ error: 'invalid_review', message: 'A four-character review note is required.' });
+        try {
+            const review = await decideKycReview({
+                requestId: params.data.id,
+                reviewerId: req.actor!.userId,
+                decision,
+                note: body.data.note,
+            });
+            return { ok: true, review };
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    };
+
+    fastify.post('/kyc/reviews/:id/approve', async (req, reply) => decideReview(req, reply, 'approved'));
+    fastify.post('/kyc/reviews/:id/reject', async (req, reply) => decideReview(req, reply, 'rejected'));
 
     // List customers with wallet balance + filters.
     fastify.get('/customers', async (req, reply) => {
