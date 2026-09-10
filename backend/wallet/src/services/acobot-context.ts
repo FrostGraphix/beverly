@@ -238,7 +238,7 @@ export async function buildAcobotContext(
                         `- Email: ${customerData.email ?? 'N/A'}\n` +
                         `- Phone: ${customerData.phone ?? 'N/A'}\n` +
                         `- Account Status: ${String(customerData.status).toUpperCase()}\n` +
-                        `- KYC Tier: Tier ${tierLevel} (${tierLevel === 0 ? 'Unverified' : tierLevel === 1 ? 'BVN Verified' : 'NIN & ID Verified'})\n` +
+                        `- KYC Tier: Tier ${tierLevel} (${tierLevel === 0 ? 'Basic profile' : tierLevel === 1 ? 'Identity approved' : 'Enhanced identity approved'})\n` +
                         `- KYC Verification Status: ${String(customerData.kyc_status ?? 'unverified').toUpperCase()}\n` +
                         `- Vending Limit: ${limitByTier[tierLevel] ?? limitByTier[0]}\n` +
                         `- Wallet Balance: ₦${balanceMajor}\n` +

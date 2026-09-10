@@ -197,11 +197,3 @@ export async function createPaystackCustomer(opts: {
         }),
     });
 }
-
-export interface BvnResult { first_name: string; last_name: string; date_of_birth: string; phone: string; }
-export async function resolveBvn(bvn: string): Promise<BvnResult> {
-    return call<BvnResult>(`/identity/bvn/match`, {
-        method: 'POST',
-        body: JSON.stringify({ bvn }),
-    });
-}

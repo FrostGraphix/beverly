@@ -6,7 +6,14 @@ type MalwareScanResult =
 
 export async function runMalwareScan(fileBytes: Buffer, fileName: string): Promise<MalwareScanResult> {
     const cmd = process.env.PROFILE_PICTURE_SCAN_COMMAND?.trim();
-    if (!cmd) return { ok: true, mode: 'disabled', output: undefined };
+    if (!cmd) {
+        const production = process.env.NODE_ENV?.trim().toLowerCase() === 'production';
+        return {
+            ok: !production,
+            mode: 'disabled',
+            output: production ? 'Malware scanner is not configured.' : undefined,
+        };
+    }
     return new Promise<{ ok: boolean; mode: 'command'; output?: string }>((resolve) => {
         const child = execFile(cmd, [fileName], { timeout: 8000 }, (error, stdout, stderr) => {
             if (error) return resolve({ ok: false, mode: 'command', output: `${stdout}\n${stderr}`.trim() });

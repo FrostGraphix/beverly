@@ -67,6 +67,9 @@ function checkProductionConfig(env = process.env) {
   if (production && ["ALLOW_LIVE_WRITES", "APPROVED_LIVE_WRITES", "VITE_ALLOW_LIVE_WRITES"].some((key) => key in env)) {
     failures.push("live-write environment flags are forbidden; use runtime control");
   }
+  if (production && !String(env.PROFILE_PICTURE_SCAN_COMMAND || "").trim()) {
+    failures.push("PROFILE_PICTURE_SCAN_COMMAND must be configured in production");
+  }
   if (!env.LIVE_API_BEARER_TOKEN && !env.UPSTREAM_BEARER_TOKEN) {
     warnings.push("live bearer token is missing");
   }

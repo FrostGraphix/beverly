@@ -8,7 +8,8 @@ const secureProduction = {
   APP_ENCRYPTION_KEY: "a-separate-production-encryption-key-32chars",
   WEBHOOK_SECRET: "a-separate-webhook-secret-with-32-characters",
   CORS_ORIGINS: "https://beverly.acoblighting.com",
-  LIVE_API_BEARER_TOKEN: "token"
+  LIVE_API_BEARER_TOKEN: "token",
+  PROFILE_PICTURE_SCAN_COMMAND: "malware-scanner"
 };
 
 function assert(condition, message) {
@@ -22,6 +23,7 @@ assert(!checkProductionConfig({ ...secureProduction, WEBHOOK_SECRET: "short" }).
 assert(!checkProductionConfig({ ...secureProduction, CORS_ORIGINS: "http://localhost:5173" }).ok, "localhost cors should fail");
 assert(!checkProductionConfig({ ...secureProduction, ALLOW_LIVE_WRITES: "true" }).ok, "legacy write flags should fail");
 assert(!checkProductionConfig({ ...secureProduction, VITE_ALLOW_LIVE_WRITES: "true" }).ok, "client write flags should fail");
+assert(!checkProductionConfig({ ...secureProduction, PROFILE_PICTURE_SCAN_COMMAND: "" }).ok, "production malware scanner should be required");
 
 console.log(JSON.stringify({
   status: "security config passed"

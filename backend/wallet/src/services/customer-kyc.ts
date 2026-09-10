@@ -1,9 +1,8 @@
 /**
  * Customer KYC service.
  *
- * Tier 0  → unverified (phone OTP only)
- * Tier 1  → basic profile: full_name + date_of_birth + address submitted
- * Tier 2  → NIN verified through an approved identity provider
+ * Tier 0  → registered with basic profile information
+ * Tier 1+ → evidence-backed verification approved by authorised staff
  *
  * Tier caps (enforced in routes via requireKycTier):
  *   Tier 0: read-only, no purchases
@@ -11,11 +10,9 @@
  *   Tier 2: purchases up to ₦200,000/day
  */
 import { adminClient } from '../db/supabase.js';
-import { logAction } from './audit.js';
-import { notifyKycUpdate } from './notifications.js';
 
 export const NIN_VERIFICATION_UNAVAILABLE_MESSAGE =
-    'NIN verification is temporarily unavailable. Your Tier 1 access remains active.';
+    'Automatic NIN verification is unavailable. Use the secure manual identity review.';
 
 export function getNinVerificationAvailability() {
     return {
@@ -32,7 +29,7 @@ export class KycError extends Error {
     }
 }
 
-export interface KycTier1Input {
+export interface KycBasicInfoInput {
     customerId: string;
     actorUserId: string;
     full_name: string;
@@ -42,7 +39,7 @@ export interface KycTier1Input {
     lga: string;
 }
 
-export async function submitKycTier1(input: KycTier1Input): Promise<void> {
+export async function saveCustomerBasicInfo(input: KycBasicInfoInput): Promise<{ completedAt: string }> {
     const dob = new Date(input.date_of_birth);
     if (isNaN(dob.getTime())) throw new KycError('Invalid date of birth.', 'invalid_dob');
     const ageYears = (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
@@ -51,70 +48,21 @@ export async function submitKycTier1(input: KycTier1Input): Promise<void> {
         throw new KycError('Full name must include first and last name.', 'invalid_name');
     }
 
-    const { data: cu } = await adminClient.from('customers').select('kyc_tier').eq('id', input.customerId).single();
-    if (!cu) throw new KycError('Customer not found.', 'not_found');
-
-    const tier1Payload: Record<string, unknown> = {
-        full_name: input.full_name.trim(),
-        kyc_tier: Math.max((cu as { kyc_tier: number }).kyc_tier, 1),
-        kyc_status: 'verified',
-    };
-
-    // kyc_data column added in migration 20260520110000 — write it only when the
-    // column exists in the schema cache (avoids 422 on un-migrated environments).
-    const kycDataValue = {
-        tier1: {
+    const completedAt = new Date().toISOString();
+    const { data, error } = await adminClient.rpc('save_customer_kyc_basic_info', {
+        p_customer_id: input.customerId,
+        p_actor_user_id: input.actorUserId,
+        p_basic_info: {
+            full_name: input.full_name.trim(),
             date_of_birth: input.date_of_birth,
-            address: input.address,
-            state: input.state,
-            lga: input.lga,
-            verified_at: new Date().toISOString(),
-        },
-    };
-    let { error } = await adminClient.from('customers').update(tier1Payload).eq('id', input.customerId);
-    if (error?.message?.includes('kyc_data')) {
-        // Column missing — skip for now; supplementary data is already in the audit log.
-    } else if (!error) {
-        // Try to write the JSONB field if the column is present.
-        const res2 = await adminClient.from('customers')
-            .update({ kyc_data: kycDataValue } as any)
-            .eq('id', input.customerId);
-        if (res2.error && !res2.error.message.includes('kyc_data')) {
-            error = res2.error;
-        }
-    }
-    if (error && !error.message.includes('kyc_data')) throw new KycError(error.message, 'update_failed');
-
-    // Raise wallet daily cap to ₦50k
-    const { data: wallet } = await adminClient
-        .from('wallets')
-        .select('id')
-        .eq('owner_type', 'customer')
-        .eq('owner_id', input.customerId)
-        .maybeSingle();
-    if (wallet) {
-        await adminClient.from('wallets').update({
-            daily_debit_cap_minor: 5_000_000,    // ₦50,000
-            monthly_debit_cap_minor: 100_000_000, // ₦1,000,000
-        }).eq('id', (wallet as { id: string }).id);
-    }
-
-    await logAction({
-        actorUserId: input.actorUserId,
-        actorType: 'customer',
-        action: 'kyc.tier1.submit',
-        targetType: 'customer',
-        targetId: input.customerId,
-        after: {
-            kyc_tier: 1,
-            date_of_birth: input.date_of_birth,
-            address: input.address,
-            state: input.state,
-            lga: input.lga,
+            address: input.address.trim(),
+            state: input.state.trim(),
+            lga: input.lga.trim(),
+            completed_at: completedAt,
         },
     });
-
-    notifyKycUpdate(input.customerId, { tier: 1 }).catch(() => undefined);
+    if (error || !data) throw new KycError(error?.message ?? 'Basic information could not be saved.', 'basic_info_save_failed');
+    return { completedAt: String((data as any).completed_at ?? completedAt) };
 }
 
 export interface KycTier2Input {

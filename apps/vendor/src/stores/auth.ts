@@ -26,6 +26,7 @@ export interface VendorUserProfile {
     primary_phone?: string | null;
     contact_email?: string | null;
     kyc_status?: string | null;
+    kyc_tier?: number;
     cac_number?: string | null;
     tin?: string | null;
     kyc_approved_date?: string | null;

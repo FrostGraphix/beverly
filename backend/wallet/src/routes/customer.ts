@@ -15,7 +15,8 @@
  *   POST   /auth/email/verify/send    — (re)send email verification code
  *   POST   /auth/email/verify/confirm — confirm email verification code
  *
- *   POST   /kyc/tier1
+ *   POST   /kyc/basic-info
+ *   POST   /kyc/tier1/submit
  *   POST   /kyc/tier2/nin
  *
  *   GET    /meters
@@ -47,8 +48,9 @@ import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
 } from '../services/customer-auth.js';
 import {
-    getNinVerificationAvailability, submitKycTier1, submitKycTier2Nin, KycError,
+    getNinVerificationAvailability, saveCustomerBasicInfo, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
+import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
     linkMeter, unlinkMeter, listCustomerMeters, listCustomerMeterLinkHistory, listCustomerPurchases, sendTokenSmsToCustomer,
@@ -534,7 +536,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── KYC ───────────────────────────────────────────────────────────────────
 
-    fastify.post('/kyc/tier1', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+    const saveBasicInfo = async (req: any, reply: any) => {
         const { full_name, date_of_birth, address, state, lga } = req.body as {
             full_name: string; date_of_birth: string; address: string; state: string; lga: string;
         };
@@ -542,21 +544,107 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'full_name, date_of_birth, address, state and lga are required.' });
         }
         try {
-            await submitKycTier1({
+            const basicInfo = await saveCustomerBasicInfo({
                 customerId: req.actor!.customerId!,
                 actorUserId: req.actor!.userId,
                 full_name, date_of_birth, address, state, lga,
             });
             const { data } = await adminClient.from('customers').select('kyc_tier, kyc_status').eq('id', req.actor!.customerId!).single();
-            return { ok: true, kyc_tier: (data as any)?.kyc_tier, kyc_status: (data as any)?.kyc_status };
+            return { ok: true, basic_info: basicInfo, kyc_tier: (data as any)?.kyc_tier, kyc_status: (data as any)?.kyc_status };
         } catch (e: any) {
             if (e instanceof KycError) return reply.code(422).send({ error: e.code, message: e.message });
             throw e;
         }
-    });
+    };
+
+    fastify.post('/kyc/basic-info', { preHandler: fastify.requireCustomer() }, saveBasicInfo);
+    // Compatibility route. Tier advancement never occurs here.
+    fastify.post('/kyc/tier1', { preHandler: fastify.requireCustomer() }, saveBasicInfo);
 
     fastify.get('/kyc/tier2/nin/status', { preHandler: fastify.requireCustomer() }, async () => {
         return getNinVerificationAvailability();
+    });
+
+    fastify.get('/kyc/status', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        try {
+            return await currentKycState('customer', req.actor!.customerId!);
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const body = z.object({
+            requested_tier: z.union([z.literal(1), z.literal(2)]),
+            document_type: z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie']),
+            mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+            size_bytes: z.number().int().min(1).max(10 * 1024 * 1024),
+            expires_at: z.string().date().nullable().optional(),
+        }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_document', message: body.error.message });
+        try {
+            const { data: customer } = await adminClient.from('customers').select('kyc_tier, kyc_status, kyc_data').eq('id', req.actor!.customerId!).single();
+            if (!customer) return reply.code(404).send({ error: 'customer_not_found' });
+            if ((customer as any).kyc_status === 'pending') return reply.code(409).send({ error: 'kyc_review_pending', message: 'A KYC review is already pending.' });
+            if (body.data.requested_tier !== Number((customer as any).kyc_tier ?? 0) + 1) {
+                return reply.code(409).send({ error: 'tier_not_sequential', message: 'Complete KYC tiers in order.' });
+            }
+            if (body.data.requested_tier === 1 && !(customer as any).kyc_data?.basic_info?.completed_at) {
+                return reply.code(409).send({ error: 'basic_info_required', message: 'Save basic information before requesting Tier 1.' });
+            }
+            return await createKycUpload({
+                subjectType: 'customer', subjectId: req.actor!.customerId!, requestedTier: body.data.requested_tier,
+                documentType: body.data.document_type, mimeType: body.data.mime_type,
+                sizeBytes: body.data.size_bytes, expiresAt: body.data.expires_at,
+            });
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/documents/:id/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+        if (!params.success) return reply.code(400).send({ error: 'invalid_document_id' });
+        try {
+            return await activateKycUpload({ subjectType: 'customer', subjectId: req.actor!.customerId!, documentId: params.data.id });
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
+        try {
+            const review = await submitKycReview({
+                subjectType: 'customer', subjectId: req.actor!.customerId!, requestedTier: 1,
+                submittedBy: req.actor!.userId, submission: { method: 'manual_document_review', identity_basis: 'nin_or_government_id' },
+                documentIds: body.data.document_ids,
+            });
+            return { ok: true, review };
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/tier2/submit', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(3).max(6) }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
+        try {
+            const review = await submitKycReview({
+                subjectType: 'customer', subjectId: req.actor!.customerId!, requestedTier: 2,
+                submittedBy: req.actor!.userId, submission: { method: 'manual_document_review' },
+                documentIds: body.data.document_ids,
+            });
+            return { ok: true, review };
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
     });
 
     fastify.post('/kyc/tier2/nin', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {

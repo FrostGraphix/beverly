@@ -265,10 +265,14 @@ onBeforeUnmount(() => {
           Disputes
         </RouterLink>
 
-        <div :class="['bw-nav-section', { active: isSectionActive(['/profile', '/security', '/vend-access']) }]">Account</div>
+        <div :class="['bw-nav-section', { active: isSectionActive(['/profile', '/kyc', '/security', '/vend-access']) }]">Account</div>
         <RouterLink to="/profile" :class="['bw-nav-item', { active: isItemActive('/profile') }]" :aria-current="isItemActive('/profile') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg>
           Profile
+        </RouterLink>
+        <RouterLink to="/kyc" :class="['bw-nav-item', { active: isItemActive('/kyc') }]" :aria-current="isItemActive('/kyc') ? 'page' : undefined" @click="closeDrawer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></svg>
+          KYC verification
         </RouterLink>
         <RouterLink to="/security" :class="['bw-nav-item', { active: isItemActive('/security') }]" :aria-current="isItemActive('/security') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>

@@ -436,6 +436,8 @@ onMounted(loadDetail);
             <div class="head-badges">
               <span class="bw-badge info bw-mono">Station ID · {{ detail.vendor.station_id || 'Unassigned' }}</span>
               <span :class="['bw-badge', vStatusBadge(detail.vendor.status)]">{{ detail.vendor.status }}</span>
+              <span class="bw-badge info">KYC Tier {{ detail.vendor.kyc_tier ?? 1 }}</span>
+              <span :class="['bw-badge', detail.vendor.kyc_status === 'verified' ? 'success' : detail.vendor.kyc_status === 'rejected' ? 'danger' : 'warn']">{{ detail.vendor.kyc_status ?? 'verified' }}</span>
               <span :class="['bw-badge', riskBadge(detail.vendor.risk_level)]">{{ detail.vendor.risk_level }} risk</span>
             </div>
           </div>
