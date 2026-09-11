@@ -520,29 +520,29 @@ async function archiveYearlyFromMonthly({ stationId, year, reportType, oem }) {
   };
 }
 
-async function archivePartition({ stationId, periodStart, reportType = REPORT_TYPE, granularity = GRANULARITY }) {
-  if (granularity === "yearly") {
-    const oem = await resolveOemForStation(stationId);
-    return archiveYearlyFromMonthly({
-      stationId,
-      year: Number(String(periodStart).slice(0, 4)),
-      reportType,
-      oem
-    });
-  }
-
-  const { from, to } = periodBounds(granularity, periodStart);
+async function archiveProvidedRows({ stationId, periodStart, rows, reportType = REPORT_TYPE, oem = null }) {
+  if (!SOURCES[reportType]) throw new Error("Unsupported archive report type");
+  const { from, to } = periodBounds(GRANULARITY, periodStart);
   const columns = columnsFor(reportType);
   const source = SOURCES[reportType];
-
-  const rows = await fetchPartitionRows(reportType, stationId, from, to);
-  if (!rows.length) return null;
-
-  const oem = await resolveOemForStation(stationId);
-  const csv = toCsv(rows, columns);
+  const normalizedStation = String(stationId || "").trim().toUpperCase();
+  const providedRows = Array.isArray(rows) ? rows : [];
+  if (!providedRows.length) return null;
+  for (const row of providedRows) {
+    const rowStation = String(row[source.stationColumn] || "").trim().toUpperCase();
+    const rowDate = String(row[source.dateColumn] || "").slice(0, 10);
+    if (rowStation !== normalizedStation) throw new Error("Archive station boundary violation");
+    if (!rowDate || rowDate < from || rowDate > to) throw new Error("Archive period boundary violation");
+  }
+  const resolvedOem = oem || await resolveOemForStation(normalizedStation);
+  const sortedRows = providedRows.slice().sort((left, right) =>
+    String(left[source.dateColumn] || "").localeCompare(String(right[source.dateColumn] || ""))
+    || String(left.meter_id || left.meter_sn || "").localeCompare(String(right.meter_id || right.meter_sn || ""))
+  );
+  const csv = toCsv(sortedRows, columns);
   const gzipped = zlib.gzipSync(Buffer.from(csv, "utf8"), { level: 9 });
   const checksum = crypto.createHash("sha256").update(gzipped).digest("hex");
-  const objectPath = objectPathFor(stationId, periodStart, reportType, granularity, oem.slug);
+  const objectPath = objectPathFor(normalizedStation, periodStart, reportType, GRANULARITY, resolvedOem.slug);
 
   // Upload BEFORE indexing. If the upload throws, no index row claims the partition
   // exists, and the next sweep retries it. The reverse order could advertise an
@@ -551,7 +551,7 @@ async function archivePartition({ stationId, periodStart, reportType = REPORT_TY
 
   // covers_from/covers_to are the real extent of the data, which can be narrower than
   // the period (a station that came online mid-month). Timestamps are sliced to a date.
-  const dates = rows
+  const dates = sortedRows
     .map((row) => String(row[source.dateColumn] || "").slice(0, 10))
     .filter(Boolean)
     .sort();
@@ -562,17 +562,17 @@ async function archivePartition({ stationId, periodStart, reportType = REPORT_TY
       method: "POST",
       prefer: "resolution=merge-duplicates,return=minimal",
       body: {
-        oem_id: oem.oemId,
-        station_id: stationId,
+        oem_id: resolvedOem.oemId,
+        station_id: normalizedStation,
         report_type: reportType,
-        granularity,
+        granularity: GRANULARITY,
         period_start: from,
         period_end: to,
         covers_from: dates[0] || null,
         covers_to: dates[dates.length - 1] || null,
         bucket: BUCKET,
         object_path: objectPath,
-        row_count: rows.length,
+        row_count: sortedRows.length,
         byte_size: gzipped.length,
         content_sha256: checksum
       }
@@ -580,13 +580,13 @@ async function archivePartition({ stationId, periodStart, reportType = REPORT_TY
   );
 
   return {
-    stationId,
-    oemSlug: oem.slug,
+    stationId: normalizedStation,
+    oemSlug: resolvedOem.slug,
     reportType,
-    granularity,
+    granularity: GRANULARITY,
     periodStart: from,
     objectPath,
-    rowCount: rows.length,
+    rowCount: sortedRows.length,
     byteSize: gzipped.length,
     uncompressedBytes: Buffer.byteLength(csv, "utf8")
   };
@@ -754,6 +754,23 @@ function reportRow(row = {}, slugById = new Map()) {
     createdAt: row.created_at,
     refreshedAt: row.updated_at || row.created_at
   };
+}
+
+async function archivePartition({ stationId, periodStart, reportType = REPORT_TYPE, granularity = GRANULARITY }) {
+  if (granularity === "yearly") {
+    const oem = await resolveOemForStation(stationId);
+    return archiveYearlyFromMonthly({
+      stationId,
+      year: Number(String(periodStart).slice(0, 4)),
+      reportType,
+      oem
+    });
+  }
+
+  const { from, to } = periodBounds(granularity, periodStart);
+  const rows = await fetchPartitionRows(reportType, stationId, from, to);
+  if (!rows.length) return null;
+  return archiveProvidedRows({ stationId, periodStart, rows, reportType });
 }
 
 function dateLagDays(day, now = new Date()) {
@@ -1068,6 +1085,7 @@ module.exports = {
   periodBounds,
   resolveOemForStation,
   archivePartition,
+  archiveProvidedRows,
   listReports,
   normalizeListFilters,
   newestEligibleMonth,

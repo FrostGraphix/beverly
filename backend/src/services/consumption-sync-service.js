@@ -242,7 +242,8 @@ function syncWindow(mode, stationStats, input) {
     input.hotRetentionDays,
     positiveInteger(process.env.CONSUMPTION_HOT_RETENTION_DAYS, 120)
   );
-  const retentionFrom = addDays(to, -retentionDays);
+  const retentionFloor = addDays(to, -retentionDays);
+  const retentionFrom = `${retentionFloor.slice(0, 7)}-01`;
   if (mode === "backfill") {
     const requestedFrom = normalizeDate(input.from, retentionFrom);
     return {
