@@ -42,12 +42,26 @@ function inlineBrandAttachments(html: string) {
     }];
 }
 
+function batchCompatibleHtml(html: string): string {
+    if (!html.includes('cid:beverly-logo')) return html;
+    const assetBaseUrl = env.EMAIL_ASSET_BASE_URL?.trim().replace(/\/+$/, '');
+    if (!assetBaseUrl) {
+        throw new Error('EMAIL_ASSET_BASE_URL not configured for batch email branding');
+    }
+    return html.replaceAll('cid:beverly-logo', `${assetBaseUrl}/assets/beverly-logo.png`);
+}
+
 export interface EmailResult {
     messageId: string;
 }
 
 export class EmailBatchError extends Error {
-    constructor(message: string, public readonly sentCount: number, public readonly failedCount: number) {
+    constructor(
+        message: string,
+        public readonly sentCount: number,
+        public readonly failedCount: number,
+        public readonly acceptedMessages: Array<{ email: string; messageId: string }> = [],
+    ) {
         super(message);
         this.name = 'EmailBatchError';
     }
@@ -87,13 +101,20 @@ export async function sendBatch(messages: SendEmailOpts[], idempotencyKey?: stri
             from: env.RESEND_FROM,
             to: m.to,
             subject: m.subject,
-            html: m.html,
+            html: batchCompatibleHtml(m.html),
             text: m.text,
             replyTo: m.replyTo,
-            attachments: inlineBrandAttachments(m.html),
+            attachments: undefined,
             tags: m.tag ? [{ name: 'category', value: sanitizeTag(m.tag) }] : undefined,
         })), idempotencyKey ? { idempotencyKey: `${idempotencyKey}:${i / 100}` } : undefined);
-        if (error) throw new EmailBatchError(error.message, results.length, messages.length - results.length);
+        if (error) {
+            throw new EmailBatchError(
+                error.message,
+                results.length,
+                messages.length - results.length,
+                results.map((result, index) => ({ email: messages[index].to, messageId: result.messageId })),
+            );
+        }
         const sentRows = (data as any)?.data;
         results.push(...(Array.isArray(sentRows)
             ? sentRows.map((d: any) => ({ messageId: d.id ?? '' }))

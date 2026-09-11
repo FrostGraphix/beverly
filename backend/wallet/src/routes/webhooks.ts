@@ -135,6 +135,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             'email.bounced': 'failed',
             'email.complained': 'failed',
             'email.suppressed': 'failed',
+            'email.failed': 'failed',
         };
         const deliveryStatus = statusByEvent[eventType];
         if (messageId && deliveryStatus) {
@@ -177,7 +178,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             }
         }
 
-        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.suppressed' || eventType === 'email.delivery_delayed') {
+        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.suppressed' || eventType === 'email.failed' || eventType === 'email.delivery_delayed') {
             await logAction({
                 actorUserId: 'system',
                 actorType: 'system',

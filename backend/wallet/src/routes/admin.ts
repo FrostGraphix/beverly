@@ -357,19 +357,30 @@ async function updateAnnouncementEmailState(
     announcementId: string,
     state: { sent: number; failed: number; status: 'sent' | 'partial' | 'failed' },
 ) {
-    const [announcementResult, deliveryResult] = await Promise.all([
-        adminClient.from('admin_announcements').update({
+    const announcementResult = await adminClient.from('admin_announcements').update({
             email_sent_count: state.sent,
             email_failed_count: state.failed,
             delivery_status: state.status,
-        }).eq('id', announcementId),
-        adminClient.from('admin_announcement_deliveries')
-            .update({ status: state.status === 'sent' ? 'email_sent' : state.status === 'partial' ? 'email_partial' : 'email_failed' })
-            .eq('announcement_id', announcementId)
-            .not('email', 'is', null),
-    ]);
+        }).eq('id', announcementId);
     if (announcementResult.error) throw announcementResult.error;
-    if (deliveryResult.error) throw deliveryResult.error;
+    if (state.failed > 0) {
+        const { error } = await adminClient.from('admin_announcement_deliveries')
+            .update({ status: 'email_failed', email_status: 'failed' })
+            .eq('announcement_id', announcementId)
+            .not('email', 'is', null)
+            .is('email_message_id', null);
+        if (error) throw error;
+    }
+}
+
+async function summarizeTrackedAnnouncementEmails(announcementId: string) {
+    const { data, error } = await adminClient.from('admin_announcement_deliveries')
+        .select('email_message_id')
+        .eq('announcement_id', announcementId)
+        .not('email_message_id', 'is', null)
+        .limit(10_000);
+    if (error) throw error;
+    return new Set((data ?? []).map((row: any) => row.email_message_id).filter(Boolean)).size;
 }
 
 async function storeAnnouncementEmailMessages(
@@ -532,6 +543,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /announcements/recipients': 'wallet.announcements.manage',
     'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
     'POST /announcements': 'wallet.announcements.manage',
+    'POST /announcements/:id/retry-email': 'wallet.announcements.manage',
     'GET /refunds': 'wallet.refunds.manage',
     'GET /refunds/summary': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
@@ -3984,6 +3996,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (emailError: any) {
             const sentCount = Number(emailError?.sentCount ?? 0);
             const trackedEmailRecipientCount = Number(announcement.email_recipient_count ?? emailRecipientCount);
+            const acceptedMessages = Array.isArray(emailError?.acceptedMessages) ? emailError.acceptedMessages : [];
+            if (acceptedMessages.length) {
+                await storeAnnouncementEmailMessages(announcement.id, recipients, acceptedMessages)
+                    .catch((trackingError) => req.log.error({ trackingError, announcementId: announcement.id }, 'Partial announcement email tracking failed'));
+            }
             await updateAnnouncementEmailState(announcement.id, {
                 sent: sentCount,
                 failed: Math.max(0, trackedEmailRecipientCount - sentCount),
@@ -4050,6 +4067,100 @@ const route: FastifyPluginAsync = async (fastify) => {
             email_delivered: emailResult.sent,
             tracking_deferred: legacyAnnouncementSchema,
         });
+    });
+
+    fastify.post('/announcements/:id/retry-email', async (req, reply) => {
+        const requestKey = requireIdempotencyKey(req, reply);
+        if (!requestKey) return reply;
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { data: announcement, error: announcementError } = await adminClient
+            .from('admin_announcements')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+        if (announcementError) throw announcementError;
+        if (!announcement) return reply.code(404).send({ error: 'announcement_not_found', message: 'Announcement not found.' });
+        if (!String(announcement.channel ?? '').split(',').includes('email')) {
+            return reply.code(409).send({ error: 'announcement_email_not_selected', message: 'This announcement did not include email delivery.' });
+        }
+        if (!['partial', 'failed'].includes(String(announcement.delivery_status ?? ''))) {
+            return reply.code(409).send({ error: 'announcement_retry_not_needed', message: 'This announcement has no failed email deliveries.' });
+        }
+
+        const { data: pendingRows, error: pendingError } = await adminClient
+            .from('admin_announcement_deliveries')
+            .select('recipient_type,recipient_id,email')
+            .eq('announcement_id', id)
+            .not('email', 'is', null)
+            .is('email_message_id', null)
+            .limit(10_000);
+        if (pendingError) throw pendingError;
+        const { data: retryClaim, error: retryClaimError } = await adminClient
+            .from('admin_announcements')
+            .update({ delivery_status: 'sending' })
+            .eq('id', id)
+            .in('delivery_status', ['partial', 'failed'])
+            .select('id')
+            .maybeSingle();
+        if (retryClaimError) throw retryClaimError;
+        if (!retryClaim) {
+            return reply.code(409).send({ error: 'announcement_retry_in_progress', message: 'Another email retry is already running.' });
+        }
+        const recipients: AnnouncementRecipient[] = (pendingRows ?? []).map((row: any) => ({
+            key: recipientKey(row.recipient_type, row.recipient_id),
+            type: row.recipient_type,
+            id: row.recipient_id,
+            name: 'there',
+            email: row.email,
+            phone: null,
+            status: null,
+        }));
+        const total = Number(announcement.email_recipient_count ?? 0);
+        if (!recipients.length) {
+            const sent = await summarizeTrackedAnnouncementEmails(id);
+            await updateAnnouncementEmailState(id, { sent, failed: Math.max(0, total - sent), status: total && sent >= total ? 'sent' : 'partial' });
+            return { ok: true, announcement_id: id, email_delivered: 0, remaining: Math.max(0, total - sent), replayed: true };
+        }
+
+        try {
+            const result = await notifyAdminAnnouncement(
+                recipients,
+                { title: announcement.title, body: announcement.body },
+                `announcement-retry:${id}:${requestKey}`,
+            );
+            await storeAnnouncementEmailMessages(id, recipients, result.messages);
+            const sent = await summarizeTrackedAnnouncementEmails(id);
+            const failed = Math.max(0, total - sent);
+            await updateAnnouncementEmailState(id, { sent, failed, status: failed ? 'partial' : 'sent' });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'admin.announcement.email_retried',
+                targetType: 'admin_announcement',
+                targetId: id,
+                after: { attempted: result.recipients, accepted: result.sent, remaining: failed },
+            });
+            return { ok: true, announcement_id: id, email_delivered: result.sent, remaining: failed };
+        } catch (emailError: any) {
+            const acceptedMessages = Array.isArray(emailError?.acceptedMessages) ? emailError.acceptedMessages : [];
+            if (acceptedMessages.length) await storeAnnouncementEmailMessages(id, recipients, acceptedMessages);
+            const sent = await summarizeTrackedAnnouncementEmails(id);
+            const failed = Math.max(0, total - sent);
+            await updateAnnouncementEmailState(id, {
+                sent,
+                failed,
+                status: String(announcement.channel ?? '').split(',').includes('in_app') || sent ? 'partial' : 'failed',
+            });
+            req.log.error({ emailError, announcementId: id, accepted: acceptedMessages.length }, 'Announcement email retry failed');
+            return reply.code(502).send({
+                error: 'announcement_email_retry_failed',
+                message: acceptedMessages.length
+                    ? `${acceptedMessages.length} emails were accepted before retrying stopped.`
+                    : 'Email retry failed before Resend accepted any messages.',
+                details: { announcement_id: id, sent, total, remaining: failed },
+            });
+        }
     });
 
     // ── refunds ──
