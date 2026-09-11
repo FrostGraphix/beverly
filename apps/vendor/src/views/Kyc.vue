@@ -17,10 +17,40 @@ const submitting = ref(false);
 const progress = ref('');
 const error = ref('');
 const notice = ref('');
+const fileError = ref('');
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const tier = computed(() => Number(state.value?.kyc_tier ?? auth.user?.kyc_tier ?? 0));
 const status = computed(() => state.value?.kyc_status ?? auth.user?.kyc_status ?? 'unverified');
 const pending = computed(() => status.value === 'pending' || state.value?.review?.status === 'pending');
+const reviewNote = computed(() => String(state.value?.review?.reviewer_note ?? '').trim());
+const changesRequested = computed(() => state.value?.review?.status === 'rejected');
+const selectedFileCount = computed(() => [identityFile.value, selfieFile.value, addressFile.value].filter(Boolean).length);
+
+function selectFile(slot: 'identity' | 'selfie' | 'address', event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  const allowed = slot === 'selfie' ? IMAGE_MIME_TYPES : DOCUMENT_MIME_TYPES;
+  fileError.value = '';
+
+  if (file && !allowed.has(file.type)) {
+    fileError.value = slot === 'selfie'
+      ? 'Use a JPEG, PNG, or WebP image.'
+      : 'Use JPEG, PNG, WebP, or PDF files.';
+    input.value = '';
+  } else if (file && file.size > MAX_FILE_BYTES) {
+    fileError.value = 'Each file must be 10 MB or smaller.';
+    input.value = '';
+  }
+
+  const selected = fileError.value ? null : file;
+  if (slot === 'identity') identityFile.value = selected;
+  if (slot === 'selfie') selfieFile.value = selected;
+  if (slot === 'address') addressFile.value = selected;
+}
 
 async function load() {
   loading.value = true;
@@ -80,10 +110,10 @@ onMounted(load);
   <AppShell title="KYC verification">
     <header class="page-head">
       <div><p class="eyebrow">Business identity</p><h1>KYC verification</h1><p>Submit evidence. Track approvals.</p></div>
-      <button class="bw-btn" :disabled="loading" @click="load">Refresh</button>
+      <button class="bw-btn" :disabled="loading || submitting" @click="load">Refresh</button>
     </header>
 
-    <div v-if="error" class="bw-alert danger" role="alert">{{ error }}</div>
+    <div v-if="error && stateLoaded" class="bw-alert danger" role="alert">{{ error }}</div>
     <div v-if="notice" class="bw-alert success" role="status">{{ notice }}</div>
 
     <section v-if="stateLoaded" class="tier-grid" aria-label="KYC tiers">
@@ -94,9 +124,14 @@ onMounted(load);
       </article>
     </section>
 
+    <section v-if="stateLoaded && changesRequested" class="bw-alert danger review-feedback" role="alert">
+      <strong>Changes requested</strong>
+      <span>{{ reviewNote || 'Review your evidence, then submit clearer documents.' }}</span>
+    </section>
+
     <section v-if="loading" class="bw-card empty">Loading status…</section>
     <section v-else-if="!stateLoaded" class="bw-card status-card" role="alert">
-      <div><h2>Status unavailable</h2><p>Your verification status could not be confirmed.</p></div>
+      <div><h2>Status unavailable</h2><p>{{ error || 'Your verification status could not be confirmed.' }}</p></div>
       <button class="bw-btn" @click="load">Retry</button>
     </section>
     <section v-else-if="pending" class="bw-card status-card" role="status">
@@ -115,32 +150,34 @@ onMounted(load);
           <label class="upload-field">
             <strong>Government identity</strong>
             <span>NIN slip, passport, licence, or voter card.</span>
-            <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type">
+            <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type" :disabled="submitting">
               <option value="national_id">NIN slip</option>
               <option value="voters_card">Voter card</option>
               <option value="passport">Passport</option>
               <option value="drivers_license">Driver's licence</option>
             </select>
-            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" @change="identityFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
-            <small>{{ identityFile?.name || 'Choose a file' }}</small>
+            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Government identity file" :disabled="submitting" required @change="selectFile('identity', $event)" />
+            <small>{{ identityFile ? `Selected: ${identityFile.name}` : 'Choose a file' }}</small>
           </label>
           <label class="upload-field">
             <strong>Representative selfie</strong>
             <span>Use a clear photo. Avoid filters.</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp" @change="selfieFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
-            <small>{{ selfieFile?.name || 'Choose a file' }}</small>
+            <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Representative selfie file" :disabled="submitting" required @change="selectFile('selfie', $event)" />
+            <small>{{ selfieFile ? `Selected: ${selfieFile.name}` : 'Choose a file' }}</small>
           </label>
           <label class="upload-field">
             <strong>Business address</strong>
-            <select v-model="addressDocumentType" class="bw-input">
+            <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting">
               <option value="utility_bill">Utility bill</option>
               <option value="bank_statement">Bank statement</option>
             </select>
-            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" @change="addressFile = ($event.target as HTMLInputElement).files?.[0] ?? null" />
-            <small>{{ addressFile?.name || 'Choose a recent document' }}</small>
+            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Business address file" :disabled="submitting" required @change="selectFile('address', $event)" />
+            <small>{{ addressFile ? `Selected: ${addressFile.name}` : 'Choose a recent document' }}</small>
           </label>
         </div>
+        <p class="selection-summary" role="status" aria-live="polite">{{ selectedFileCount }} of 3 required files selected.</p>
         <p class="privacy">Private storage. File validated. Maximum 10 MB.</p>
+        <div v-if="fileError" class="bw-alert danger" role="alert">{{ fileError }}</div>
         <div v-if="progress" class="bw-alert info" role="status" aria-live="polite">{{ progress }}</div>
         <button class="bw-btn primary lg" type="submit" :disabled="submitting || !identityFile || !selfieFile || !addressFile">{{ submitting ? 'Submitting…' : 'Submit Tier 2 review' }}</button>
       </form>
@@ -152,6 +189,7 @@ onMounted(load);
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s-4);margin-bottom:var(--s-4)}.page-head h1{margin:0;font-size:var(--t-2xl)}.page-head p{margin:4px 0 0;color:var(--text-muted)}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:10px!important;font-weight:800;color:var(--brand)!important}
 .tier-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3);margin-bottom:var(--s-4)}.tier-card{display:flex;flex-direction:column;gap:6px;padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);opacity:.62}.tier-card.active{opacity:1;border-color:oklch(from var(--brand) l c h/.35);background:oklch(from var(--brand) l c h/.06)}.tier-card span{color:var(--text-muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.tier-card small{color:var(--text-muted)}.tier-card.active small{color:var(--brand)}
 .status-card,.complete-card{display:flex;align-items:center;gap:var(--s-4)}.status-card>div,.complete-card>div{flex:1}.status-card h2,.complete-card h2{margin:0 0 4px}.status-card p,.complete-card p{margin:0;color:var(--text-muted)}.status-dot{width:12px;height:12px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 6px oklch(from var(--warn) l c h/.13)}.complete-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:var(--brand);background:oklch(from var(--brand) l c h/.12);font-weight:900}
-.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-3)}.section-head span:first-child{color:var(--brand);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.section-head h2{margin:4px 0 0}.instructions{color:var(--text-muted);max-width:680px}.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--s-3);margin:var(--s-4) 0}.upload-field{display:flex;flex-direction:column;gap:8px;padding:var(--s-4);border:1px dashed var(--border);border-radius:var(--r-lg);background:var(--surface-2);cursor:pointer}.upload-field span,.upload-field small,.privacy{color:var(--text-muted)}.upload-field input{width:100%;color:var(--text-muted)}.upload-field small{overflow-wrap:anywhere}.privacy{font-size:var(--t-xs);margin:0 0 var(--s-3)}.submission-card .bw-btn.primary{width:100%}.empty{text-align:center;padding:var(--s-8);color:var(--text-muted)}
-@media(max-width:640px){.tier-grid{grid-template-columns:1fr}.upload-grid{grid-template-columns:1fr}.status-card{align-items:flex-start;flex-wrap:wrap}.status-card .bw-btn{width:100%}.page-head{align-items:flex-start}}
+.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-3)}.section-head span:first-child{color:var(--brand);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.section-head h2{margin:4px 0 0}.instructions{color:var(--text-muted);max-width:680px}.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--s-3);margin:var(--s-4) 0}.upload-field{display:flex;flex-direction:column;gap:8px;padding:var(--s-4);border:1px dashed var(--border);border-radius:var(--r-lg);background:var(--surface-2);cursor:pointer}.upload-field span,.upload-field small,.privacy{color:var(--text-muted)}.upload-field input{width:100%;color:var(--text-muted)}.upload-field small{overflow-wrap:anywhere}.selection-summary{margin:0 0 4px;color:var(--text);font-size:var(--t-sm);font-weight:700}.privacy{font-size:var(--t-xs);margin:0 0 var(--s-3)}.submission-card .bw-btn.primary{width:100%}.empty{text-align:center;padding:var(--s-8);color:var(--text-muted)}
+.review-feedback{display:grid;gap:4px;margin-bottom:var(--s-4)}
+@media(max-width:640px){.tier-grid{grid-template-columns:1fr}.upload-grid{grid-template-columns:1fr}.status-card{align-items:flex-start;flex-wrap:wrap}.status-card .bw-btn{width:100%}.page-head{align-items:flex-start;flex-direction:column}.page-head>.bw-btn{width:100%}}
 </style>

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { publishNotificationCount } from '@beverly/tokens';
+import NotificationDetailModal from '@beverly/tokens/NotificationDetailModal.vue';
 import type { DeviceNotificationState } from '@beverly/tokens/push-notifications';
 import { adminPushNotifications } from '../lib/push-notifications';
 
@@ -29,6 +30,7 @@ const filters = ['all', 'unread', 'read'] as const;
 const deviceState = ref<DeviceNotificationState>(adminPushNotifications.state());
 const deviceBusy = ref(false);
 const deviceMessage = ref('');
+const selectedNotification = ref<Notification | null>(null);
 const deviceLabel = computed(() => ({
     enabled: 'Enabled on this device',
     blocked: 'Blocked in browser settings',
@@ -69,6 +71,7 @@ async function load(reset = true) {
 }
 
 async function openNotification(item: Notification) {
+    selectedNotification.value = item;
     if (!item.read) {
         error.value = '';
         try {
@@ -78,10 +81,15 @@ async function openNotification(item: Notification) {
             publishNotificationCount(unreadCount.value);
         } catch (caught: any) {
             error.value = caught?.message ?? 'Notification could not be marked read.';
-            return;
         }
     }
-    if (item.metadata?.path) await router.push(item.metadata.path);
+}
+
+async function followNotificationPath() {
+    const path = selectedNotification.value?.metadata?.path;
+    if (!path) return;
+    selectedNotification.value = null;
+    await router.push(path);
 }
 
 async function markAllRead() {
@@ -170,13 +178,13 @@ onMounted(() => {
       </button>
     </div>
 
-    <section class="bw-card flush">
-      <div v-if="loading && !items.length" class="an-empty">Loading...</div>
-      <div v-else-if="!items.length" class="an-empty">
+    <section class="notification-list">
+      <div v-if="loading && !items.length" class="an-empty bw-card">Loading...</div>
+      <div v-else-if="!items.length" class="an-empty bw-card">
         <strong>No operational alerts.</strong>
         <span>Funding, disputes, and support updates appear here.</span>
       </div>
-      <div v-else-if="!filteredItems.length" class="an-empty">
+      <div v-else-if="!filteredItems.length" class="an-empty bw-card">
         <strong>No {{ filter }} notifications.</strong>
         <span>Choose another filter.</span>
       </div>
@@ -185,14 +193,15 @@ onMounted(() => {
         v-else
         :key="item.id"
         type="button"
-        :class="['an-row', { unread: !item.read }]"
+        :class="['an-row', 'notification-card', { unread: !item.read }]"
+        aria-haspopup="dialog"
         @click="openNotification(item)"
       >
         <span class="an-dot" />
         <span class="an-copy">
           <em>{{ item.type.replace(/_/g, ' ') }}</em>
           <strong>{{ item.title }}</strong>
-          <small>{{ item.body }}</small>
+          <small class="notification-preview">{{ item.body }}</small>
         </span>
         <time>{{ formatDate(item.created_at) }}</time>
       </button>
@@ -203,6 +212,16 @@ onMounted(() => {
         {{ loading ? 'Loading...' : 'Load more' }}
       </button>
     </div>
+
+    <NotificationDetailModal
+      v-if="selectedNotification"
+      :notification="selectedNotification"
+      :type-label="selectedNotification.type.replace(/_/g, ' ')"
+      :formatted-date="formatDate(selectedNotification.created_at)"
+      action-label="Open update"
+      @close="selectedNotification = null"
+      @navigate="followNotificationPath"
+    />
   </AppShell>
 </template>
 
@@ -219,13 +238,17 @@ onMounted(() => {
 .notification-mark-all { min-height: 44px; }
 .notification-filter.active { border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); background: color-mix(in srgb, var(--brand) 14%, var(--surface)); color: var(--brand); }
 .notification-filter:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.an-row { width: 100%; display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; gap: var(--s-3); align-items: center; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); padding: var(--s-4); text-align: left; cursor: pointer; }
-.an-row.unread { background: color-mix(in oklab, var(--brand), transparent 90%); }
+.notification-list { display: grid; gap: var(--s-3); }
+.an-row { width: 100%; display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; gap: var(--s-3); align-items: center; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); color: var(--text); padding: var(--s-4); text-align: left; cursor: pointer; box-shadow: var(--glass-shadow-card, 0 12px 34px rgb(0 0 0 / .12)); transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.an-row.unread { background: color-mix(in oklab, var(--brand), transparent 90%); border-color: color-mix(in oklab, var(--brand), transparent 72%); }
+.an-row:hover { border-color: color-mix(in oklab, var(--brand), transparent 58%); transform: translateY(-1px); }
+.an-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .an-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); opacity: .3; }
 .an-row.unread .an-dot { opacity: 1; }
 .an-copy { min-width: 0; display: grid; gap: 3px; }
 .an-copy em { color: var(--brand); font-size: var(--t-2xs); font-style: normal; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .an-copy small, .an-row time { color: var(--text-muted); }
+.notification-preview { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .an-row time { font-size: var(--t-xs); white-space: nowrap; }
 .an-empty { min-height: 220px; display: grid; place-items: center; gap: var(--s-2); color: var(--text-muted); text-align: center; }
 .an-more { display: flex; justify-content: center; margin-top: var(--s-4); }
@@ -235,5 +258,9 @@ onMounted(() => {
   .device-actions > * { flex: 1; }
   .an-row { grid-template-columns: 9px minmax(0, 1fr); }
   .an-row time { grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .an-row { transition: none; }
+  .an-row:hover { transform: none; }
 }
 </style>

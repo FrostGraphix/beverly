@@ -16,6 +16,10 @@
     "WalletGreeting.vue.d.ts",
     "BeverlyLoader.vue",
     "BeverlyLoader.vue.d.ts",
+    "NotificationDetailModal.vue",
+    "NotificationDetailModal.vue.d.ts",
+    "notification-content.js",
+    "notification-content.d.ts",
     "WalletPagination.vue",
     "WalletPagination.vue.d.ts",
     "WalletTablePagination.vue",
@@ -111,6 +115,15 @@
     "./wallet-export": {
       "types": "./wallet-export.d.ts",
       "import": "./wallet-export.js"
+    },
+    "./NotificationDetailModal.vue": {
+      "types": "./NotificationDetailModal.vue.d.ts",
+      "import": "./NotificationDetailModal.vue"
+    },
+    "./notification-content": {
+      "types": "./notification-content.d.ts",
+      "import": "./notification-content.js",
+      "default": "./notification-content.js"
     },
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",

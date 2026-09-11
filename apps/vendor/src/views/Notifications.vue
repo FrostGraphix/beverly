@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { publishNotificationCount } from '@beverly/tokens';
+import NotificationDetailModal from '@beverly/tokens/NotificationDetailModal.vue';
 import {
     deviceNotificationState,
     disableDeviceNotifications,
@@ -34,6 +35,7 @@ const filters = ['all', 'unread', 'read'] as const;
 const deviceState = ref<DeviceNotificationState>(deviceNotificationState());
 const deviceBusy = ref(false);
 const deviceError = ref('');
+const selectedNotification = ref<Notification | null>(null);
 const filteredItems = computed(() => items.value.filter((item) =>
     filter.value === 'all' || (filter.value === 'read' ? item.read : !item.read)
 ));
@@ -115,8 +117,15 @@ async function markRead(id: string) {
 }
 
 async function openNotification(item: Notification) {
+    selectedNotification.value = item;
     await markRead(item.id);
-    if (item.metadata?.path) await router.push(item.metadata.path);
+}
+
+async function followNotificationPath() {
+    const path = selectedNotification.value?.metadata?.path;
+    if (!path) return;
+    selectedNotification.value = null;
+    await router.push(path);
 }
 
 function typeLabel(type: string) {
@@ -220,13 +229,13 @@ onMounted(() => {
 
     <div v-if="error" class="bw-alert danger" style="margin-bottom: var(--s-3)">{{ error }}</div>
 
-    <section class="bw-card flush">
-      <div v-if="loading && !items.length" class="vn-empty">Loading...</div>
-      <div v-else-if="!items.length" class="vn-empty">
+    <section class="notification-list">
+      <div v-if="loading && !items.length" class="vn-empty bw-card">Loading...</div>
+      <div v-else-if="!items.length" class="vn-empty bw-card">
         <strong>No notifications yet.</strong>
         <span>Wallet, vending, support, and security updates appear here.</span>
       </div>
-      <div v-else-if="!filteredItems.length" class="vn-empty">
+      <div v-else-if="!filteredItems.length" class="vn-empty bw-card">
         <strong>No {{ filter }} notifications.</strong>
         <span>Choose another filter.</span>
       </div>
@@ -235,14 +244,15 @@ onMounted(() => {
         v-else
         :key="item.id"
         type="button"
-        :class="['vn-row', { unread: !item.read }]"
+        :class="['vn-row', 'notification-card', { unread: !item.read }]"
+        aria-haspopup="dialog"
         @click="openNotification(item)"
       >
         <span class="vn-dot" />
         <span>
           <em>{{ typeLabel(item.type) }}</em>
           <strong>{{ item.title }}</strong>
-          <small>{{ item.body }}</small>
+          <small class="notification-preview">{{ item.body }}</small>
         </span>
         <time>{{ fmtDate(item.created_at) }}</time>
       </button>
@@ -253,6 +263,16 @@ onMounted(() => {
         {{ loadingMore ? 'Loading...' : 'Load more' }}
       </button>
     </div>
+
+    <NotificationDetailModal
+      v-if="selectedNotification"
+      :notification="selectedNotification"
+      :type-label="typeLabel(selectedNotification.type)"
+      :formatted-date="fmtDate(selectedNotification.created_at)"
+      action-label="Open update"
+      @close="selectedNotification = null"
+      @navigate="followNotificationPath"
+    />
   </AppShell>
 </template>
 
@@ -366,21 +386,34 @@ onMounted(() => {
     grid-template-columns: 10px minmax(0, 1fr) auto;
     gap: var(--s-3);
     align-items: center;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    background: var(--surface);
     color: var(--text);
     padding: var(--s-4);
     text-align: left;
     cursor: pointer;
+    box-shadow: var(--glass-shadow-card, 0 12px 34px rgb(0 0 0 / .12));
+    transition: border-color .16s ease, background .16s ease, transform .16s ease;
 }
 .vn-row.unread {
     background: color-mix(in oklab, var(--brand), transparent 90%);
+    border-color: color-mix(in oklab, var(--brand), transparent 72%);
 }
+.vn-row:hover { border-color: color-mix(in oklab, var(--brand), transparent 58%); transform: translateY(-1px); }
+.vn-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.notification-list { display: grid; gap: var(--s-3); }
 .vn-row small {
     display: block;
     color: var(--text-muted);
     margin-top: 4px;
+}
+.notification-preview {
+    display: -webkit-box !important;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
 }
 .vn-row em {
     display: block;
@@ -435,5 +468,9 @@ onMounted(() => {
     .vn-mark-all { justify-content: center; }
     .device-alerts { align-items: stretch; flex-direction: column; }
     .device-alerts-action { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .vn-row { transition: none; }
+    .vn-row:hover { transform: none; }
 }
 </style>

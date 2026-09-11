@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell.vue';
 import MessageSuccessHover from '../components/MessageSuccessHover.vue';
 import { ApiError, api, shortDate } from '../lib/api';
 import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import { formatNotificationBody } from '@beverly/tokens/notification-content';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
 
@@ -57,6 +58,7 @@ const selectedKeys = ref<string[]>([]);
 const history = ref<Announcement[]>([]);
 const activeTab = ref<'compose' | 'history'>('compose');
 const selectedHistory = ref<Announcement | null>(null);
+const selectedHistoryBlocks = computed(() => formatNotificationBody(selectedHistory.value?.body ?? ''));
 const historyDetailClose = ref<HTMLButtonElement | null>(null);
 const brandLogoLightUrl = `${import.meta.env.BASE_URL}brand/beverly-lockup.png`;
 const composeStep = ref(1);
@@ -568,7 +570,15 @@ onBeforeUnmount(() => {
             <span>{{ formatChannel(selectedHistory.channel) }}</span>
             <span>{{ selectedHistory.delivery_status || 'unknown' }}</span>
           </div>
-          <div class="an-detail-message">{{ selectedHistory.body }}</div>
+          <div class="an-detail-message">
+            <template v-for="(block, index) in selectedHistoryBlocks" :key="`${block.kind}-${index}`">
+              <p v-if="block.kind === 'paragraph'">{{ block.text }}</p>
+              <div v-else class="an-detail-item">
+                <strong aria-hidden="true">{{ block.marker }}</strong>
+                <p>{{ block.text }}</p>
+              </div>
+            </template>
+          </div>
           <dl class="an-detail-counts">
             <div><dt>Recipients</dt><dd>{{ selectedHistory.recipient_count }}</dd></div>
             <div><dt>Emails sent</dt><dd>{{ selectedHistory.email_sent_count ?? 0 }} / {{ selectedHistory.email_recipient_count ?? 0 }}</dd></div>
@@ -934,6 +944,28 @@ onBeforeUnmount(() => {
     line-height: 1.65;
     white-space: pre-wrap;
 }
+.an-detail-message > p { margin: 0 0 var(--s-3); }
+.an-detail-message > p:last-child { margin-bottom: 0; }
+.an-detail-item {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: var(--s-3);
+    align-items: start;
+    margin-top: var(--s-3);
+    padding: var(--s-3);
+    border-radius: var(--r-md);
+    background: color-mix(in oklab, var(--brand) 7%, transparent);
+    white-space: normal;
+}
+.an-detail-item strong {
+    min-height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--brand) 15%, transparent);
+    color: var(--brand);
+}
+.an-detail-item p { margin: 0; }
 .an-detail-counts {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
