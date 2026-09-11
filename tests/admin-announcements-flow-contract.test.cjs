@@ -36,6 +36,7 @@ function main() {
     "fastify.get('/announcements/recipients'",
     "fastify.get('/announcements'",
     "fastify.post('/announcements'",
+    "fastify.post('/announcements/:id/retry-email'",
   ]) {
     assert(adminRoutes.includes(route), `Missing admin route: ${route}`);
   }
@@ -44,6 +45,7 @@ function main() {
     "'GET /announcements': 'wallet.announcements.manage'",
     "'GET /announcements/recipients': 'wallet.announcements.manage'",
     "'POST /announcements': 'wallet.announcements.manage'",
+    "'POST /announcements/:id/retry-email': 'wallet.announcements.manage'",
   ]) {
     assert(adminRoutes.includes(permission), `Missing route permission: ${permission}`);
   }
@@ -83,6 +85,9 @@ function main() {
   assert(adminRoutes.includes("const wantsEmail = channels.includes('email')"), "Email delivery must be independently selectable.");
   assert(adminRoutes.includes("notificationRows.length ? await insertAnnouncementNotifications"), "Email-only sends must skip in-app notifications.");
   assert(adminRoutes.includes("if (wantsEmail && emailRecipientCount > 0)"), "Notification-only sends must skip Resend.");
+  assert(adminRoutes.includes("email_message_id', 'is', null"), "Retries must only target emails lacking provider IDs.");
+  assert(adminRoutes.includes("admin.announcement.email_retried"), "Announcement retries must be audit logged.");
+  assert(adminRoutes.includes(".in('delivery_status', ['partial', 'failed'])"), "Announcement retries must claim delivery atomically.");
 
   assert(adminRouter.includes("path: '/announcements'"), "Admin route missing.");
   assert(adminRouter.includes("wallet.announcements.manage"), "Admin route must require announcement permission.");
@@ -114,6 +119,7 @@ function main() {
   assert(adminPage.includes("showFeedback('error'"), "Validation and delivery failures must show feedback.");
   assert(adminPage.includes(':disabled="sending"'), "Invalid forms must remain clickable for validation feedback.");
   assert(adminPage.includes("await loadHistory();"), "Message history must refresh immediately after send.");
+  assert(adminPage.includes("retryAnnouncementEmail"), "Failed announcement emails need a safe retry action.");
   assert(adminPage.includes("}, 8000);"), "Success hover must remain visible long enough for review.");
   assert(adminPage.includes("Message history refreshed."), "Success feedback must confirm history refresh.");
   assert(adminPage.includes("Date.now()"), "History refresh must bypass stale cached responses.");
@@ -168,10 +174,14 @@ function main() {
   assert(emailTemplates.includes('@media (prefers-color-scheme: dark)'), "Announcement emails must support dark mode.");
   assert(emailTemplates.includes('formatAnnouncementBody'), "Announcement emails must preserve message formatting.");
   assert(resendAdapter.includes("inlineContentId: 'beverly-logo'"), "Resend must attach the Beverly logo inline.");
+  assert(resendAdapter.includes("batchCompatibleHtml"), "Batch email branding must use a hosted asset.");
+  assert(resendAdapter.includes("attachments: undefined"), "Batch requests must never include unsupported attachments.");
   assert(webhookRoutes.includes("verifyResendSignature"), "Resend webhooks must verify signatures.");
   assert(webhookRoutes.includes("email_message_id"), "Resend webhooks must update tracked deliveries.");
   assert(webhookRoutes.includes("email.suppressed"), "Suppressed email delivery must be tracked.");
+  assert(webhookRoutes.includes("'email.failed': 'failed'"), "Provider send failures must be tracked.");
   assert(envConfig.includes("RESEND_WEBHOOK_SECRET"), "Resend webhook secrets must be configured.");
+  assert(!envConfig.includes("values.RESEND_API_KEY && !values.RESEND_WEBHOOK_SECRET"), "Missing callback tracking must not disable outbound email delivery.");
 
   console.log(JSON.stringify({
     status: "admin announcements flow contract passed",

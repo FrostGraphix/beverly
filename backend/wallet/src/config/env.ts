@@ -178,13 +178,6 @@ const schema = z.object({
             message: 'Production deployments require a dedicated APP_ENCRYPTION_KEY.',
         });
     }
-    if (values.NODE_ENV === 'production' && values.RESEND_API_KEY && !values.RESEND_WEBHOOK_SECRET) {
-        context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['RESEND_WEBHOOK_SECRET'],
-            message: 'Required when production Resend delivery is enabled.',
-        });
-    }
     if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {
         if (!values.PAYSTACK_SECRET_KEY) {
             context.addIssue({
