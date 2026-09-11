@@ -907,7 +907,7 @@ async function reportsSummary(filters = {}) {
         retryable: true,
         body: { p_station_id: normalized.stationId || null }
       }),
-      consumptionSyncHealth(normalized.stationId ? [normalized.stationId] : [])
+      consumptionSyncHealth(normalized.stationId)
     ]);
     if (summary && !Array.isArray(summary)) return { ...summary, syncHealth };
   } catch (error) {
