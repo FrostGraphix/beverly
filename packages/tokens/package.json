@@ -39,6 +39,8 @@
     "wallet-export-wizard.ts",
     "wallet-export.js",
     "wallet-export.d.ts",
+    "vending-vat.js",
+    "vending-vat.d.ts",
     "password-policy.js",
     "password-policy.d.ts",
     "ai-message.js",
@@ -124,6 +126,11 @@
       "types": "./notification-content.d.ts",
       "import": "./notification-content.js",
       "default": "./notification-content.js"
+    },
+    "./vending-vat": {
+      "types": "./vending-vat.d.ts",
+      "import": "./vending-vat.js",
+      "default": "./vending-vat.js"
     },
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",

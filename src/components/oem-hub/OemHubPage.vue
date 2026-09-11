@@ -13,7 +13,7 @@
           <h1 class="oem-hub__title">Welcome back</h1>
           <p class="oem-hub__subtitle">Choose an OEM below to continue, or add a new one.</p>
         </div>
-        <BaseButton class="bw-btn primary" variant="primary" @click="handleAddOem">
+        <BaseButton class="bw-btn primary" variant="primary" :disabled="store.status === 'error'" @click="handleAddOem">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
           Add OEM
         </BaseButton>
@@ -22,21 +22,33 @@
       <div class="oem-hub__toolbar">
         <label class="oem-hub__search">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-          <BaseInput v-model="searchQuery" type="search" placeholder="Search OEM…" aria-label="Search OEM" />
+          <BaseInput v-model="searchQuery" type="search" placeholder="Search OEM…" aria-label="Search OEM" :disabled="store.status === 'error'" />
         </label>
-        <BaseButton class="bw-btn ghost oem-hub__refresh" variant="ghost" :disabled="store.status === 'loading'" aria-label="Refresh OEM list" @click="store.loadOems()">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" :class="{ 'oem-hub__refresh-icon--spin': store.status === 'loading' }">
+        <BaseButton class="bw-btn ghost oem-hub__refresh" variant="ghost" :disabled="store.isLoading" aria-label="Refresh OEM list" @click="store.loadOems()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" :class="{ 'oem-hub__refresh-icon--spin': store.isLoading }">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
           </svg>
         </BaseButton>
       </div>
 
+      <div v-if="store.warning" class="oem-hub__warning" role="status" data-testid="oem-degraded-warning">
+        <span>
+          {{ store.warning }}
+          <span v-if="store.errorReference" class="oem-hub__warning-reference">Reference: {{ store.errorReference }}</span>
+        </span>
+        <BaseButton class="bw-btn ghost sm" variant="ghost" size="sm" :disabled="store.isLoading" @click="store.loadOems()">
+          {{ store.isLoading ? "Refreshing…" : "Refresh counts" }}
+        </BaseButton>
+      </div>
+
       <div v-if="store.status === 'loading' && !store.hasOems" class="oem-hub__grid" aria-busy="true">
+        <span class="bw-sr-only" role="status">Loading OEM inventory…</span>
         <div v-for="n in 3" :key="n" class="bw-card oem-hub__skeleton"></div>
       </div>
 
       <div v-else-if="store.status === 'error'" class="bw-error-banner" role="alert">
-        Couldn't load OEMs: {{ store.error }}
+        <span>Couldn't load OEMs: {{ store.error }}</span>
+        <span v-if="store.errorReference" class="oem-hub__error-reference">Reference: {{ store.errorReference }}</span>
         <BaseButton class="bw-btn ghost sm" variant="ghost" size="sm" @click="store.loadOems()">Retry</BaseButton>
       </div>
 
@@ -128,6 +140,7 @@ export default {
       this.$emit("oem-selected", oem);
     },
     handleAddOem() {
+      if (this.store.status === "error") return;
       this.editingOem = null;
       this.showForm = true;
     },
@@ -205,6 +218,31 @@ export default {
 .oem-hub__refresh-icon--spin { animation: oem-hub-spin 0.9s linear infinite; }
 @keyframes oem-hub-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+.oem-hub__warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--text);
+  font-size: var(--t-sm);
+}
+.oem-hub__error-reference {
+  display: block;
+  margin-top: var(--s-1);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+.oem-hub__warning-reference {
+  display: block;
+  margin-top: var(--s-1);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+
 .oem-hub__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -228,6 +266,7 @@ export default {
   .oem-hub__header .bw-btn { justify-content: center; }
   .oem-hub__grid { grid-template-columns: 1fr; }
   .oem-hub__confirm { max-width: 100%; }
+  .oem-hub__warning { align-items: stretch; flex-direction: column; }
 }
 @media (max-width: 420px) {
   .oem-hub { padding: var(--s-3); }

@@ -398,7 +398,7 @@
 import BaseButton from './base/BaseButton.vue';
 import BaseInput from './base/BaseInput.vue';
 import BaseSelect from './base/BaseSelect.vue';
-import { calculateVendingVatBreakdown, VENDING_VAT_BASIS_POINTS } from '../../packages/tokens/index.js';
+import { calculateVendingVatBreakdown, VENDING_VAT_BASIS_POINTS } from '@beverly/tokens/vending-vat';
 import { postApi, liveWritesAllowed, getCookie } from '../services/api.js';
 import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf } from '../services/receipt-tools.mjs';
 import { printModelForRoute } from '../services/table-service';

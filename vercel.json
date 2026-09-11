@@ -8,9 +8,6 @@
     "APP_ENV": "production",
     "SUPABASE_URL": "https://qpoipyqgrjsjdvfqmxok.supabase.co",
     "EXPECTED_SUPABASE_PROJECT_REF": "qpoipyqgrjsjdvfqmxok",
-    "APP_ENCRYPTION_KEY": "beverly-production-app-encryption-fallback-key-32b",
-    "ENERGY_AUTHORIZATION_PASSWORD": "123456",
-    "UPSTREAM_PASSWORD": "ACOB_ADMIN",
     "CORS_ORIGINS": "https://acob-beverly.vercel.app,https://admin-acob-beverly.vercel.app,https://vendor-acob-beverly.vercel.app,https://customer-acob-beverly.vercel.app,https://beverly.acoblighting.com,https://vendor.beverly.acoblighting.com",
     "STAFF_PORTAL_URL": "https://beverly.acoblighting.com/wallet-admin",
     "CUSTOMER_APP_URL": "https://acob-beverly.vercel.app/wallet-customer/",
@@ -19,7 +16,12 @@
     "CUSTOMER_FUNDING_CALLBACK_URL": "https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return",
     "VENDOR_FUNDING_CALLBACK_URL": "https://acob-beverly.vercel.app/wallet-vendor/wallet/fund?payment=return",
     "CUSTOMER_METER_ORDER_CALLBACK_URL": "https://acob-beverly.vercel.app/wallet-customer/meter-orders",
-    "PAYSTACK_WEBHOOK_URL": "https://acob-beverly.vercel.app/api/v1/webhook/paystack"
+    "PAYSTACK_WEBHOOK_URL": "https://acob-beverly.vercel.app/api/v1/webhook/paystack",
+    "DATABASE_QUOTA_MB": "500",
+    "DATABASE_QUOTA_WARN_PERCENT": "75",
+    "DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT": "85",
+    "DATABASE_QUOTA_HARD_STOP_PERCENT": "90",
+    "CONSUMPTION_HOT_RETENTION_DAYS": "120"
   },
   "functions": {
     "api/reference.js": {
@@ -43,8 +45,8 @@
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
     { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/archive-readings", "schedule": "0 1 * * *" }
+    { "path": "/api/cron/consumption-sync", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/archive-readings", "schedule": "5 * * * *" }
   ],
   "headers": [
     {

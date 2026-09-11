@@ -28,6 +28,13 @@ assert.match(page, /--wallet-card-radius/, "Archive KPI cards must reuse the sha
 assert.match(page, /props:\s*\{\s*route:\s*\{\s*type:\s*Object/, "ArchiveReportsPage must accept route prop");
 assert.match(page, /applyFilters\(\)/, "Archive Reports must reset paging when filters change");
 assert.match(page, /this\.load\(\{\s*includeSummary:\s*false\s*\}\)/, "Archive pagination and filters must not block on a full KPI summary refresh");
+assert.match(page, /WalletExportMenu/, "Archive Reports must reuse wallet exporting");
+assert.match(page, /resolveArchiveExportRows/, "Archive exports must fetch complete filtered results");
+assert.match(page, /Source freshness/, "Archive Reports must surface synchronization freshness");
+assert.match(page, /Coverage through/, "Archive Reports must distinguish actual coverage");
+assert.match(page, /Refreshed/, "Archive Reports must distinguish refresh timestamps");
+assert.match(page, /summary\.syncHealth/, "Archive Reports must consume durable sync health");
+assert.match(page, /report\.refreshedAt/, "Archive Reports must show report refresh time");
 
 // 2. Manifest contract checks
 assert.match(manifest, /hash:\s*"#\/prepay-report\/archive-reports"/, "Manifest must declare #/prepay-report/archive-reports route");

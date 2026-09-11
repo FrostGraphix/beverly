@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
-import { initLocale } from "@beverly/tokens";
+import { initLocale } from "@beverly/tokens/i18n.js";
 import { installGlobalErrorHandlers, recordClientError } from "./services/error-logger.mjs";
 import "./styles/reference.css";
 

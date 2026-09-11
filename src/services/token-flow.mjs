@@ -2,7 +2,7 @@ import { isGuardedWriteError } from "./guarded-write.mjs";
 import {
   VENDING_VAT_BASIS_POINTS,
   calculateVendingVatBreakdown as calculateSharedVendingVatBreakdown
-} from "../../packages/tokens/index.js";
+} from "@beverly/tokens/vending-vat";
 import { parseTariffUnitPrice } from "./tariff-pricing.mjs";
 
 export { parseTariffUnitPrice } from "./tariff-pricing.mjs";

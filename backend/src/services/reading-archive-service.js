@@ -604,6 +604,14 @@ const SWEEP_MATRIX = [
   { reportType: "payments", granularity: "yearly" }
 ];
 
+function prioritizeArchivePartitions(partitions) {
+  return partitions.slice().sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live))
+    || a.reportType.localeCompare(b.reportType)
+    || a.granularity.localeCompare(b.granularity)
+    || a.periodStart.localeCompare(b.periodStart)
+    || a.stationId.localeCompare(b.stationId));
+}
+
 /**
  * Periods newer than the grace window -- i.e. the current month/year and the one still
  * settling behind it -- that should be kept CURRENT rather than frozen.
@@ -693,18 +701,15 @@ async function runArchiveSweep(options = {}) {
     }
   }
 
-  pending.sort((a, b) => a.reportType.localeCompare(b.reportType)
-    || a.granularity.localeCompare(b.granularity)
-    || a.periodStart.localeCompare(b.periodStart)
-    || a.stationId.localeCompare(b.stationId));
+  const prioritized = prioritizeArchivePartitions(pending);
 
   if (dryRun) {
-    return { ok: true, dryRun: true, pending: pending.slice(0, limit), pendingTotal: pending.length, archived: [] };
+    return { ok: true, dryRun: true, pending: prioritized.slice(0, limit), pendingTotal: prioritized.length, archived: [] };
   }
 
   const archived = [];
   const failures = [];
-  for (const partition of pending.slice(0, limit)) {
+  for (const partition of prioritized.slice(0, limit)) {
     try {
       const result = await archivePartition(partition);
       if (result) {
@@ -720,8 +725,8 @@ async function runArchiveSweep(options = {}) {
 
   return {
     ok: failures.length === 0,
-    pendingTotal: pending.length,
-    remaining: Math.max(0, pending.length - archived.length - failures.length),
+    pendingTotal: prioritized.length,
+    remaining: Math.max(0, prioritized.length - archived.length - failures.length),
     archived,
     failures
   };
@@ -746,7 +751,46 @@ function reportRow(row = {}, slugById = new Map()) {
     sizeMb: Math.round((Number(row.byte_size || 0) / 1048576) * 100) / 100,
     filename: String(row.object_path || "").split("/").pop(),
     objectPath: row.object_path,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    refreshedAt: row.updated_at || row.created_at
+  };
+}
+
+function dateLagDays(day, now = new Date()) {
+  const parsed = new Date(`${String(day || "").slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return Math.max(0, Math.floor((today.getTime() - parsed.getTime()) / 86400000));
+}
+
+async function consumptionSyncHealth(stationId = "", now = new Date()) {
+  const query = [
+    "select=station_id,last_status,last_success_at,cursor_date,source_latest_date,last_error",
+    "order=station_id.asc"
+  ];
+  if (stationId) query.push(`station_id=eq.${encodeURIComponent(stationId)}`);
+  const rows = await supabase.restRequest(`/consumption_sync_station_state?${query.join("&")}`);
+  const stations = (Array.isArray(rows) ? rows : []).map((row) => {
+    const lagDays = dateLagDays(row.cursor_date, now);
+    const stale = lagDays === null || lagDays > 1 || row.last_status !== "succeeded";
+    return {
+      stationId: row.station_id,
+      status: row.last_status,
+      lastSuccessAt: row.last_success_at,
+      cursorDate: row.cursor_date,
+      sourceLatestDate: row.source_latest_date,
+      lagDays,
+      stale,
+      error: row.last_error,
+    };
+  });
+  return {
+    stationCount: stations.length,
+    healthyCount: stations.filter((station) => !station.stale).length,
+    staleCount: stations.filter((station) => station.stale).length,
+    failedCount: stations.filter((station) => station.status === "failed").length,
+    maximumLagDays: stations.reduce((maximum, station) => Math.max(maximum, station.lagDays ?? 0), 0),
+    stations,
   };
 }
 
@@ -862,19 +906,23 @@ async function summaryRowsFallback(filters) {
 async function reportsSummary(filters = {}) {
   const normalized = normalizeListFilters({ ...filters, page: 1, pageSize: 10 });
   try {
-    const summary = await supabase.restRequest("/rpc/archive_reports_summary", {
-      method: "POST",
-      retryable: true,
-      body: { p_station_id: normalized.stationId || null }
-    });
-    if (summary && !Array.isArray(summary)) return summary;
+    const [summary, syncHealth] = await Promise.all([
+      supabase.restRequest("/rpc/archive_reports_summary", {
+        method: "POST",
+        retryable: true,
+        body: { p_station_id: normalized.stationId || null }
+      }),
+      consumptionSyncHealth(normalized.stationId)
+    ]);
+    if (summary && !Array.isArray(summary)) return { ...summary, syncHealth };
   } catch (error) {
     if (!/PGRST202|Could not find the function|schema cache/i.test(String(error?.message || error))) throw error;
   }
 
-  const [rows, slugs] = await Promise.all([
+  const [rows, slugs, syncHealth] = await Promise.all([
     summaryRowsFallback(normalized),
-    oemSlugById()
+    oemSlugById(),
+    consumptionSyncHealth(normalized.stationId)
   ]);
   const list = Array.isArray(rows) ? rows : [];
   const byStation = {};
@@ -918,7 +966,8 @@ async function reportsSummary(filters = {}) {
     byGranularity,
     byOem,
     byStation,
-    dateRange: { earliest, latest }
+    dateRange: { earliest, latest },
+    syncHealth
   };
 }
 
@@ -1000,6 +1049,7 @@ module.exports = {
   ARCHIVE_COLUMNS,
   PAYMENT_COLUMNS,
   archiveFilename,
+  consumptionSyncHealth,
   SWEEP_MATRIX,
   BUCKET,
   periodBounds,
@@ -1011,6 +1061,7 @@ module.exports = {
   objectPathFor,
   reportsSummary,
   parseContentRangeTotal,
+  prioritizeArchivePartitions,
   runArchiveSweep,
   signedDownloadUrl,
   toCsv

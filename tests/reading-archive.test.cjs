@@ -18,6 +18,14 @@ process.env.ARCHIVE_GRACE_DAYS = "35";
 
 const archive = require("../backend/src/services/reading-archive-service");
 
+{
+  const ordered = archive.prioritizeArchivePartitions([
+    { stationId: "TUNGA", reportType: "readings", granularity: "monthly", periodStart: "2025-01-01", live: false },
+    { stationId: "OFEMILI", reportType: "readings", granularity: "monthly", periodStart: "2026-09-01", live: true },
+  ]);
+  assert.strictEqual(ordered[0].stationId, "OFEMILI", "live archive refreshes must run first");
+}
+
 // ── 0. Catalogue pagination/filter validation ───────────────────────────────
 {
   assert.deepStrictEqual(

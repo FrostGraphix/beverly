@@ -5,7 +5,9 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-const sharedVat = read('packages/tokens/index.js');
+const tokenIndex = read('packages/tokens/index.js');
+assert.match(tokenIndex, /export \* from '\.\/vending-vat\.js'/);
+const sharedVat = read('packages/tokens/vending-vat.js');
 assert.match(sharedVat, /VENDING_VAT_BASIS_POINTS\s*=\s*750/);
 assert.match(sharedVat, /energyAmountMinor\s*=\s*Math\.round\(\(grossAmountMinor \* 10000\) \/ \(10000 \+ vatRateBasisPoints\)\)/);
 assert.match(sharedVat, /vatAmountMinor\s*=\s*grossAmountMinor - energyAmountMinor/);

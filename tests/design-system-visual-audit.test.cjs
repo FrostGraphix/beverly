@@ -57,7 +57,14 @@ function apiBody(url) {
     return { code: 0, data: { data: [{ userId: "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin" }], total: 1 } };
   }
   if (url.includes("/system/oem/list")) {
-    return { code: 0, data: { oems: [{ id: "calinmeter", slug: "calinmeter", displayName: "Calinmeter", status: "active", isSeedDefault: true, capabilities: {} }] } };
+    return {
+      code: 0,
+      data: {
+        oems: [{ id: "calinmeter", slug: "calinmeter", displayName: "Calinmeter", status: "active", isSeedDefault: true, capabilities: {}, communityCount: 1, communityCountStatus: "stale" }],
+        degraded: true,
+        dependencies: { stationApi: { status: "unavailable", code: "STATION_API_UNAVAILABLE" } }
+      }
+    };
   }
   if (url.includes("/dashboard/readPanelGroup")) {
     return { code: 0, data: { totalAccountCount: 100, totalPurchaseTimes: 20, totalPurchaseUnit: 300, totalPurchaseMoney: 400 } };
@@ -128,6 +135,10 @@ async function login(page) {
   await page.click('[data-testid="login-submit"]');
   await page.waitForSelector(".dashboard-editor-container, .oem-hub", { timeout: 10000 });
   if (await page.locator(".oem-hub").isVisible().catch(() => false)) {
+    const warning = page.locator('[data-testid="oem-degraded-warning"]');
+    assert.equal(await warning.getAttribute("role"), "status", "degraded warning announces politely");
+    assert.match(await warning.innerText(), /station counts may be outdated/i);
+    assert.equal(await page.locator(".oem-card__surface").count(), 1, "degraded mode preserves OEM cards");
     await page.locator(".oem-card__surface").first().click();
   }
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
