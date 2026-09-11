@@ -117,6 +117,7 @@ function boundedPercent(value, fallback) {
 
 async function createSyncRun(stationId, mode) {
   const id = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
   await supabase.restRequest("/consumption_sync_runs", {
     method: "POST",
     prefer: "return=minimal",
@@ -125,13 +126,13 @@ async function createSyncRun(stationId, mode) {
       station_id: stationId,
       mode,
       status: "running",
-      started_at: new Date().toISOString(),
+      started_at: startedAt,
     },
   });
-  return id;
+  return { id, startedAt };
 }
 
-async function finishSyncRun(id, stationId, mode, result, error, attempts) {
+async function finishSyncRun(id, stationId, mode, result, error, attempts, startedAt) {
   const finishedAt = new Date().toISOString();
   const status = error ? "failed" : result?.complete ? "succeeded" : "partial";
   await supabase.restRequest(`/consumption_sync_runs?id=eq.${encodeURIComponent(id)}`, {
@@ -159,6 +160,7 @@ async function finishSyncRun(id, stationId, mode, result, error, attempts) {
       station_id: stationId,
       last_mode: mode,
       last_status: status,
+      last_started_at: startedAt,
       last_finished_at: finishedAt,
       ...(status === "succeeded" ? { last_success_at: finishedAt } : {}),
       cursor_date: result?.storedThrough || result?.latestReadingDate || null,
@@ -394,10 +396,12 @@ async function runConsumptionSync(input = {}) {
   const failures = [];
   for (const stationId of stationIds) {
     const attempts = stationAttemptsForMode(mode, input);
-    const runId = await createSyncRun(stationId, mode);
+    const run = await createSyncRun(stationId, mode);
+    let attemptsUsed = 0;
     let stationResult = null;
     let lastError = null;
     for (let attempt = 1; attempt <= attempts; attempt++) {
+      attemptsUsed = attempt;
       try {
         stationResult = await syncStation(stationId, statsByStation.get(stationId), { ...input, mode });
         if (stationResult.storedRows > 0) {
@@ -412,14 +416,14 @@ async function runConsumptionSync(input = {}) {
       }
     }
     if (stationResult) {
-      await finishSyncRun(runId, stationId, mode, stationResult, null, attempts);
+      await finishSyncRun(run.id, stationId, mode, stationResult, null, attemptsUsed, run.startedAt);
       stations.push(stationResult);
     } else {
-      await finishSyncRun(runId, stationId, mode, null, lastError, attempts);
+      await finishSyncRun(run.id, stationId, mode, null, lastError, attemptsUsed, run.startedAt);
       failures.push({
         stationId,
         mode,
-        attempts,
+        attempts: attemptsUsed,
         error: lastError instanceof Error ? lastError.message : String(lastError),
       });
     }

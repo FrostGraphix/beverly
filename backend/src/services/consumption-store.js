@@ -2,6 +2,7 @@
 
 const supabase = require("./supabase-service");
 const { normalizeIntervalRow, conditionActive } = require("./abnormal-alarm-service");
+const { consumptionSyncHealth } = require("./consumption-sync-health-service");
 
 // Signal columns on daily_meter_readings, in DB column -> upstream camelCase order.
 // Single source of truth for the write-side (rowToRecord) and read-side
@@ -1380,6 +1381,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   const granularity = normalizeGranularity(request.granularity);
   const topLimit = Math.min(Math.max(Number(request.topMeters || request.topLimit || 20), 1), 200);
   if (!from || !to) return null;
+  const freshnessPromise = consumptionSyncHealth(stationIds);
 
   const dayMs = 86400000;
   const windowDays = Math.max(
@@ -1404,12 +1406,14 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     p_top_limit: topLimit,
   });
   if (summary) {
-    return await buildAnalyticsFromSummary({
+    const response = await buildAnalyticsFromSummary({
       summary, from, to, priorFrom, priorTo,
       granularity: chartGranularity,
       requestedGranularity: granularity,
       windowDays, stationId,
     });
+    response.body.data.freshness = await freshnessPromise;
+    return response;
   }
 
   // ── Try aggregate table path ──────────────────────────────────────────────
@@ -1457,6 +1461,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     data.totals.meterReadComplete = data.totals.meterCount > 0
       && metersWithLatest === data.totals.meterCount;
     data.totals.source = "aggregated";
+    data.freshness = await freshnessPromise;
     return response;
   }
 
@@ -1638,6 +1643,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   const distinctDays = overallByDate.size;
   const customerCount = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key)).size;
   const latestOdometerKwh = Array.from(latestByStation.values()).reduce((sum, entry) => sum + entry.latestOdometerKwh, 0);
+  const freshness = await freshnessPromise;
   return {
     status: 200,
     body: {
@@ -1677,6 +1683,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
         },
         seasonality,
         topMeters,
+        freshness,
       },
       _proxy: {
         source: "supabase-station-analytics",

@@ -249,4 +249,22 @@ const archive = require("../backend/src/services/reading-archive-service");
   assert(gz.length < Buffer.byteLength(csv, "utf8") / 4, "repetitive reading rows should compress well past 4x");
 }
 
+{
+  const january = 'station_id,customer_name\nOFEMILI,"Ada\nOkafor"\n';
+  const february = 'station_id,customer_name\nOFEMILI,Bola\n';
+  const joined = archive.joinMonthlyCsvParts([
+    { csv: january, rowCount: 1 },
+    { csv: february, rowCount: 1 },
+  ]);
+  assert.strictEqual(joined.rowCount, 2);
+  assert.strictEqual(joined.csv, 'station_id,customer_name\nOFEMILI,"Ada\nOkafor"\nOFEMILI,Bola\n');
+  assert.throws(
+    () => archive.joinMonthlyCsvParts([
+      { csv: january, rowCount: 1 },
+      { csv: 'different,header\nOFEMILI,Bola\n', rowCount: 1 },
+    ]),
+    /column drift/
+  );
+}
+
 console.log("reading-archive ok");

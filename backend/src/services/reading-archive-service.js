@@ -26,6 +26,7 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 const supabase = require("./supabase-service");
 const { DEFAULT_OEM_SLUG } = require("./oem-registry-service");
+const { consumptionSyncHealth } = require("./consumption-sync-health-service");
 
 const BUCKET = process.env.ARCHIVE_BUCKET || "archives";
 const REPORT_TYPE = "readings";
@@ -435,6 +436,25 @@ async function readArchiveObject(bucket, objectPath) {
   return zlib.gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8");
 }
 
+function joinMonthlyCsvParts(parts) {
+  let header = null;
+  const body = [];
+  let rowCount = 0;
+  for (const part of parts) {
+    const csv = String(part.csv || "");
+    const headerEnd = csv.indexOf("\n");
+    if (headerEnd < 0) continue;
+    const partHeader = csv.slice(0, headerEnd).replace(/\r$/, "");
+    if (header === null) header = partHeader;
+    else if (partHeader !== header) throw new Error("column drift between monthly parts");
+    const partBody = csv.slice(headerEnd + 1).replace(/\n$/, "");
+    if (partBody) body.push(partBody);
+    rowCount += Number(part.rowCount || 0);
+  }
+  if (header === null) return null;
+  return { csv: `${[header, ...body].join("\n")}\n`, rowCount };
+}
+
 /**
  * Build a yearly bundle by CONCATENATING that year's monthly archive objects, rather
  * than re-querying the source tables.
@@ -459,23 +479,19 @@ async function archiveYearlyFromMonthly({ stationId, year, reportType, oem }) {
   const months = Array.isArray(parts) ? parts : [];
   if (!months.length) return null;
 
-  let header = null;
-  const body = [];
-  let rowCount = 0;
+  const csvParts = [];
   for (const part of months) {
     const csv = await readArchiveObject(part.bucket || BUCKET, part.object_path);
-    const lines = csv.split("\n").filter(Boolean);
-    if (!lines.length) continue;
-    if (header === null) header = lines[0];
-    else if (lines[0] !== header) {
-      throw new Error(`column drift between monthly parts for ${stationId} ${year}`);
-    }
-    for (let i = 1; i < lines.length; i += 1) body.push(lines[i]);
-    rowCount += lines.length - 1;
+    csvParts.push({ csv, rowCount: part.row_count });
   }
-  if (header === null) return null;
-
-  const csv = `${[header, ...body].join("\n")}\n`;
+  let joined;
+  try {
+    joined = joinMonthlyCsvParts(csvParts);
+  } catch (error) {
+    throw new Error(`${error.message} for ${stationId} ${year}`);
+  }
+  if (!joined) return null;
+  const { csv, rowCount } = joined;
   const gzipped = zlib.gzipSync(Buffer.from(csv, "utf8"), { level: 9 });
   const objectPath = objectPathFor(stationId, `${year}-01-01`, reportType, "yearly", oem.slug);
   await supabase.uploadStorageObject(BUCKET, objectPath, gzipped, "application/gzip");
@@ -773,44 +789,6 @@ async function archivePartition({ stationId, periodStart, reportType = REPORT_TY
   return archiveProvidedRows({ stationId, periodStart, rows, reportType });
 }
 
-function dateLagDays(day, now = new Date()) {
-  const parsed = new Date(`${String(day || "").slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return Math.max(0, Math.floor((today.getTime() - parsed.getTime()) / 86400000));
-}
-
-async function consumptionSyncHealth(stationId = "", now = new Date()) {
-  const query = [
-    "select=station_id,last_status,last_success_at,cursor_date,source_latest_date,last_error",
-    "order=station_id.asc"
-  ];
-  if (stationId) query.push(`station_id=eq.${encodeURIComponent(stationId)}`);
-  const rows = await supabase.restRequest(`/consumption_sync_station_state?${query.join("&")}`);
-  const stations = (Array.isArray(rows) ? rows : []).map((row) => {
-    const lagDays = dateLagDays(row.cursor_date, now);
-    const stale = lagDays === null || lagDays > 1 || row.last_status !== "succeeded";
-    return {
-      stationId: row.station_id,
-      status: row.last_status,
-      lastSuccessAt: row.last_success_at,
-      cursorDate: row.cursor_date,
-      sourceLatestDate: row.source_latest_date,
-      lagDays,
-      stale,
-      error: row.last_error,
-    };
-  });
-  return {
-    stationCount: stations.length,
-    healthyCount: stations.filter((station) => !station.stale).length,
-    staleCount: stations.filter((station) => station.stale).length,
-    failedCount: stations.filter((station) => station.status === "failed").length,
-    maximumLagDays: stations.reduce((maximum, station) => Math.max(maximum, station.lagDays ?? 0), 0),
-    stations,
-  };
-}
-
 function normalizeListFilters(filters = {}) {
   const page = Math.max(1, Math.trunc(Number(filters.page) || 1));
   const requestedPageSize = Math.trunc(Number(filters.pageSize) || 10);
@@ -939,7 +917,7 @@ async function reportsSummary(filters = {}) {
   const [rows, slugs, syncHealth] = await Promise.all([
     summaryRowsFallback(normalized),
     oemSlugById(),
-    consumptionSyncHealth(normalized.stationId)
+    consumptionSyncHealth(normalized.stationId ? [normalized.stationId] : [])
   ]);
   const list = Array.isArray(rows) ? rows : [];
   const byStation = {};
@@ -1086,6 +1064,7 @@ module.exports = {
   resolveOemForStation,
   archivePartition,
   archiveProvidedRows,
+  joinMonthlyCsvParts,
   listReports,
   normalizeListFilters,
   newestEligibleMonth,

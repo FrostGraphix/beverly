@@ -124,6 +124,14 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.equal(backfill.ok, false, "partial syncs must not report completion");
   const partialRun = writes.find((write) => write.pathname.includes("/consumption_sync_runs?id=eq."));
   assert.equal(partialRun.options.body.status, "partial", "page-limited runs must stay partial");
+  assert.equal(partialRun.options.body.attempts, 1, "durable runs must store used attempts");
+  const partialStart = writes.find((write) => write.pathname === "/consumption_sync_runs");
+  const partialState = writes.find((write) => write.pathname.includes("/consumption_sync_station_state?on_conflict=station_id"));
+  assert.equal(
+    partialState.options.body.last_started_at,
+    partialStart.options.body.started_at,
+    "station state must retain the actual start time"
+  );
 
   let failedOnce = false;
   global.fetch = async (url, init) => {

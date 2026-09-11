@@ -29,8 +29,11 @@ assert(
   stationPage.includes("triggerMeterAggregateRefresh(stationIds)"),
   "station page must call refresh with stationIds"
 );
+assert(stationPage.includes("Source freshness"), "station page must label source freshness");
+assert(stationPage.includes("data?.freshness"), "station page must consume synchronization health");
+assert(stationPage.includes("maximumLagDays"), "station page must show synchronization lag");
 assert(
-  adminView.includes("api.post('/api/v1/admin/consumption/refresh', { stationIds })"),
+  adminView.includes("/api/v1/admin/consumption/refresh") && adminView.includes("stationIds: [selectedStn.value]"),
   "wallet admin view must use station-scoped refresh payload"
 );
 assert(
