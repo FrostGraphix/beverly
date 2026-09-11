@@ -481,6 +481,8 @@ const rpcAnalytics = await store.readStationConsumptionAnalytics({
 assert.strictEqual(rpcAnalytics.status, 200);
 assert.strictEqual(rpcAnalytics.body._proxy.source, "supabase-station-analytics-rpc");
 assert.strictEqual(rpcAnalytics.body.data.totals.consumedKwh, 20);
+assert.strictEqual(rpcAnalytics.body.data.freshness.stationCount, 0);
+assert.strictEqual(rpcAnalytics.body.data.freshness.staleCount, 0);
 assert.strictEqual(rpcAnalytics.body.data.totals.customerCount, 1);
 assert.strictEqual(rpcAnalytics.body.data.totals.meterReadAsOf, "2026-05-07");
 assert.strictEqual(rpcAnalytics.body.data.totals.meterReadCoveragePct, 100);

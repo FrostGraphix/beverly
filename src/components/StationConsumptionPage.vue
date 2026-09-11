@@ -29,6 +29,14 @@
           <span v-if="lastAggRefresh" class="scc-badge scc-badge--info" :title="'Aggregates rebuilt at ' + lastAggRefresh">
             ✓ Rebuilt {{ lastAggRefresh }}
           </span>
+          <span
+            v-if="data?.freshness?.available"
+            :class="['scc-badge', data.freshness.staleCount ? 'scc-badge--slow' : 'scc-badge--fast']"
+            :title="`Source freshness: ${data.freshness.maximumLagDays} day maximum lag`"
+          >
+            Source freshness: {{ data.freshness.staleCount ? `${data.freshness.staleCount} stale` : 'Current' }}
+            · {{ data.freshness.maximumLagDays }}d lag
+          </span>
         </div>
         <div class="scc-hero-actions">
           <button class="scc-hbtn scc-hbtn--ghost" :disabled="refreshingAgg" @click="refreshAggregates"

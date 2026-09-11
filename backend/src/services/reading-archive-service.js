@@ -26,6 +26,7 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 const supabase = require("./supabase-service");
 const { DEFAULT_OEM_SLUG } = require("./oem-registry-service");
+const { consumptionSyncHealth } = require("./consumption-sync-health-service");
 
 const BUCKET = process.env.ARCHIVE_BUCKET || "archives";
 const REPORT_TYPE = "readings";
@@ -773,44 +774,6 @@ async function archivePartition({ stationId, periodStart, reportType = REPORT_TY
   return archiveProvidedRows({ stationId, periodStart, rows, reportType });
 }
 
-function dateLagDays(day, now = new Date()) {
-  const parsed = new Date(`${String(day || "").slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return Math.max(0, Math.floor((today.getTime() - parsed.getTime()) / 86400000));
-}
-
-async function consumptionSyncHealth(stationId = "", now = new Date()) {
-  const query = [
-    "select=station_id,last_status,last_success_at,cursor_date,source_latest_date,last_error",
-    "order=station_id.asc"
-  ];
-  if (stationId) query.push(`station_id=eq.${encodeURIComponent(stationId)}`);
-  const rows = await supabase.restRequest(`/consumption_sync_station_state?${query.join("&")}`);
-  const stations = (Array.isArray(rows) ? rows : []).map((row) => {
-    const lagDays = dateLagDays(row.cursor_date, now);
-    const stale = lagDays === null || lagDays > 1 || row.last_status !== "succeeded";
-    return {
-      stationId: row.station_id,
-      status: row.last_status,
-      lastSuccessAt: row.last_success_at,
-      cursorDate: row.cursor_date,
-      sourceLatestDate: row.source_latest_date,
-      lagDays,
-      stale,
-      error: row.last_error,
-    };
-  });
-  return {
-    stationCount: stations.length,
-    healthyCount: stations.filter((station) => !station.stale).length,
-    staleCount: stations.filter((station) => station.stale).length,
-    failedCount: stations.filter((station) => station.status === "failed").length,
-    maximumLagDays: stations.reduce((maximum, station) => Math.max(maximum, station.lagDays ?? 0), 0),
-    stations,
-  };
-}
-
 function normalizeListFilters(filters = {}) {
   const page = Math.max(1, Math.trunc(Number(filters.page) || 1));
   const requestedPageSize = Math.trunc(Number(filters.pageSize) || 10);
@@ -929,7 +892,7 @@ async function reportsSummary(filters = {}) {
         retryable: true,
         body: { p_station_id: normalized.stationId || null }
       }),
-      consumptionSyncHealth(normalized.stationId)
+      consumptionSyncHealth(normalized.stationId ? [normalized.stationId] : [])
     ]);
     if (summary && !Array.isArray(summary)) return { ...summary, syncHealth };
   } catch (error) {
@@ -939,7 +902,7 @@ async function reportsSummary(filters = {}) {
   const [rows, slugs, syncHealth] = await Promise.all([
     summaryRowsFallback(normalized),
     oemSlugById(),
-    consumptionSyncHealth(normalized.stationId)
+    consumptionSyncHealth(normalized.stationId ? [normalized.stationId] : [])
   ]);
   const list = Array.isArray(rows) ? rows : [];
   const byStation = {};
