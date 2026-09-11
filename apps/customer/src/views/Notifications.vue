@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { publishNotificationCount } from '@beverly/tokens';
+import NotificationDetailModal from '@beverly/tokens/NotificationDetailModal.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ const loading     = ref(false);
 const loadingMore = ref(false);
 const markingAll  = ref(false);
 const inboxError  = ref('');
+const selectedNotification = ref<Notification | null>(null);
 const filter = ref<'all' | 'unread' | 'read'>('all');
 const filters = ['all', 'unread', 'read'] as const;
 const filteredItems = computed(() => items.value.filter((item) =>
@@ -226,9 +228,22 @@ async function markRead(id: string) {
 }
 
 async function openNotification(notification: Notification) {
+    selectedNotification.value = notification;
     await markRead(notification.id);
-    const path = typeof notification.metadata?.path === 'string' ? notification.metadata.path : '';
+}
+
+async function followNotificationPath() {
+    const path = typeof selectedNotification.value?.metadata?.path === 'string'
+        ? selectedNotification.value.metadata.path
+        : '';
+    selectedNotification.value = null;
     if (path) await router.push(path);
+}
+
+function notificationTypeLabel(type: string) {
+    return type === 'admin_announcement'
+        ? 'Announcement'
+        : type.replace(/_/g, ' ');
 }
 
 async function markAllRead() {
@@ -338,10 +353,12 @@ onMounted(async () => {
       </div>
 
       <div v-else class="bw-stack" style="gap: var(--s-2)">
-        <div
+        <button
           v-for="n in filteredItems"
           :key="n.id"
-          :class="['notif-item', { unread: !n.read }]"
+          type="button"
+          :class="['notif-item', 'notification-card', { unread: !n.read }]"
+          aria-haspopup="dialog"
           @click="openNotification(n)"
         >
           <!-- Icon -->
@@ -357,12 +374,12 @@ onMounted(async () => {
               <p class="notif-title">{{ n.title }}</p>
               <span class="notif-time">{{ fmtDate(n.created_at) }}</span>
             </div>
-            <p class="notif-body">{{ n.body }}</p>
+            <p class="notif-body notification-preview">{{ n.body }}</p>
           </div>
 
           <!-- Unread dot -->
           <div v-if="!n.read" class="notif-unread-dot" />
-        </div>
+        </button>
       </div>
 
       <!-- Load more -->
@@ -414,6 +431,16 @@ onMounted(async () => {
         {{ savingPrefs ? 'Saving…' : 'Save preferences' }}
       </button>
     </div>
+
+    <NotificationDetailModal
+      v-if="selectedNotification"
+      :notification="selectedNotification"
+      :type-label="notificationTypeLabel(selectedNotification.type)"
+      :formatted-date="fmtDate(selectedNotification.created_at)"
+      action-label="Open update"
+      @close="selectedNotification = null"
+      @navigate="followNotificationPath"
+    />
 
   </AppShell>
 </template>
@@ -491,6 +518,7 @@ onMounted(async () => {
 
 /* Inbox items */
 .notif-item {
+  width: 100%;
   display: flex;
   align-items: flex-start;
   gap: var(--s-3);
@@ -504,6 +532,9 @@ onMounted(async () => {
   cursor: pointer;
   transition: background 0.12s;
   position: relative;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
 }
 .notif-item.unread {
   background: oklch(from var(--brand) l c h / 0.05);
@@ -540,6 +571,7 @@ onMounted(async () => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.notification-preview { overflow-wrap: anywhere; }
 .notif-time {
   font-size: 10px;
   color: var(--text-dim);

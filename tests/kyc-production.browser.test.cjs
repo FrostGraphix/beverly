@@ -124,7 +124,12 @@ async function verifyVendor(browser, base) {
     if (pathname.endsWith("/me")) return json(route, user);
     if (pathname.endsWith("/kyc/status")) {
       if (failStatus) return json(route, { error: "status_unavailable", message: "KYC status failed." }, 503);
-      return json(route, { kyc_tier: 1, kyc_status: "verified", review: null, documents: [] });
+      return json(route, {
+        kyc_tier: 1,
+        kyc_status: "rejected",
+        review: { id: "rejected-vendor-review", requested_tier: 2, status: "rejected", reviewer_note: "Use a newer utility bill." },
+        documents: [],
+      });
     }
     if (pathname.endsWith("/kyc/documents/upload-url")) {
       const body = request.postDataJSON();
@@ -142,18 +147,52 @@ async function verifyVendor(browser, base) {
 
   const page = await context.newPage();
   await page.goto(`${base}/kyc`, { waitUntil: "networkidle" });
+  const kycIconBox = await page.getByRole("link", { name: "KYC verification" }).locator("svg").boundingBox();
+  assert.ok(kycIconBox && kycIconBox.width <= 24 && kycIconBox.height <= 24, "KYC navigation icon must remain compact");
+  await page.setViewportSize({ width: 517, height: 900 });
+  await page.waitForTimeout(350);
+  const closedSidebarBox = await page.locator(".bw-sidebar").boundingBox();
+  assert.ok(closedSidebarBox && closedSidebarBox.x + closedSidebarBox.width <= 0, "closed mobile navigation must not cover KYC content");
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("heading", { name: "Status unavailable" }).waitFor();
+  assert.equal(await page.getByRole("alert").count(), 1, "status failure must be announced once");
   assert.equal(await page.getByRole("heading", { name: "Request Tier 2" }).count(), 0);
   failStatus = false;
   await page.getByRole("button", { name: "Retry" }).click();
   await page.getByRole("heading", { name: "Request Tier 2" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Use a newer utility bill." }).waitFor();
+  await page.getByText("0 of 3 required files selected.").waitFor({ timeout: 1_000 });
+  await page.setViewportSize({ width: 517, height: 900 });
+  await page.waitForTimeout(350);
+  const badgeSizing = await page.locator(".section-head .bw-badge").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  assert.ok(badgeSizing.scrollWidth <= badgeSizing.clientWidth, "mobile review badge must remain readable");
+  const pageTitleBox = await page.getByRole("heading", { name: "KYC verification" }).boundingBox();
+  const refreshBox = await page.getByRole("button", { name: "Refresh", exact: true }).boundingBox();
+  assert.ok(pageTitleBox && refreshBox && refreshBox.y >= pageTitleBox.y + pageTitleBox.height, "mobile refresh action must stack below the page heading");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  if (process.env.KYC_AUDIT_DIR) {
+    fs.mkdirSync(process.env.KYC_AUDIT_DIR, { recursive: true });
+    await page.screenshot({ path: path.join(process.env.KYC_AUDIT_DIR, "01-vendor-kyc-recovery-desktop.png"), fullPage: true });
+    await page.setViewportSize({ width: 517, height: 900 });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: path.join(process.env.KYC_AUDIT_DIR, "02-vendor-kyc-recovery-mobile.png"), fullPage: true });
+    await page.locator(".submission-card").screenshot({ path: path.join(process.env.KYC_AUDIT_DIR, "03-vendor-kyc-upload-mobile.png") });
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
+  const fields = page.locator(".upload-field");
+  await fields.nth(0).locator('input[type="file"]').setInputFiles({ name: "identity.txt", mimeType: "text/plain", buffer: Buffer.from("not accepted") });
+  await page.getByRole("alert").filter({ hasText: "Use JPEG, PNG, WebP, or PDF files." }).waitFor();
+  assert.equal(uploadRequests.length, 0);
   const selector = page.getByLabel("Identity document type");
   assert.deepEqual(await selector.locator("option").evaluateAll((items) => items.map((item) => item.value)), identityTypes);
   await selector.selectOption("drivers_license");
-  const fields = page.locator(".upload-field");
   await fields.nth(0).locator('input[type="file"]').setInputFiles({ name: "licence.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") });
   await fields.nth(1).locator('input[type="file"]').setInputFiles({ name: "selfie.jpg", mimeType: "image/jpeg", buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) });
   await fields.nth(2).locator('input[type="file"]').setInputFiles({ name: "utility.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") });
+  await page.getByText("3 of 3 required files selected.").waitFor({ timeout: 1_000 });
   await page.getByRole("button", { name: "Submit Tier 2 review" }).click();
   await page.getByText("Tier 2 review submitted.").waitFor();
   assert.deepEqual(uploadRequests.map((item) => item.document_type), ["drivers_license", "selfie", "utility_bill"]);
