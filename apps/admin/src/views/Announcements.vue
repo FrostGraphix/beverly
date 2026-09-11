@@ -90,6 +90,7 @@ const announcementExportColumns: WalletExportColumn<Announcement>[] = [
 const loadingRecipients = ref(false);
 const loadingHistory = ref(false);
 const sending = ref(false);
+const retryingAnnouncementId = ref<string | null>(null);
 const broadcastRequestKey = ref(crypto.randomUUID());
 const banner = ref<{ tone: 'success' | 'danger'; text: string } | null>(null);
 const feedback = ref<{ id: number; open: boolean; tone: 'success' | 'error'; title: string; message: string }>({
@@ -341,6 +342,29 @@ async function sendAnnouncement() {
     }
 }
 
+async function retryAnnouncementEmail() {
+    const announcement = selectedHistory.value;
+    if (!announcement || retryingAnnouncementId.value) return;
+    retryingAnnouncementId.value = announcement.id;
+    try {
+        const response = await api.post<{ email_delivered: number; remaining: number }>(
+            `/api/v1/admin/announcements/${announcement.id}/retry-email`,
+            {},
+            { headers: { 'Idempotency-Key': crypto.randomUUID() } },
+        );
+        const retryMessage = response.remaining
+            ? `${response.email_delivered} emails accepted. ${response.remaining} still need review.`
+            : `${response.email_delivered} emails accepted. Delivery retry completed.`;
+        showFeedback(response.remaining ? 'error' : 'success', response.remaining ? 'Retry incomplete' : 'Email retry completed', retryMessage);
+        await loadHistory();
+        selectedHistory.value = history.value.find((item) => item.id === announcement.id) ?? null;
+    } catch (error: any) {
+        showFeedback('error', 'Email retry failed', error?.message ?? 'Resend did not accept the retry.');
+    } finally {
+        retryingAnnouncementId.value = null;
+    }
+}
+
 watch([selectedAudiences, systemWide, deliveryMode], () => {
     void loadRecipients();
 });
@@ -584,6 +608,13 @@ onBeforeUnmount(() => {
             <div><dt>Emails sent</dt><dd>{{ selectedHistory.email_sent_count ?? 0 }} / {{ selectedHistory.email_recipient_count ?? 0 }}</dd></div>
             <div><dt>Email failures</dt><dd>{{ selectedHistory.email_failed_count ?? 0 }}</dd></div>
           </dl>
+          <button
+            v-if="String(selectedHistory.channel || '').split(',').includes('email') && ['partial', 'failed'].includes(selectedHistory.delivery_status || '') && Number(selectedHistory.email_failed_count || 0) > 0"
+            type="button"
+            class="bw-btn an-detail-retry"
+            :disabled="retryingAnnouncementId === selectedHistory.id"
+            @click="retryAnnouncementEmail"
+          >{{ retryingAnnouncementId === selectedHistory.id ? 'Retrying email…' : 'Retry failed emails' }}</button>
         </section>
       </div>
     </Teleport>
@@ -944,6 +975,7 @@ onBeforeUnmount(() => {
     line-height: 1.65;
     white-space: pre-wrap;
 }
+
 .an-detail-message > p { margin: 0 0 var(--s-3); }
 .an-detail-message > p:last-child { margin-bottom: 0; }
 .an-detail-item {
@@ -979,6 +1011,7 @@ onBeforeUnmount(() => {
 }
 .an-detail-counts dt { color: var(--text-muted); font-size: var(--t-xs); }
 .an-detail-counts dd { margin: var(--s-1) 0 0; font-weight: 800; }
+.an-detail-retry { width: 100%; margin-top: var(--s-4); }
 @media (max-width: 760px) {
     .an-scope {
         grid-template-columns: 1fr;
