@@ -133,12 +133,12 @@ async function createSyncRun(stationId, mode) {
 
 async function finishSyncRun(id, stationId, mode, result, error, attempts) {
   const finishedAt = new Date().toISOString();
-  const succeeded = !error;
+  const status = error ? "failed" : result?.complete ? "succeeded" : "partial";
   await supabase.restRequest(`/consumption_sync_runs?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     prefer: "return=minimal",
     body: {
-      status: succeeded ? "succeeded" : "failed",
+      status,
       finished_at: finishedAt,
       attempts,
       from_date: result?.from || null,
@@ -158,10 +158,9 @@ async function finishSyncRun(id, stationId, mode, result, error, attempts) {
     body: {
       station_id: stationId,
       last_mode: mode,
-      last_status: succeeded ? "succeeded" : "failed",
-      last_started_at: finishedAt,
+      last_status: status,
       last_finished_at: finishedAt,
-      last_success_at: succeeded ? finishedAt : null,
+      ...(status === "succeeded" ? { last_success_at: finishedAt } : {}),
       cursor_date: result?.storedThrough || result?.latestReadingDate || null,
       source_latest_date: result?.sourceLatestReadingDate || null,
       last_fetched_rows: Number(result?.fetchedRows || 0),
@@ -202,6 +201,26 @@ async function databaseQuotaState(input, mode) {
   };
 }
 
+async function recordQuotaPause(stationIds, mode, quota) {
+  const measuredAt = new Date().toISOString();
+  const rows = (stationIds.length ? stationIds : ["AUTO"]).map((stationId) => ({
+    id: crypto.randomUUID(),
+    station_id: stationId,
+    mode,
+    status: "quota_paused",
+    started_at: measuredAt,
+    finished_at: measuredAt,
+    attempts: 1,
+    stop_reason: quota.reason,
+    error_message: `Database usage ${quota.usedPercent}% reached ${quota.reason}`,
+  }));
+  await supabase.restRequest("/consumption_sync_runs", {
+    method: "POST",
+    prefer: "return=minimal",
+    body: rows.length === 1 ? rows[0] : rows,
+  });
+}
+
 function maxPagesForMode(mode, input) {
   const explicit = Number(input.maxPagesPerStation ?? input.maxPages);
   if (Number.isFinite(explicit) && explicit >= 0) return Math.floor(explicit);
@@ -219,12 +238,12 @@ function stationAttemptsForMode(mode, input) {
 
 function syncWindow(mode, stationStats, input) {
   const to = normalizeDate(input.to, today());
+  const retentionDays = positiveInteger(
+    input.hotRetentionDays,
+    positiveInteger(process.env.CONSUMPTION_HOT_RETENTION_DAYS, 120)
+  );
+  const retentionFrom = addDays(to, -retentionDays);
   if (mode === "backfill") {
-    const retentionDays = positiveInteger(
-      input.hotRetentionDays,
-      positiveInteger(process.env.CONSUMPTION_HOT_RETENTION_DAYS, 120)
-    );
-    const retentionFrom = addDays(to, -retentionDays);
     const requestedFrom = normalizeDate(input.from, retentionFrom);
     return {
       from: requestedFrom > retentionFrom ? requestedFrom : retentionFrom,
@@ -234,8 +253,11 @@ function syncWindow(mode, stationStats, input) {
   }
   const latest = normalizeDate(stationStats?.latestReadingDate);
   const lookbackDays = Math.max(0, positiveInteger(input.lookbackDays, positiveInteger(process.env.CONSUMPTION_SYNC_LOOKBACK_DAYS, 0)));
+  const requestedFrom = latest
+    ? addDays(latest, -lookbackDays)
+    : normalizeDate(input.from, retentionFrom);
   return {
-    from: latest ? addDays(latest, -lookbackDays) : normalizeDate(input.from, process.env.CONSUMPTION_BACKFILL_FROM || "2025-01-01"),
+    from: requestedFrom > retentionFrom ? requestedFrom : retentionFrom,
     to,
     reason: latest ? "latest_reading" : "empty_station",
     latestReadingDate: latest || null,
@@ -243,7 +265,7 @@ function syncWindow(mode, stationStats, input) {
 }
 
 async function syncStation(stationId, stationStats, options) {
-  const pageSize = positiveInteger(options.pageSize, positiveInteger(process.env.CONSUMPTION_SYNC_PAGE_SIZE, 500));
+  const pageSize = Math.min(500, positiveInteger(options.pageSize, positiveInteger(process.env.CONSUMPTION_SYNC_PAGE_SIZE, 500)));
   const maxPages = maxPagesForMode(options.mode, options);
   const window = syncWindow(options.mode, stationStats, options);
   let pageNumber = 1;
@@ -334,6 +356,7 @@ async function runConsumptionSync(input = {}) {
   const requestedStations = normalizeStations(input.stations || input.stationId || process.env.CONSUMPTION_SYNC_STATIONS);
   const quota = await databaseQuotaState(input, mode);
   if (quota.quotaPaused) {
+    await recordQuotaPause(requestedStations, mode, quota);
     return {
       ok: true,
       mode,
@@ -402,12 +425,14 @@ async function runConsumptionSync(input = {}) {
   }
 
   const after = await dailyMeterTableReport(stationIds);
+  const partialStations = stations.filter((station) => !station.complete).length;
   return {
-    ok: failures.length === 0,
+    ok: failures.length === 0 && partialStations === 0,
     mode,
     stationCount: stationIds.length,
     syncedStations: stations.length,
     failedStations: failures.length,
+    partialStations,
     fetchedRows: stations.reduce((sum, station) => sum + station.fetchedRows, 0),
     storedRows: stations.reduce((sum, station) => sum + station.storedRows, 0),
     before,
@@ -419,6 +444,7 @@ async function runConsumptionSync(input = {}) {
 }
 
 module.exports = {
+  databaseQuotaState,
   runConsumptionSync,
   stationAttemptsForMode,
   syncWindow,

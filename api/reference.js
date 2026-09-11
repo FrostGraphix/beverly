@@ -969,6 +969,36 @@ function cronQuery(urlValue) {
   }
 }
 
+async function runLoggedConsumptionSync(request, input) {
+  const startedAt = Date.now();
+  const context = {
+    requestId: request.__requestId || null,
+    mode: input.mode,
+    stationId: input.stationId || input.stations || null,
+  };
+  console.info("[consumption-sync-start]", context);
+  try {
+    const result = await runConsumptionSync(input);
+    console.info("[consumption-sync-done]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      quotaPaused: result.quotaPaused === true,
+      syncedStations: result.syncedStations,
+      failedStations: result.failedStations,
+      fetchedRows: result.fetchedRows,
+      storedRows: result.storedRows,
+    });
+    return result;
+  } catch (error) {
+    console.error("[consumption-sync-error]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 const walletMaintenanceTasks = new Set([
   "holds",
   "payments",
@@ -2712,7 +2742,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         }
       };
     }
-    return localJobResponse(await runConsumptionSync({
+    return localJobResponse(await runLoggedConsumptionSync(request, {
       ...cronQuery(request.url),
       mode: "incremental"
     }));
@@ -2731,7 +2761,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         }
       };
     }
-    return localJobResponse(await runConsumptionSync({
+    return localJobResponse(await runLoggedConsumptionSync(request, {
       ...cronQuery(request.url),
       mode: "backfill"
     }));

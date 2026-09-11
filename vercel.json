@@ -21,7 +21,9 @@
     "DATABASE_QUOTA_WARN_PERCENT": "75",
     "DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT": "85",
     "DATABASE_QUOTA_HARD_STOP_PERCENT": "90",
-    "CONSUMPTION_HOT_RETENTION_DAYS": "120"
+    "CONSUMPTION_HOT_RETENTION_DAYS": "120",
+    "CONSUMPTION_SYNC_PAGE_SIZE": "500",
+    "CONSUMPTION_SYNC_INCREMENTAL_MAX_PAGES": "50"
   },
   "functions": {
     "api/reference.js": {
@@ -45,8 +47,8 @@
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
     { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/consumption-sync", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/archive-readings", "schedule": "5 * * * *" }
+    { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/archive-readings", "schedule": "0 1 * * *" }
   ],
   "headers": [
     {

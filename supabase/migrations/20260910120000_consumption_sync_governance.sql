@@ -4,7 +4,7 @@ create table if not exists public.consumption_sync_runs (
   id uuid primary key default gen_random_uuid(),
   station_id text not null check (station_id = upper(btrim(station_id)) and btrim(station_id) <> ''),
   mode text not null check (mode in ('incremental', 'backfill')),
-  status text not null check (status in ('running', 'succeeded', 'failed', 'quota_paused')),
+  status text not null check (status in ('running', 'partial', 'succeeded', 'failed', 'quota_paused')),
   started_at timestamptz not null default now(),
   finished_at timestamptz,
   attempts integer not null default 1 check (attempts > 0),
@@ -30,7 +30,7 @@ create table if not exists public.consumption_sync_station_state (
   station_id text primary key check (station_id = upper(btrim(station_id)) and btrim(station_id) <> ''),
   last_mode text check (last_mode is null or last_mode in ('incremental', 'backfill')),
   last_status text not null default 'pending'
-    check (last_status in ('pending', 'running', 'succeeded', 'failed', 'quota_paused')),
+    check (last_status in ('pending', 'running', 'partial', 'succeeded', 'failed', 'quota_paused')),
   last_started_at timestamptz,
   last_finished_at timestamptz,
   last_success_at timestamptz,

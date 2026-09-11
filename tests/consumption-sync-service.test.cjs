@@ -120,6 +120,10 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.equal(backfill.mode, "backfill");
   assert.equal(liveCalls[0].payload.FROM, "2026-01-12");
   assert.equal(backfill.storedRows, 2);
+  assert.equal(backfill.partialStations, 1);
+  assert.equal(backfill.ok, false, "partial syncs must not report completion");
+  const partialRun = writes.find((write) => write.pathname.includes("/consumption_sync_runs?id=eq."));
+  assert.equal(partialRun.options.body.status, "partial", "page-limited runs must stay partial");
 
   let failedOnce = false;
   global.fetch = async (url, init) => {
@@ -270,6 +274,21 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.deepEqual(meterCalls.map((call) => call.payload.stationId), ["OFEMILI"]);
 
   liveCalls.length = 0;
+  await runConsumptionSync({
+    mode: "incremental",
+    stations: "OFEMILI",
+    from: "2026-05-10",
+    to: "2026-05-12",
+    pageSize: 5000,
+    maxPages: 1,
+  });
+  assert.equal(
+    liveCalls.find((call) => call.url.endsWith("/api/DailyDataMeter/read")).payload.pageSize,
+    500,
+    "sync page sizes must remain bounded"
+  );
+
+  liveCalls.length = 0;
   writes.length = 0;
   supabase.restRequest = async (pathname, options = {}) => {
     writes.push({ pathname, options });
@@ -284,6 +303,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   });
   assert.equal(quotaPaused.quotaPaused, true, "backfills must pause above eighty-five percent");
   assert.equal(liveCalls.filter((call) => call.url.endsWith("/api/DailyDataMeter/read")).length, 0);
+  assert(writes.some((write) => write.pathname === "/consumption_sync_runs" && write.options.body.status === "quota_paused"), "quota pauses must remain durable");
 
   console.log(JSON.stringify({
     status: "consumption sync service passed",

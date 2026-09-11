@@ -10,6 +10,7 @@ const original = {
 };
 
 const calls = [];
+let fallbackMode = false;
 supabase.restRequestWithResponse = async (pathname, options) => {
   calls.push({ kind: "list", pathname, options });
   return {
@@ -36,6 +37,7 @@ supabase.restRequest = async (pathname, options) => {
     return [{ id: "22222222-2222-4222-8222-222222222222", slug: "calinmeter" }];
   }
   if (pathname === "/rpc/archive_reports_summary") {
+    if (fallbackMode) throw new Error("PGRST202 schema cache");
     return { totalReports: 2, totalRows: 10, totalBundleRows: 20, byStation: { UMAISHA: 2 } };
   }
   if (pathname.startsWith("/consumption_sync_station_state?")) {
@@ -59,6 +61,20 @@ supabase.restRequest = async (pathname, options) => {
       period_start: "2026-07-01",
       bucket: "archives",
       object_path: "calinmeter/readings/monthly/UMAISHA/2026-07.csv.gz"
+    }];
+  }
+  if (pathname.startsWith("/archive_reports?select=oem_id")) {
+    return [{
+      oem_id: "22222222-2222-4222-8222-222222222222",
+      station_id: "UMAISHA",
+      report_type: "readings",
+      granularity: "monthly",
+      period_start: "2026-07-01",
+      row_count: 10,
+      byte_size: 120,
+      covers_from: "2026-07-01",
+      covers_to: "2026-07-31",
+      updated_at: "2026-09-10T01:00:00.000Z"
     }];
   }
   throw new Error(`Unexpected REST call: ${pathname}`);
@@ -93,6 +109,15 @@ const archive = require("../backend/src/services/reading-archive-service");
     assert.equal(summary.syncHealth.staleCount, 0);
     const summaryCall = calls.find((call) => call.pathname === "/rpc/archive_reports_summary");
     assert.deepEqual(summaryCall.options.body, { p_station_id: "UMAISHA" });
+
+    fallbackMode = true;
+    const fallbackSummary = await archive.reportsSummary({ stationId: "UMAISHA" });
+    assert.deepEqual(fallbackSummary.coverageRange, { earliest: "2026-07-01", latest: "2026-07-31" });
+    assert.deepEqual(fallbackSummary.refreshRange, {
+      earliest: "2026-09-10T01:00:00.000Z",
+      latest: "2026-09-10T01:00:00.000Z"
+    });
+    fallbackMode = false;
 
     const download = await archive.signedDownloadUrl(
       "11111111-1111-4111-8111-111111111111",

@@ -890,7 +890,7 @@ async function summaryRowsFallback(filters) {
   const rows = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
     const query = appendArchiveFilters([
-      "select=oem_id,station_id,report_type,granularity,period_start,row_count,byte_size",
+      "select=oem_id,station_id,report_type,granularity,period_start,row_count,byte_size,covers_from,covers_to,updated_at",
       "order=period_start.asc,station_id.asc",
       `limit=${PAGE_SIZE}`,
       `offset=${offset}`
@@ -934,6 +934,10 @@ async function reportsSummary(filters = {}) {
   let bundleRows = 0;
   let earliest = null;
   let latest = null;
+  let coverageEarliest = null;
+  let coverageLatest = null;
+  let refreshEarliest = null;
+  let refreshLatest = null;
 
   for (const row of list) {
     const station = row.station_id || "unknown";
@@ -950,6 +954,13 @@ async function reportsSummary(filters = {}) {
       if (!earliest || period < earliest) earliest = period;
       if (!latest || period > latest) latest = period;
     }
+    const coversFrom = String(row.covers_from || "");
+    const coversTo = String(row.covers_to || "");
+    const refreshedAt = String(row.updated_at || "");
+    if (coversFrom && (!coverageEarliest || coversFrom < coverageEarliest)) coverageEarliest = coversFrom;
+    if (coversTo && (!coverageLatest || coversTo > coverageLatest)) coverageLatest = coversTo;
+    if (refreshedAt && (!refreshEarliest || refreshedAt < refreshEarliest)) refreshEarliest = refreshedAt;
+    if (refreshedAt && (!refreshLatest || refreshedAt > refreshLatest)) refreshLatest = refreshedAt;
   }
 
   return {
@@ -967,6 +978,8 @@ async function reportsSummary(filters = {}) {
     byOem,
     byStation,
     dateRange: { earliest, latest },
+    coverageRange: { earliest: coverageEarliest, latest: coverageLatest },
+    refreshRange: { earliest: refreshEarliest, latest: refreshLatest },
     syncHealth
   };
 }
