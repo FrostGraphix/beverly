@@ -112,6 +112,10 @@ function rowToRecord(row, requestStation = "") {
   };
 }
 
+function dailyMeterArchiveRecord(row, stationId = "") {
+  return rowToRecord(row, stationId);
+}
+
 // Resolves the OEM fault/electrical signal fields (via abnormal-alarm-service.js's
 // own alias-matching, so ingestion-time and read-time interpretation can never
 // drift) into the typed daily_meter_readings columns. Booleans are stored as an
@@ -1793,6 +1797,7 @@ async function readMeterConsumptionAnalysis({ requestPayload: payload }) {
 
 module.exports = {
   collectionRowsFromPayload,
+  dailyMeterArchiveRecord,
   dailyMeterStationStats,
   dailyMeterTableReport,
   ingestWebhookReadings,

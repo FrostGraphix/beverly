@@ -16,19 +16,21 @@ loadEnvFile();
 process.env.SUPABASE_CONSUMPTION_STORE_ENABLED = process.env.SUPABASE_CONSUMPTION_STORE_ENABLED || "true";
 
 const { writeDailyMeterRows, dailyMeterTableReport } = require("../backend/src/services/consumption-store");
+const { databaseQuotaState, syncWindow } = require("../backend/src/services/consumption-sync-service");
 const { stations } = require("../backend/src/services/refresh-targets");
 
 const root = path.resolve(__dirname, "..");
 const progressPath = path.join(root, "tmp", "consumption-backfill-progress.json");
 const failurePath = path.join(root, "tmp", "consumption-backfill-failures.json");
 const runLogPath = path.join(root, "tmp", "consumption-backfill-run.log");
-const pageSize = numberArg("--page-size", Number(process.env.CONSUMPTION_BACKFILL_PAGE_SIZE || 500));
+const pageSize = Math.min(500, numberArg("--page-size", Number(process.env.CONSUMPTION_BACKFILL_PAGE_SIZE || 500)));
 const maxPages = numberArg("--max-pages", Number(process.env.CONSUMPTION_BACKFILL_MAX_PAGES || 0));
 const stationArg = stringArg("--station", "");
 const force = process.argv.includes("--force");
 const ignoreRunLog = process.argv.includes("--ignore-run-log");
-const from = stringArg("--from", process.env.CONSUMPTION_BACKFILL_FROM || "2025-01-01");
 const to = stringArg("--to", new Date().toISOString().slice(0, 10));
+const requestedFrom = stringArg("--from", process.env.CONSUMPTION_BACKFILL_FROM || "2025-01-01");
+const from = syncWindow("backfill", {}, { from: requestedFrom, to }).from;
 const timeoutMs = numberArg("--timeout-ms", Number(process.env.CONSUMPTION_BACKFILL_TIMEOUT_MS || 45000));
 const maxRetries = numberArg("--retries", Number(process.env.CONSUMPTION_BACKFILL_RETRIES || 4));
 const stopAfterEmptyPages = numberArg("--stop-after-empty-pages", Number(process.env.CONSUMPTION_BACKFILL_STOP_AFTER_EMPTY_PAGES || 5));
@@ -169,7 +171,7 @@ async function backfillStation(stationId, progress) {
 
     const rows = pageRows(responsePayload);
     rawTotalRows = Number(responsePayload?.result?.total ?? responsePayload?.data?.total ?? rows.length) || rawTotalRows;
-    const filteredRows = filterRowsByRange(rows, from, to);
+    const filteredRows = filterRowsByRange(rows, from, to, stationId);
     filteredTotal += filteredRows.length;
     if (filteredRows.length) emptyPagesAfterMatch = 0;
     else if (filteredTotal > 0) emptyPagesAfterMatch++;
@@ -253,6 +255,8 @@ async function backfillStation(stationId, progress) {
   const failures = [];
   for (const stationId of selectedStations) {
     try {
+      const quota = await databaseQuotaState({}, "backfill");
+      if (quota.quotaPaused) throw new Error(`Database quota paused backfill at ${quota.usedPercent}%`);
       await backfillStation(stationId, progress);
     } catch (error) {
       const state = progress.stations?.[stationId] || null;

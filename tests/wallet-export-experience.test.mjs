@@ -70,6 +70,9 @@ for (const relativePath of requiredExportSurfaces) {
 const menu = fs.readFileSync(path.join(root, 'packages/tokens/WalletExportMenu.vue'), 'utf8');
 assert.match(menu, /WalletExportWizard/);
 assert.match(menu, /:formats="formats"/);
+assert.match(menu, /:resolve-rows="resolveRows"/);
+assert.match(menu, /:station-options="stationOptions"/);
+assert.match(menu, /:status-options="statusOptions"/);
 
 const adminExport = fs.readFileSync(path.join(root, 'apps/admin/src/lib/export.ts'), 'utf8');
 assert.match(adminExport, /resolveWalletPrintBranding\(\)/);

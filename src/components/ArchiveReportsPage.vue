@@ -9,9 +9,28 @@
           after a verified archive index exists; payment exports remain bulk-download copies.
         </p>
       </div>
-      <BaseButton variant="secondary" :disabled="loading" @click="load()">
-        {{ loading ? "Loading…" : "Refresh" }}
-      </BaseButton>
+      <div class="archive-reports__actions">
+        <WalletExportMenu
+          :rows="reports"
+          :columns="archiveExportColumns"
+          :meta="archiveExportMeta"
+          :loading="loading"
+          :station-options="stationOptions"
+          :status-options="exportTypeOptions"
+          :date-value="report => report.periodStart"
+          :station-value="report => report.stationId"
+          :status-value="report => report.reportType"
+          :resolve-rows="resolveArchiveExportRows"
+          filename="beverly-archive-catalogue"
+          title="Archive report catalogue"
+          subtitle="Verified coverage, freshness, and download metadata."
+          status-label="Report type"
+          label="Export catalogue"
+        />
+        <BaseButton variant="secondary" :disabled="loading" @click="load()">
+          {{ loading ? "Loading…" : "Refresh" }}
+        </BaseButton>
+      </div>
     </header>
 
     <!-- The archive is provisioned by migration + a nightly sweep, so "not set up yet"
@@ -24,6 +43,19 @@
       to export settled months.
     </div>
     <div v-else-if="error" class="archive-reports__error" role="alert">{{ error }}</div>
+
+    <div
+      v-if="summary?.syncHealth"
+      :class="['archive-reports__freshness', { 'archive-reports__freshness--stale': summary.syncHealth.staleCount > 0 }]"
+      role="status"
+    >
+      <strong>Source freshness</strong>
+      <span>
+        {{ summary.syncHealth.healthyCount }} current.
+        {{ summary.syncHealth.staleCount }} stale.
+        Maximum lag: {{ summary.syncHealth.maximumLagDays }} days.
+      </span>
+    </div>
 
     <!-- Summary tiles. storageQuotaMb is surfaced because the whole point of the
          archive is that it bills against the 1 GB Storage quota, not the 500 MB
@@ -45,12 +77,11 @@
         <span class="archive-tile__hint">of {{ summary.storageQuotaMb }} MB bucket quota</span>
       </article>
       <article class="archive-tile archive-tile--neutral">
-        <span class="archive-tile__label">Coverage</span>
+        <span class="archive-tile__label">Coverage through</span>
         <strong class="archive-tile__value archive-tile__value--sm">
-          {{ summary.dateRange?.earliest ? formatMonth(summary.dateRange.earliest) : "—" }}
-          →
-          {{ summary.dateRange?.latest ? formatMonth(summary.dateRange.latest) : "—" }}
+          {{ summary.coverageRange?.latest || summary.dateRange?.latest || "—" }}
         </strong>
+        <span class="archive-tile__hint">actual rows, not generation time</span>
       </article>
     </div>
 
@@ -115,15 +146,16 @@
             <th scope="col">Covers</th>
             <th scope="col" class="archive-table__num">Rows</th>
             <th scope="col" class="archive-table__num">Size</th>
+            <th scope="col">Refreshed</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="9" class="archive-table__empty">Loading archive catalogue…</td>
+            <td colspan="10" class="archive-table__empty">Loading archive catalogue…</td>
           </tr>
           <tr v-else-if="!reports.length">
-            <td colspan="9" class="archive-table__empty">
+            <td colspan="10" class="archive-table__empty">
               No archived partitions yet. Months are exported once they have been closed
               for {{ graceDays }} days.
             </td>
@@ -143,6 +175,7 @@
             </td>
             <td class="archive-table__num">{{ formatNumber(report.rowCount) }}</td>
             <td class="archive-table__num">{{ formatSize(report.byteSize) }}</td>
+            <td class="archive-table__muted">{{ formatDateTime(report.refreshedAt) }}</td>
             <td>
               <BaseButton
                 variant="ghost"
@@ -177,6 +210,7 @@
           <div><dt>Grain</dt><dd>{{ titleCase(report.granularity) }}</dd></div>
           <div><dt>Rows</dt><dd>{{ formatNumber(report.rowCount) }}</dd></div>
           <div><dt>Size</dt><dd>{{ formatSize(report.byteSize) }}</dd></div>
+          <div><dt>Refreshed</dt><dd>{{ formatDateTime(report.refreshedAt) }}</dd></div>
           <div class="archive-mobile-card__coverage"><dt>Covers</dt><dd>{{ report.coversFrom || "—" }} → {{ report.coversTo || "—" }}</dd></div>
         </dl>
         <BaseButton variant="secondary" :disabled="downloadingId === report.id" @click="download(report)">
@@ -227,6 +261,7 @@
 import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
+import WalletExportMenu from "@beverly/tokens/WalletExportMenu.vue";
 import {
   fetchArchiveReports,
   fetchArchiveReportsSummary,
@@ -245,9 +280,22 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+const ARCHIVE_EXPORT_COLUMNS = [
+  { key: "oemSlug", header: "OEM", value: (report) => report.oemSlug || "" },
+  { key: "stationId", header: "StationID", value: (report) => report.stationId || "" },
+  { key: "reportType", header: "Type", value: (report) => report.reportType || "" },
+  { key: "granularity", header: "Grain", value: (report) => report.granularity || "" },
+  { key: "periodStart", header: "Period start", value: (report) => report.periodStart || "" },
+  { key: "coversFrom", header: "Covers from", value: (report) => report.coversFrom || "" },
+  { key: "coversTo", header: "Covers through", value: (report) => report.coversTo || "" },
+  { key: "rowCount", header: "Rows", value: (report) => report.rowCount || 0 },
+  { key: "byteSize", header: "Bytes", value: (report) => report.byteSize || 0 },
+  { key: "refreshedAt", header: "Refreshed", value: (report) => report.refreshedAt || "" },
+];
+
 export default {
   name: "ArchiveReportsPage",
-  components: { BaseButton, BaseInput, BaseSelect },
+  components: { BaseButton, BaseInput, BaseSelect, WalletExportMenu },
   props: {
     route: {
       type: Object,
@@ -269,6 +317,7 @@ export default {
       currentPage: 1,
       pageSize: 10,
       pageSizeOptions,
+      archiveExportColumns: ARCHIVE_EXPORT_COLUMNS,
       gotoPageInput: "1",
       loadToken: 0,
     };
@@ -304,6 +353,15 @@ export default {
     },
     typeOptions() {
       return Object.keys(this.summary?.byType || {}).sort();
+    },
+    exportTypeOptions() {
+      return this.typeOptions.map((value) => ({ value, label: this.titleCase(value) }));
+    },
+    archiveExportMeta() {
+      return [
+        { label: "Coverage through", value: this.summary?.coverageRange?.latest || this.summary?.dateRange?.latest || "Unavailable" },
+        { label: "Maximum source lag", value: `${this.summary?.syncHealth?.maximumLagDays ?? "Unavailable"} days` },
+      ];
     },
     granularityOptions() {
       // Monthly before yearly -- alphabetical would invert the natural reading order.
@@ -420,6 +478,32 @@ export default {
         this.downloadingId = "";
       }
     },
+    async resolveArchiveExportRows(selection) {
+      const rows = [];
+      let page = 1;
+      let pageCount = 1;
+      do {
+        const result = await fetchArchiveReports({
+          stationId: selection.station || this.filters.stationId || null,
+          year: this.filters.year || null,
+          month: this.filters.granularity === "yearly" ? null : (this.filters.month || null),
+          reportType: selection.status || this.filters.reportType || null,
+          granularity: this.filters.granularity || null,
+          page,
+          pageSize: 100,
+        });
+        rows.push(...(result?.reports || []));
+        pageCount = Math.max(1, Number(result?.pageCount || 1));
+        page += 1;
+      } while (page <= pageCount);
+
+      return rows.filter((report) => {
+        const day = String(report.periodStart || "").slice(0, 10);
+        if (selection.since && day < selection.since) return false;
+        if (selection.until && day > selection.until) return false;
+        return true;
+      });
+    },
     formatNumber(value) {
       return Number(value || 0).toLocaleString();
     },
@@ -434,6 +518,11 @@ export default {
       if (text.length < 7) return text || "—";
       const month = Number(text.slice(5, 7));
       return `${MONTH_NAMES[month - 1] || text.slice(5, 7)} ${text.slice(0, 4)}`;
+    },
+    formatDateTime(value) {
+      if (!value) return "—";
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
     },
     titleCase(value) {
       const text = String(value || "");
@@ -479,6 +568,12 @@ export default {
   color: var(--text-muted);
 }
 
+.archive-reports__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--bev-space-2);
+}
+
 .archive-reports__error {
   padding: 0.75rem 1rem;
   border: 1px solid var(--danger);
@@ -505,6 +600,24 @@ export default {
   background: var(--bg-page);
   font-family: var(--bev-font-mono, monospace);
   font-size: 0.8125rem;
+}
+
+.archive-reports__freshness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bev-space-3);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--success);
+  border-radius: var(--bev-radius-md, 8px);
+  background: var(--success-bg);
+  color: var(--text-main);
+  font-size: var(--bev-font-size-sm, 0.875rem);
+}
+
+.archive-reports__freshness--stale {
+  border-color: var(--warning);
+  background: var(--warning-bg);
 }
 
 /* ── summary tiles ─────────────────────────────────────────────────────────── */
@@ -793,7 +906,9 @@ export default {
 .archive-reports__footnote strong { color: var(--text-main); }
 
 @media (max-width: 760px) {
-  .archive-reports__head :deep(button) { width: 100%; }
+  .archive-reports__actions { width: 100%; flex-direction: column; align-items: stretch; }
+  .archive-reports__actions :deep(button) { width: 100%; }
+  .archive-reports__freshness { align-items: flex-start; flex-direction: column; }
   .archive-reports__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .archive-reports__filters { flex-direction: column; align-items: stretch; }
   .archive-filter :deep(select) { min-width: 0; width: 100%; }

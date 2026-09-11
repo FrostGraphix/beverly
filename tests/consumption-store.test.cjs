@@ -269,6 +269,18 @@ assert.strictEqual(write.options.body[0].station_id, "TUNGA");
 assert.strictEqual(write.options.body[0].meter_id, "M-1");
 assert.strictEqual(write.options.body[0].reading_date, "2026-05-07");
 
+const archiveRecord = store.dailyMeterArchiveRecord({
+  stationId: "OFEMILI",
+  meterId: "M-COLD",
+  customerId: "C-COLD",
+  currentDate: "2025-08-11",
+  total1: 50,
+  remain1: 5,
+}, "OFEMILI");
+assert.strictEqual(archiveRecord.station_id, "OFEMILI");
+assert.strictEqual(archiveRecord.meter_id, "M-COLD");
+assert.strictEqual(archiveRecord.reading_date, "2025-08-11");
+
 // Signal-column polarity proof: conditionActive() inverts plain booleans (raw
 // upstream "true" means healthy), so a raw relayOpen:false / magneticInterference:false
 // must be stored as *active* (true), and a raw batteryLow:true must be stored as

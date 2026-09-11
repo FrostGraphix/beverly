@@ -1,14 +1,19 @@
 import { defineStore } from "pinia";
-import { getApi, postApi, putApi, deleteApi } from "../services/api";
+import { getApi, postApi, putApi, deleteApi } from "../services/api.js";
 
 const currentOemStorageKey = "beverly.currentOem";
+const activeLoads = new WeakMap();
 
 export const useOemStore = defineStore("oem", {
   state: () => ({
     currentOemId: "",
     oems: [],
-    status: "idle", // idle | loading | ready | error
+    status: "idle", // idle | loading | refreshing | ready | error
     error: "",
+    errorReference: "",
+    warning: "",
+    isStale: false,
+    lastUpdatedAt: 0,
     warmCache: {}
   }),
   getters: {
@@ -17,19 +22,62 @@ export const useOemStore = defineStore("oem", {
     },
     hasOems(state) {
       return state.oems.length > 0;
+    },
+    isLoading(state) {
+      return state.status === "loading" || state.status === "refreshing";
     }
   },
   actions: {
     async loadOems() {
-      this.status = "loading";
+      const activeLoad = activeLoads.get(this);
+      if (activeLoad) return activeLoad;
+
+      const hadOems = this.hasOems;
+      this.status = hadOems ? "refreshing" : "loading";
       this.error = "";
+      this.errorReference = "";
+
+      const load = (async () => {
+        try {
+          const envelope = await getApi("/system/oem/list");
+          const payload = envelope?.data || envelope?.result || {};
+          this.oems = Array.isArray(payload?.oems) ? payload.oems : [];
+          const stationDependency = payload?.dependencies?.stationApi || {};
+          const stationUnavailable = stationDependency.status === "unavailable";
+          this.isStale = payload?.degraded === true || stationUnavailable;
+          this.warning = this.isStale
+            ? "OEMs loaded. Station counts may be outdated."
+            : "";
+          this.errorReference = this.isStale ? String(stationDependency.reference || "") : "";
+          this.lastUpdatedAt = Date.now();
+          this.status = "ready";
+          return this.oems;
+        } catch (error) {
+          this.errorReference = String(
+            error?.response?.data?.reference
+              || error?.response?.headers?.["x-request-id"]
+              || ""
+          );
+          if (this.hasOems || hadOems) {
+            this.status = "ready";
+            this.isStale = true;
+            this.warning = "Using previously loaded OEMs. Refresh failed.";
+            this.error = "";
+            return this.oems;
+          }
+          this.status = "error";
+          this.isStale = false;
+          this.warning = "";
+          this.error = error?.message || "Failed to load OEMs";
+          return [];
+        }
+      })();
+
+      activeLoads.set(this, load);
       try {
-        const envelope = await getApi("/system/oem/list");
-        this.oems = envelope?.data?.oems || envelope?.result?.oems || [];
-        this.status = "ready";
-      } catch (error) {
-        this.status = "error";
-        this.error = error?.message || "Failed to load OEMs";
+        return await load;
+      } finally {
+        if (activeLoads.get(this) === load) activeLoads.delete(this);
       }
     },
     selectOem(oemId) {

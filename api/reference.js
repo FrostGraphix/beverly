@@ -969,6 +969,36 @@ function cronQuery(urlValue) {
   }
 }
 
+async function runLoggedConsumptionSync(request, input) {
+  const startedAt = Date.now();
+  const context = {
+    requestId: request.__requestId || null,
+    mode: input.mode,
+    stationId: input.stationId || input.stations || null,
+  };
+  console.info("[consumption-sync-start]", context);
+  try {
+    const result = await runConsumptionSync(input);
+    console.info("[consumption-sync-done]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      quotaPaused: result.quotaPaused === true,
+      syncedStations: result.syncedStations,
+      failedStations: result.failedStations,
+      fetchedRows: result.fetchedRows,
+      storedRows: result.storedRows,
+    });
+    return result;
+  } catch (error) {
+    console.error("[consumption-sync-error]", {
+      ...context,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 const walletMaintenanceTasks = new Set([
   "holds",
   "payments",
@@ -1499,11 +1529,15 @@ function jsonRequestData(payload) {
 }
 
 async function fetchLiveStationIds(request) {
+  const configuredTimeout = Number(process.env.OEM_HUB_STATION_TIMEOUT_MS || 5000);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? Math.max(1000, Math.min(configuredTimeout, 15000))
+    : 5000;
   const syntheticRequest = {
     method: "POST",
     url: "/api/station/read",
     headers: { ...(request?.headers || {}) },
-    __timeoutMs: request?.__timeoutMs
+    __timeoutMs: Math.min(Number(request?.__timeoutMs) || timeoutMs, timeoutMs)
   };
   const result = await proxyLive(
     syntheticRequest,
@@ -2708,7 +2742,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         }
       };
     }
-    return localJobResponse(await runConsumptionSync({
+    return localJobResponse(await runLoggedConsumptionSync(request, {
       ...cronQuery(request.url),
       mode: "incremental"
     }));
@@ -2727,7 +2761,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         }
       };
     }
-    return localJobResponse(await runConsumptionSync({
+    return localJobResponse(await runLoggedConsumptionSync(request, {
       ...cronQuery(request.url),
       mode: "backfill"
     }));
@@ -2919,12 +2953,19 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/oem/list") {
     const manufacturers = await listOemManufacturers();
-    const liveStationIds = await fetchLiveStationIds(request);
+    let liveStationIds = [];
+    let stationApiAvailable = true;
+    try {
+      liveStationIds = await fetchLiveStationIds(request);
+    } catch (error) {
+      stationApiAvailable = false;
+      console.error("[oem-list-station-degraded]", error instanceof Error ? error.message : String(error));
+    }
     const oems = await Promise.all(manufacturers.map(async (oem) => {
       // Resolve the mappings once — the count is just its length, and the lookup
       // can hit Supabase plus fallback tiers, so calling it twice doubles the work
       // and can drift if a tier changes between the two calls.
-      const stations = oem.isSeedDefault
+      const stations = oem.isSeedDefault && stationApiAvailable
         ? liveStationIds.map((stationId) => ({
           oemId: oem.id,
           stationId,
@@ -2941,12 +2982,25 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         capabilities: oem.capabilities,
         vendingStrategy: oem.vendingStrategy,
         communityCount: stations.length,
+        communityCountStatus: stationApiAvailable || !oem.isSeedDefault ? "live" : "stale",
         stations,
         createdAt: oem.createdAt,
         updatedAt: oem.updatedAt
       };
     }));
-    return localJobResponse({ oems });
+    return localJobResponse({
+      oems,
+      degraded: !stationApiAvailable,
+      dependencies: {
+        stationApi: stationApiAvailable
+          ? { status: "available" }
+          : {
+            status: "unavailable",
+            code: "STATION_API_UNAVAILABLE",
+            reference: request.__requestId,
+          }
+      }
+    });
   }
   if (pathname === "/api/system/oem" || pathname.startsWith("/api/system/oem/")) {
     const oemResult = await handleOemManagementRequest(request, pathname, requestData);
@@ -5218,13 +5272,19 @@ async function proxyCanonicalWallet(request, pathname, requestData) {
 }
 
 async function handler(request, response) {
+  const suppliedRequestId = String(request.headers?.["x-request-id"] || "").trim();
+  const requestId = /^[a-z0-9._:-]{8,128}$/i.test(suppliedRequestId)
+    ? suppliedRequestId
+    : `REQ-${crypto.randomUUID()}`;
+  const pathname = normalizeRequestPath(request.url);
+  request.__requestId = requestId;
+  if (typeof response.setHeader === "function") response.setHeader("X-Request-Id", requestId);
   try {
     applyCorsHeaders(request, response);
     if (String(request.method || "GET").toUpperCase() === "OPTIONS") {
       response.status(204).json({});
       return;
     }
-    const pathname = normalizeRequestPath(request.url);
     if (isCanonicalWalletRequest(pathname)) {
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
@@ -5717,14 +5777,18 @@ async function handler(request, response) {
     await auditResult(request, pathname, result);
     response.status(result.status).json(result.body);
   } catch (error) {
-    console.error("[reference-facade-crash]", error);
-    response.status(500).json({
-      code: 500,
-      msg: "Internal Server Error",
+    const isOemInventory = pathname.toLowerCase() === "/api/system/oem/list";
+    const status = isOemInventory ? 503 : 500;
+    console.error("[reference-facade-crash]", { requestId, pathname, error });
+    if (isOemInventory && typeof response.setHeader === "function") response.setHeader("Retry-After", "5");
+    response.status(status).json({
+      code: status,
+      msg: isOemInventory ? "OEM inventory unavailable" : "Internal Server Error",
       reason: error instanceof Error ? error.message : String(error),
+      reference: requestId,
       _proxy: {
         source: "facade-crash",
-        pathname: request.url
+        pathname
       }
     });
   }

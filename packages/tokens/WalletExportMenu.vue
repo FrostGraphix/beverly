@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="T extends Record<string, any>">
 import WalletExportWizard from './WalletExportWizard.vue';
 import type { WalletExportColumn, WalletExportMeta } from './wallet-export';
+import type { WalletExportOption, WalletExportSelection } from './wallet-export-wizard';
 
 withDefaults(defineProps<{
   rows: T[];
@@ -12,8 +13,16 @@ withDefaults(defineProps<{
   loading?: boolean;
   label?: string;
   formats?: Array<'csv' | 'pdf'>;
+  statusOptions?: WalletExportOption[];
+  stationOptions?: WalletExportOption[];
+  statusLabel?: string;
+  dateValue?: (row: T) => string | null | undefined;
+  statusValue?: (row: T) => string | null | undefined;
+  stationValue?: (row: T) => string | null | undefined;
+  resolveRows?: (selection: WalletExportSelection) => Promise<T[]>;
 }>(), {
   subtitle: '', meta: () => [], loading: false, label: 'Export', formats: () => ['csv', 'pdf'],
+  statusOptions: () => [], stationOptions: () => [], statusLabel: 'Status',
 });
 
 const emit = defineEmits<{
@@ -33,6 +42,13 @@ const emit = defineEmits<{
     :loading="loading"
     :label="label"
     :formats="formats"
+    :status-options="statusOptions"
+    :station-options="stationOptions"
+    :status-label="statusLabel"
+    :date-value="dateValue"
+    :status-value="statusValue"
+    :station-value="stationValue"
+    :resolve-rows="resolveRows"
     hover-title="Build a tailored report"
     hover-description="Choose the fields for this page."
     @success="emit('success', $event)"
