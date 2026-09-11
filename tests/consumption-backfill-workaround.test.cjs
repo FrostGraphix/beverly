@@ -16,6 +16,8 @@ const rows = [
   { meterId: "M-1", currentDate: "2025-08-02", total1: 11 },
   { meterId: "M-1", currentDate: "2025-08-01", total1: 10 },
   { meterId: "M-1", currentDate: "2025-08-01", total1: 10 },
+  { currentDate: "2025-08-01", total1: 10 },
+  { meterId: "M-3", total1: 10 },
 ];
 
 assert.strictEqual(rowDay(rows[0]), "2026-05-10");

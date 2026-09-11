@@ -436,6 +436,25 @@ async function readArchiveObject(bucket, objectPath) {
   return zlib.gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8");
 }
 
+function joinMonthlyCsvParts(parts) {
+  let header = null;
+  const body = [];
+  let rowCount = 0;
+  for (const part of parts) {
+    const csv = String(part.csv || "");
+    const headerEnd = csv.indexOf("\n");
+    if (headerEnd < 0) continue;
+    const partHeader = csv.slice(0, headerEnd).replace(/\r$/, "");
+    if (header === null) header = partHeader;
+    else if (partHeader !== header) throw new Error("column drift between monthly parts");
+    const partBody = csv.slice(headerEnd + 1).replace(/\n$/, "");
+    if (partBody) body.push(partBody);
+    rowCount += Number(part.rowCount || 0);
+  }
+  if (header === null) return null;
+  return { csv: `${[header, ...body].join("\n")}\n`, rowCount };
+}
+
 /**
  * Build a yearly bundle by CONCATENATING that year's monthly archive objects, rather
  * than re-querying the source tables.
@@ -460,23 +479,19 @@ async function archiveYearlyFromMonthly({ stationId, year, reportType, oem }) {
   const months = Array.isArray(parts) ? parts : [];
   if (!months.length) return null;
 
-  let header = null;
-  const body = [];
-  let rowCount = 0;
+  const csvParts = [];
   for (const part of months) {
     const csv = await readArchiveObject(part.bucket || BUCKET, part.object_path);
-    const lines = csv.split("\n").filter(Boolean);
-    if (!lines.length) continue;
-    if (header === null) header = lines[0];
-    else if (lines[0] !== header) {
-      throw new Error(`column drift between monthly parts for ${stationId} ${year}`);
-    }
-    for (let i = 1; i < lines.length; i += 1) body.push(lines[i]);
-    rowCount += lines.length - 1;
+    csvParts.push({ csv, rowCount: part.row_count });
   }
-  if (header === null) return null;
-
-  const csv = `${[header, ...body].join("\n")}\n`;
+  let joined;
+  try {
+    joined = joinMonthlyCsvParts(csvParts);
+  } catch (error) {
+    throw new Error(`${error.message} for ${stationId} ${year}`);
+  }
+  if (!joined) return null;
+  const { csv, rowCount } = joined;
   const gzipped = zlib.gzipSync(Buffer.from(csv, "utf8"), { level: 9 });
   const objectPath = objectPathFor(stationId, `${year}-01-01`, reportType, "yearly", oem.slug);
   await supabase.uploadStorageObject(BUCKET, objectPath, gzipped, "application/gzip");
@@ -1049,6 +1064,7 @@ module.exports = {
   resolveOemForStation,
   archivePartition,
   archiveProvidedRows,
+  joinMonthlyCsvParts,
   listReports,
   normalizeListFilters,
   newestEligibleMonth,
