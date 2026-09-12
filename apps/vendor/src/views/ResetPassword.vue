@@ -28,8 +28,11 @@ const strengthLabel = computed(() => (['', 'Weak', 'Fair', 'Good', 'Strong', 'St
 const strengthColor = computed(() => (['', 'var(--danger)', 'var(--warn)', 'var(--brand)', 'var(--success)', 'var(--success)'] as const)[score.value]);
 const validToken = computed(() => /^[a-f0-9]{64}$/i.test(token.value));
 
-onMounted(() => {
+onMounted(async () => {
     const t = route.query.token as string | undefined;
+    const sanitizedQuery = { ...route.query };
+    delete sanitizedQuery.token;
+    if ('token' in route.query) await router.replace({ query: sanitizedQuery });
     if (t && /^[a-f0-9]{64}$/i.test(t)) { token.value = t; }
     else { error.value = 'Invalid reset link. Please request a new one.'; }
 });

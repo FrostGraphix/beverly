@@ -72,8 +72,27 @@ async function passwordGrant(email: string, password: string): Promise<PasswordG
 }
 
 async function restorePassword(userId: string, previousPassword: string): Promise<void> {
-    await adminClient.auth.admin.updateUserById(userId, { password: previousPassword });
-    await adminClient.auth.admin.signOut(userId, 'global');
+    const { error: restoreError } = await adminClient.auth.admin.updateUserById(userId, { password: previousPassword });
+    if (restoreError) throw new Error(restoreError.message);
+    const { error: revokeError } = await adminClient.auth.admin.signOut(userId, 'global');
+    if (revokeError) throw new Error(revokeError.message);
+}
+
+export function passwordSessionId(accessToken: string): string | null {
+    const sessionId = tokenClaims(accessToken).session_id;
+    return typeof sessionId === 'string' && sessionId.trim() ? sessionId : null;
+}
+
+async function restoreOrEscalate(userId: string, previousPassword: string): Promise<void> {
+    try {
+        await restorePassword(userId, previousPassword);
+    } catch {
+        throw new VendorPasswordChangeError(
+            'Password recovery requires support assistance.',
+            'password_recovery_required',
+            503,
+        );
+    }
 }
 
 export async function replaceVendorPassword(input: {
@@ -100,7 +119,7 @@ export async function replaceVendorPassword(input: {
             ip: input.ip,
             userAgent: input.userAgent,
             metadata: { surface: 'vendor_password_change', scope: 'account' },
-        });
+        }).catch(() => undefined);
         throw new VendorPasswordChangeError('Too many password-change attempts. Try again in 15 minutes.', 'password_change_rate_limited', 429);
     }
 
@@ -112,7 +131,7 @@ export async function replaceVendorPassword(input: {
             ip: input.ip,
             userAgent: input.userAgent,
             metadata: { reason: 'invalid_current_password' },
-        });
+        }).catch(() => undefined);
         throw new VendorPasswordChangeError('Current password is incorrect.', 'invalid_current_password');
     }
 
@@ -125,13 +144,13 @@ export async function replaceVendorPassword(input: {
 
     const { error: revokeError } = await adminClient.auth.admin.signOut(actor.userId, 'global');
     if (revokeError) {
-        await restorePassword(actor.userId, input.currentPassword);
+        await restoreOrEscalate(actor.userId, input.currentPassword);
         throw new VendorPasswordChangeError('Password change was cancelled because existing sessions could not be revoked.', 'session_revocation_failed', 503);
     }
 
     const rotated = await passwordGrant(actor.email, input.nextPassword);
     if (!rotated || rotated.user?.id !== actor.userId) {
-        await restorePassword(actor.userId, input.currentPassword);
+        await restoreOrEscalate(actor.userId, input.currentPassword);
         throw new VendorPasswordChangeError('Password change was safely cancelled. Please try again.', 'session_rotation_failed', 503);
     }
 
@@ -148,7 +167,7 @@ export async function replaceVendorPassword(input: {
         })
         .eq('id', actor.actorId);
     if (stateError) {
-        await restorePassword(actor.userId, input.currentPassword);
+        await restoreOrEscalate(actor.userId, input.currentPassword);
         throw new VendorPasswordChangeError('Password change was safely cancelled because account state could not be saved.', 'password_state_update_failed', 503);
     }
 
@@ -158,14 +177,14 @@ export async function replaceVendorPassword(input: {
         ip: input.ip,
         userAgent: input.userAgent,
         metadata: { was_temp_password: actor.passwordResetRequired === true, sessions_revoked: true, session_rotated: true },
-    });
+    }).catch(() => undefined);
     if (actor.passwordResetRequired === true) {
         await logSecurityEvent('temp_password_used', {
             actorUserId: actor.userId,
             severity: 'info',
             ip: input.ip,
             userAgent: input.userAgent,
-        });
+        }).catch(() => undefined);
     }
 
     return {

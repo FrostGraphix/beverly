@@ -4,17 +4,15 @@ import { useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import { API_BASE } from '../lib/api';
 import { PORTAL_URLS } from '../lib/portals';
+import { safeVendorRedirect } from '../lib/auth-navigation';
 import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const REMEMBERED_VENDOR_EMAIL_KEY = 'beverly.vendor.remembered_email';
-const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
 const router = useRouter();
 const route  = useRoute();
 const auth   = useVendorAuthStore();
 const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
-const redirectTarget = computed(() => safeRedirectTarget(route.query.redirect));
+const redirectTarget = computed(() => safeVendorRedirect(route.query.redirect));
 
 const identifier = ref('');
 const password = ref('');
@@ -22,13 +20,6 @@ const showPassword = ref(false);
 const rememberLogin = ref(true);
 const loading  = ref(false);
 const error    = ref<string | null>(null);
-
-function safeRedirectTarget(raw: unknown, fallback = '/') {
-    if (typeof raw !== 'string') return fallback;
-    const value = raw.trim();
-    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return fallback;
-    return value;
-}
 
 function normaliseVendorIdentifier(raw: string): { email?: string; phone?: string } {
     const trimmed = raw.trim();
@@ -58,65 +49,26 @@ async function submit() {
         error.value = 'Email or phone number and password are required.';
         return;
     }
-    if (!idInfo.email && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
-        error.value = 'Authentication is not configured. Contact Beverly support.';
-        return;
-    }
     loading.value = true; error.value = null;
     try {
         const payload = idInfo.email
             ? { email: idInfo.email, password: password.value }
             : { phone: idInfo.phone, password: password.value };
-        let tokData: any;
-        let me: any = null;
-        if (idInfo.email) {
-            // Email sign-in is backend-mediated so ownership verification and
-            // invited-account activation cannot be bypassed by a direct grant.
-            const loginRes = await fetch(`${API_BASE}/api/v1/vendor/auth/email/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            tokData = await loginRes.json().catch(() => ({}));
-            if (!loginRes.ok) {
-                error.value = tokData.message ?? 'Sign-in failed.';
-                return;
-            }
-            me = tokData.vendor;
-        } else {
-            // Phone sign-in remains available to existing active accounts.
-            const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
-                body: JSON.stringify(payload),
-            });
-            tokData = await tokRes.json().catch(() => ({}));
-            if (!tokRes.ok) {
-                error.value = tokData.error_description ?? tokData.msg ?? 'Sign-in failed.';
-                return;
-            }
+        const loginRes = await fetch(`${API_BASE}/api/v1/vendor/auth/email/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const tokData: any = await loginRes.json().catch(() => ({}));
+        if (!loginRes.ok) {
+            error.value = tokData.message ?? 'Sign-in failed.';
+            return;
         }
+        const me = tokData.vendor;
         const accessToken: string = tokData.access_token;
         if (!accessToken) {
             error.value = 'Sign-in response was incomplete. Try again.';
             return;
-        }
-
-        // Phone grants still need the canonical vendor lookup. Email grants
-        // already return the profile from the activation boundary.
-        if (!me) {
-            const meRes = await fetch(`${API_BASE}/api/v1/vendor/me`, {
-                headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            if (!meRes.ok) {
-                const j = await meRes.json().catch(() => ({}));
-                error.value =
-                    meRes.status === 403 ? 'Access denied. This is not an active vendor account.'
-                    : meRes.status === 401 ? 'Session invalid, inactive, or not linked to a vendor account.'
-                    : (j?.message ?? 'Vendor lookup failed.');
-                return;
-            }
-            me = await meRes.json();
         }
 
         // 3) Store session + route forward (forced password reset gate)

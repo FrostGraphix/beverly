@@ -65,7 +65,10 @@ vi.mock('../wallets.js', () => ({
     setOwnerWalletStatus: vi.fn(),
     WalletStateError: class extends Error {},
 }));
-vi.mock('../audit.js', () => ({ logAction: vi.fn(), logSecurityEvent: vi.fn() }));
+vi.mock('../audit.js', () => ({
+    logAction: vi.fn(async () => true),
+    logSecurityEvent: vi.fn(async () => true),
+}));
 vi.mock('../feature-flags.js', () => ({ isFlagEnabled: vi.fn(async () => true) }));
 vi.mock('../../adapters/resend.js', () => ({
     sendEmail: vi.fn(async (message: any) => {

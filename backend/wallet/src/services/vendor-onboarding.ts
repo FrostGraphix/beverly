@@ -285,7 +285,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
 
 export async function resendVendorInvitation(vendorOrganizationId: string): Promise<{
     temporaryPassword: string;
-    invitationDelivery: { status: 'sent'; messageId: string };
+    invitationDelivery: { status: 'sent' | 'failed'; messageId?: string; reason?: string };
 }> {
     const { data: organization, error: organizationError } = await adminClient
         .from('vendor_organizations')
@@ -296,18 +296,12 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
 
     const { data: user, error: userError } = await adminClient
         .from('vendor_users')
-        .select('id, auth_user_id, email, full_name, password_reset_required')
+        .select('id, auth_user_id, email, full_name, password_reset_required, password_changed_at, password_session_id')
         .eq('vendor_organization_id', vendorOrganizationId)
         .limit(1)
         .maybeSingle();
     if (userError || !user || !(user as any).email) throw new OnboardingError('Vendor invitation recipient was not found.', 'invitation_recipient_missing');
     if ((user as any).password_reset_required !== true) throw new OnboardingError('This vendor has already completed first-time access.', 'invitation_already_accepted');
-
-    const temporaryPassword = genTempPassword();
-    const { error: passwordError } = await adminClient.auth.admin.updateUserById((user as any).auth_user_id, { password: temporaryPassword });
-    if (passwordError) throw new OnboardingError(passwordError.message, 'invitation_password_rotation_failed');
-    const { error: revokeError } = await adminClient.auth.admin.signOut((user as any).auth_user_id, 'global');
-    if (revokeError) throw new OnboardingError(revokeError.message, 'invitation_session_revocation_failed');
 
     const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'magiclink',
@@ -316,6 +310,37 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
     });
     const verificationUrl = link?.properties?.action_link;
     if (linkError || !verificationUrl) throw new OnboardingError('Vendor verification link could not be regenerated.', 'verification_link_failed');
+
+    const temporaryPassword = genTempPassword();
+    const previousState = {
+        password_reset_required: true,
+        password_changed_at: (user as any).password_changed_at ?? null,
+        password_session_id: (user as any).password_session_id ?? null,
+    };
+    const { error: transitionError } = await adminClient.from('vendor_users').update({
+        password_reset_required: true,
+        password_changed_at: new Date().toISOString(),
+        password_session_id: `invitation:${crypto.randomUUID()}`,
+    }).eq('id', (user as any).id);
+    if (transitionError) {
+        throw new OnboardingError('Invitation security state could not be saved.', 'invitation_state_update_failed');
+    }
+
+    const { error: passwordError } = await adminClient.auth.admin.updateUserById((user as any).auth_user_id, { password: temporaryPassword });
+    if (passwordError) {
+        const { error: restoreError } = await adminClient.from('vendor_users').update(previousState).eq('id', (user as any).id);
+        if (restoreError) throw new OnboardingError('Invitation recovery requires support assistance.', 'password_recovery_required');
+        throw new OnboardingError(passwordError.message, 'invitation_password_rotation_failed');
+    }
+
+    const { error: revokeError } = await adminClient.auth.admin.signOut((user as any).auth_user_id, 'global');
+    if (revokeError) {
+        await logSecurityEvent('suspicious_activity', {
+            actorUserId: (user as any).auth_user_id,
+            severity: 'high',
+            metadata: { surface: 'vendor_invitation_resend', reason: 'session_revocation_failed', fail_closed: true },
+        }).catch(() => undefined);
+    }
 
     try {
         const content = vendorOnboardingEmail({
@@ -333,12 +358,18 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
             invitation_sent_at: new Date().toISOString(),
             invitation_error: null,
         }).eq('id', (user as any).id);
-        if (statusError) throw statusError;
+        if (statusError) {
+            await logSecurityEvent('suspicious_activity', {
+                actorUserId: (user as any).auth_user_id,
+                severity: 'high',
+                metadata: { surface: 'vendor_invitation_resend', reason: 'invitation_status_persistence_failed', delivery: 'sent' },
+            }).catch(() => undefined);
+        }
         return { temporaryPassword, invitationDelivery: { status: 'sent', messageId: delivery.messageId } };
     } catch (error) {
         const reason = error instanceof Error ? error.message : 'Invitation delivery failed.';
         await adminClient.from('vendor_users').update({ invitation_status: 'failed', invitation_error: reason }).eq('id', (user as any).id);
-        throw new OnboardingError(reason, 'invitation_delivery_failed');
+        return { temporaryPassword, invitationDelivery: { status: 'failed', reason } };
     }
 }
 

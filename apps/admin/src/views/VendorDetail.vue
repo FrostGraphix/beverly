@@ -57,7 +57,7 @@ async function resendInvitation() {
             tone: response.invitationDelivery?.status === 'sent' ? 'success' : 'error',
             text: response.invitationDelivery?.status === 'sent'
                 ? 'A fresh verification invitation was sent. The previous temporary password and sessions are no longer valid.'
-                : 'The invitation could not be delivered. Review the delivery status before retrying.',
+                : 'Email delivery failed. The displayed temporary password remains active. Copy it securely, or resend again.',
         };
     } catch (error: unknown) {
         banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Invitation resend failed.' };
