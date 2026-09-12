@@ -17,7 +17,8 @@ vi.mock('../../db/supabase.js', () => ({
     },
 }));
 
-vi.mock('../audit.js', () => ({ logSecurityEvent: vi.fn(async () => true) }));
+const logSecurityEvent = vi.fn(async () => true);
+vi.mock('../audit.js', () => ({ logSecurityEvent }));
 
 const actor = {
     actorId: 'vendor-user-1',
@@ -77,6 +78,37 @@ describe('vendor password replacement', () => {
 
         expect(updateUserById).toHaveBeenLastCalledWith(actor.userId, { password: 'Temporary!Pass92' });
         expect(signOut).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports failed compensation without claiming cancellation safety', async () => {
+        signOut.mockResolvedValueOnce({ error: { message: 'revocation unavailable' } });
+        updateUserById
+            .mockResolvedValueOnce({ error: null })
+            .mockResolvedValueOnce({ error: { message: 'restore failed' } });
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(tokenResponse('old-session-proof')));
+        const { replaceVendorPassword } = await import('../vendor-password-change.js');
+
+        await expect(replaceVendorPassword({
+            actor,
+            currentPassword: 'Temporary!Pass92',
+            nextPassword: 'River!Quartz92',
+            ip: '127.0.0.1',
+        })).rejects.toMatchObject({ code: 'password_recovery_required', status: 503 });
+    });
+
+    it('does not fail committed changes when audit storage is unavailable', async () => {
+        logSecurityEvent.mockRejectedValueOnce(new Error('audit unavailable'));
+        vi.stubGlobal('fetch', vi.fn()
+            .mockResolvedValueOnce(tokenResponse('old-session-proof'))
+            .mockResolvedValueOnce(tokenResponse('new-session')));
+        const { replaceVendorPassword } = await import('../vendor-password-change.js');
+
+        await expect(replaceVendorPassword({
+            actor,
+            currentPassword: 'Temporary!Pass92',
+            nextPassword: 'River!Quartz92',
+            ip: '127.0.0.1',
+        })).resolves.toMatchObject({ ok: true, access_token: 'new-session' });
     });
 
     it('blocks the account after its password-change attempt budget is exhausted', async () => {

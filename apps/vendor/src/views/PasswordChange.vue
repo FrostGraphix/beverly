@@ -14,11 +14,12 @@
  * Backend records: wallet_security_events { event_type=password_change }
  *                  wallet_security_events { event_type=temp_password_used }
  */
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { evaluateVendorPassword } from '@beverly/tokens/password-policy';
 import { api, ApiError } from '../lib/api';
 import { useVendorAuthStore } from '../stores/auth';
+import { safeVendorRedirect } from '../lib/auth-navigation';
 
 const router = useRouter();
 const route = useRoute();
@@ -32,6 +33,11 @@ const showConfirm = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const success = ref(false);
+let redirectTimer: ReturnType<typeof setTimeout> | null = null;
+
+onBeforeUnmount(() => {
+    if (redirectTimer) clearTimeout(redirectTimer);
+});
 
 // ─ Strength meter ─────────────────────────────────────────────
 interface Strength {
@@ -88,12 +94,8 @@ async function submit() {
         });
         success.value = true;
         // Brief success state, then route
-        const destination = typeof route.query.redirect === 'string'
-            && route.query.redirect.startsWith('/')
-            && !route.query.redirect.startsWith('//')
-            ? route.query.redirect
-            : '/';
-        setTimeout(() => router.push(destination), 1200);
+        const destination = safeVendorRedirect(route.query.redirect);
+        redirectTimer = setTimeout(() => router.push(destination), 1200);
     } catch (e: any) {
         if (e instanceof ApiError) {
             error.value = e.message ?? 'Update failed.';
@@ -148,6 +150,7 @@ function logout() {
               v-model="current"
               type="password"
               autocomplete="current-password"
+              maxlength="200"
               required
               placeholder="The one Beverly staff handed you"
             />
@@ -164,6 +167,7 @@ function logout() {
                 :type="showNext ? 'text' : 'password'"
                 autocomplete="new-password"
                 minlength="12"
+                maxlength="128"
                 required
                 placeholder="At least 12 characters"
               />
@@ -208,6 +212,7 @@ function logout() {
                 :type="showConfirm ? 'text' : 'password'"
                 autocomplete="new-password"
                 minlength="12"
+                maxlength="128"
                 required
                 :class="{ 'has-error': !passwordsMatch }"
               />

@@ -20,7 +20,7 @@ import { vendorPasswordError } from '@beverly/tokens/password-policy';
 export type ResetUserType = 'customer' | 'vendor_user';
 
 export class PasswordResetError extends Error {
-    constructor(message: string, public code: string) {
+    constructor(message: string, public code: string, public status = 400) {
         super(message);
         this.name = 'PasswordResetError';
     }
@@ -43,20 +43,34 @@ function resetUrl(userType: ResetUserType, token: string): string {
 
 async function lookupAuthUserId(email: string, userType: ResetUserType): Promise<string | null> {
     if (userType === 'customer') {
-        const { data } = await adminClient
+        const { data, error } = await adminClient
             .from('customers')
             .select('auth_user_id, user_id, status')
             .eq('email', email)
             .maybeSingle();
+        if (error) {
+            throw new PasswordResetError(
+                'Account lookup is temporarily unavailable.',
+                'user_directory_unavailable',
+                503,
+            );
+        }
         if (!data || (data as any).status !== 'active') return null;
         return (data as any).auth_user_id ?? (data as any).user_id ?? null;
     }
     // vendor_user — look up via vendor_users.email
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_users')
         .select('auth_user_id, status')
         .eq('email', email)
         .maybeSingle();
+    if (error) {
+        throw new PasswordResetError(
+            'Account lookup is temporarily unavailable.',
+            'user_directory_unavailable',
+            503,
+        );
+    }
     if (!data || (data as any).status !== 'active') return null;
     return (data as any).auth_user_id ?? null;
 }
@@ -85,6 +99,7 @@ export async function requestPasswordReset(
         throw new PasswordResetError(
             'Password reset email delivery is not configured.',
             'email_delivery_unconfigured',
+            503,
         );
     }
 
@@ -96,20 +111,28 @@ export async function requestPasswordReset(
         throw new PasswordResetError(
             'Password reset storage is unavailable.',
             'token_store_unavailable',
+            503,
         );
     }
 
     // Always succeed visibly — never reveal whether an account exists.
-    const authUserId = await lookupAuthUserId(normalizedEmail, userType).catch(() => null);
+    const authUserId = await lookupAuthUserId(normalizedEmail, userType);
     if (!authUserId) return; // silent no-op
 
     // Invalidate any existing unused tokens for this user+type.
-    await adminClient
+    const { error: invalidationError } = await adminClient
         .from('password_reset_tokens')
         .update({ used_at: new Date().toISOString() })
         .eq('auth_user_id', authUserId)
         .eq('user_type', userType)
         .is('used_at', null);
+    if (invalidationError) {
+        throw new PasswordResetError(
+            'Older password reset links could not be invalidated.',
+            'token_invalidation_failed',
+            503,
+        );
+    }
 
     const raw = generateRawToken();
     const ttlMs = env.PASSWORD_RESET_TTL_MINUTES * 60 * 1000;
@@ -126,6 +149,7 @@ export async function requestPasswordReset(
         throw new PasswordResetError(
             'Password reset storage is unavailable.',
             'token_store_failed',
+            503,
         );
     }
 
@@ -161,6 +185,7 @@ export async function requestPasswordReset(
         throw new PasswordResetError(
             'Password reset email could not be sent.',
             'email_delivery_failed',
+            503,
         );
     }
 }
@@ -209,21 +234,92 @@ export async function confirmPasswordReset(
     if (claimError) throw new PasswordResetError(claimError.message, 'db_error');
     if (!claimed) throw new PasswordResetError('Reset link is invalid or has already been used.', 'invalid_token');
 
+    const releaseClaim = async (): Promise<boolean> => {
+        const { error: releaseError } = await adminClient
+            .from('password_reset_tokens')
+            .update({ used_at: null })
+            .eq('id', (row as any).id);
+        return !releaseError;
+    };
+
+    let previousVendorState: {
+        password_reset_required: boolean;
+        password_changed_at: string | null;
+        password_session_id: string | null;
+    } | null = null;
+
+    if (userType === 'vendor_user') {
+        const { data: vendorState, error: vendorStateReadError } = await adminClient
+            .from('vendor_users')
+            .select('password_reset_required, password_changed_at, password_session_id')
+            .eq('auth_user_id', (row as any).auth_user_id)
+            .maybeSingle();
+        if (vendorStateReadError || !vendorState) {
+            await releaseClaim();
+            throw new PasswordResetError(
+                'Password security state is temporarily unavailable.',
+                'password_state_unavailable',
+                503,
+            );
+        }
+        previousVendorState = {
+            password_reset_required: (vendorState as any).password_reset_required === true,
+            password_changed_at: (vendorState as any).password_changed_at ?? null,
+            password_session_id: (vendorState as any).password_session_id ?? null,
+        };
+        const { error: vendorStateError } = await adminClient
+            .from('vendor_users')
+            .update({
+                password_reset_required: true,
+                password_changed_at: new Date().toISOString(),
+                password_session_id: `password-reset:${crypto.randomUUID()}`,
+            })
+            .eq('auth_user_id', (row as any).auth_user_id);
+        if (vendorStateError) {
+            await releaseClaim();
+            throw new PasswordResetError(
+                'Password security state could not be saved.',
+                'password_state_update_failed',
+                503,
+            );
+        }
+    }
+
     // Update password via Supabase service role.
     const { error: authErr } = await adminClient.auth.admin.updateUserById(
         (row as any).auth_user_id,
         { password: newPassword },
     );
-    if (authErr) throw new PasswordResetError(authErr.message, 'password_update_failed');
+    if (authErr) {
+        let stateRestored = true;
+        if (previousVendorState) {
+            const { error: restoreError } = await adminClient
+                .from('vendor_users')
+                .update(previousVendorState)
+                .eq('auth_user_id', (row as any).auth_user_id);
+            stateRestored = !restoreError;
+        }
+        const claimReleased = stateRestored && await releaseClaim();
+        if (!stateRestored || !claimReleased) {
+            throw new PasswordResetError(
+                'Password recovery requires support assistance.',
+                'password_recovery_required',
+                503,
+            );
+        }
+        throw new PasswordResetError(authErr.message, 'password_update_failed', 503);
+    }
 
-    // Revoke existing sessions after recovery.
-    await adminClient.auth.admin.signOut((row as any).auth_user_id, 'global').catch(() => undefined);
-
-    // For vendors, also clear the forced-reset flag if set
     if (userType === 'vendor_user') {
+        // The login boundary also completes this transition after a crash.
+        // Keep the reset marker until credential replacement succeeds.
         await adminClient
             .from('vendor_users')
             .update({ password_reset_required: false })
             .eq('auth_user_id', (row as any).auth_user_id);
     }
+
+    // Revoke existing sessions after recovery.
+    await adminClient.auth.admin.signOut((row as any).auth_user_id, 'global').catch(() => undefined);
+
 }

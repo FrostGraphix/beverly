@@ -71,7 +71,7 @@ import {
     hashIdempotency,
 } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
-import { replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
+import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
 
 function bearerToken(req: FastifyRequest): string {
@@ -650,15 +650,21 @@ const route: FastifyPluginAsync = async (fastify) => {
     // Backend-mediated so the vendor SPA does not need Supabase keys at build
     // time. Performs the Supabase password grant, verifies the vendor account,
     // and returns the access token plus the canonical vendor profile.
-    fastify.post('/auth/email/login', async (req, reply) => {
+    fastify.post('/auth/email/login', {
+        config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    }, async (req, reply) => {
         const schema = z.object({
-            email:    z.string().trim().min(3).max(200),
+            email:    z.string().trim().email().max(200).optional(),
+            phone:    z.string().trim().min(8).max(32).optional(),
             password: z.string().min(1).max(200),
-        });
+        }).refine((value) => Boolean(value.email) !== Boolean(value.phone));
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body ?? {}); }
         catch { return reply.code(400).send({ error: 'missing_fields', message: 'Email and password are required.' }); }
-        const email = body.email.trim().toLowerCase();
+        const identifier = body.email ? body.email.trim().toLowerCase() : body.phone!.trim();
+        const credentials = body.email
+            ? { email: identifier, password: body.password }
+            : { phone: identifier, password: body.password };
 
         if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
             return reply.code(503).send({ error: 'auth_not_configured', message: 'Authentication is not configured. Contact support.' });
@@ -669,12 +675,12 @@ const route: FastifyPluginAsync = async (fastify) => {
             tokRes = await fetch(`${process.env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', apikey: process.env.SUPABASE_ANON_KEY },
-                body: JSON.stringify({ email, password: body.password }),
+                body: JSON.stringify(credentials),
             });
         } catch {
             return reply.code(503).send({ error: 'auth_upstream_unreachable', message: 'Authentication service is temporarily unavailable. Try again shortly.' });
         }
-        const tokData = await tokRes.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number; user?: { id?: string; email_confirmed_at?: string | null } };
+        const tokData = await tokRes.json().catch(() => ({})) as { access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number; user?: { id?: string; email_confirmed_at?: string | null; phone_confirmed_at?: string | null } };
         if (!tokRes.ok || !tokData.access_token || !tokData.user?.id) {
             return reply.code(401).send({ error: 'invalid_credentials', message: 'Invalid email or password.' });
         }
@@ -683,22 +689,26 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, email_verified_at, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, email_verified_at, profile_picture_url, mfa_enrolled, password_reset_required, password_changed_at, password_session_id, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
             .eq('auth_user_id', userId)
             .maybeSingle();
         if (!vu) {
             return reply.code(403).send({ error: 'not_vendor', message: 'This account is not linked to a vendor.' });
         }
-        let confirmedAt = tokData.user.email_confirmed_at ?? null;
+        let confirmedAt = body.email
+            ? tokData.user.email_confirmed_at ?? null
+            : tokData.user.phone_confirmed_at ?? null;
         if (!confirmedAt) {
             const { data: authoritativeUser, error: authoritativeUserError } = await adminClient.auth.admin.getUserById(userId);
             if (authoritativeUserError) {
                 await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
                 return reply.code(503).send({ error: 'email_verification_check_failed', message: 'Email verification could not be confirmed. Try again shortly.' });
             }
-            confirmedAt = authoritativeUser.user?.email_confirmed_at ?? null;
+            confirmedAt = body.email
+                ? authoritativeUser.user?.email_confirmed_at ?? null
+                : authoritativeUser.user?.phone_confirmed_at ?? null;
         }
-        if ((vu as any).status === 'invited' && confirmedAt) {
+        if (body.email && (vu as any).status === 'invited' && confirmedAt) {
             const { error: activateUserError } = await adminClient.from('vendor_users').update({
                 status: 'active',
                 email_verified_at: confirmedAt,
@@ -730,6 +740,28 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(403).send({ error: 'org_not_approved', message: 'Your vendor organization is not approved yet.' });
         }
 
+        if ((vu as any).password_changed_at) {
+            const sessionId = passwordSessionId(accessToken);
+            if (!sessionId) {
+                await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+                return reply.code(503).send({ error: 'session_binding_failed', message: 'Your secure session could not be established. Try again shortly.' });
+            }
+            const recoveringPasswordReset = String((vu as any).password_session_id ?? '').startsWith('password-reset:');
+            const { error: bindingError } = await adminClient
+                .from('vendor_users')
+                .update({
+                    password_session_id: sessionId,
+                    password_reset_required: recoveringPasswordReset ? false : (vu as any).password_reset_required,
+                })
+                .eq('id', (vu as any).id);
+            if (bindingError) {
+                await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+                return reply.code(503).send({ error: 'session_binding_failed', message: 'Your secure session could not be established. Try again shortly.' });
+            }
+            (vu as any).password_session_id = sessionId;
+            if (recoveringPasswordReset) (vu as any).password_reset_required = false;
+        }
+
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
         const mfaVerified = mfaEnrolled ? await vendorMfaSessionVerified(userId, accessToken) : true;
 
@@ -739,7 +771,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'vendor.email_login',
             targetType: 'vendor_user',
             targetId: (vu as any).id,
-            after: { email },
+            after: { identifier_type: body.email ? 'email' : 'phone' },
         }).catch(() => undefined);
 
         return {
@@ -821,7 +853,11 @@ const route: FastifyPluginAsync = async (fastify) => {
                     userAgent: req.headers['user-agent'],
                     metadata: { userType: 'vendor_user', code: e.code },
                 });
-                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
+                const status = e.status >= 500
+                    ? e.status
+                    : e.code === 'invalid_token' || e.code === 'token_expired'
+                        ? 400
+                        : 422;
                 return reply.code(status).send({ error: e.code, message: e.message });
             }
             throw e;
@@ -835,8 +871,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(403).send({ error: 'forbidden', message: 'Vendor user only.' });
         }
         const schema = z.object({
-            current: z.string().min(1, 'Current password required.'),
-            next:    z.string().min(12, 'New password must be at least 12 characters.'),
+            current: z.string().min(1, 'Current password required.').max(200),
+            next:    z.string().min(12, 'New password must be at least 12 characters.').max(128),
         });
         const { current, next } = schema.parse(req.body);
 

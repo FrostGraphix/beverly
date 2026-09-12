@@ -31,10 +31,10 @@ assert.match(adminVite, /loadEnv\(mode, resolve\(__dirname, '\.\.\/\.\.'\), ''\)
 assert.match(adminVite, /env\.VITE_SUPABASE_URL \|\| env\.SUPABASE_URL/);
 assert.match(adminVite, /env\.VITE_SUPABASE_ANON_KEY \|\| env\.SUPABASE_ANON_KEY/);
 
-assert.match(vendorLogin, /safeRedirectTarget/);
+assert.match(vendorLogin, /safeVendorRedirect/);
 assert.match(vendorLogin, /REMEMBERED_VENDOR_EMAIL_KEY/);
 assert.match(vendorLogin, /showPassword/);
-assert.match(vendorLogin, /Authentication is not configured/);
+assert.match(vendorLogin, /\/api\/v1\/vendor\/auth\/email\/login/);
 assert.match(vendorVite, /loadEnv\(mode, resolve\(__dirname, '\.\.\/\.\.'\), ''\)/);
 assert.match(vendorVite, /env\.VITE_SUPABASE_URL \|\| env\.SUPABASE_URL/);
 assert.match(vendorVite, /env\.VITE_SUPABASE_ANON_KEY \|\| env\.SUPABASE_ANON_KEY/);
