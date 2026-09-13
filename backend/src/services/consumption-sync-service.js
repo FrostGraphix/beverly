@@ -183,18 +183,25 @@ async function databaseQuotaState(input, mode) {
     retryable: true,
     body: {},
   });
-  const usedMb = Number(Array.isArray(usage) ? usage[0]?.megabytes : usage?.megabytes);
-  if (!Number.isFinite(usedMb) || usedMb < 0) {
+  const usageRow = Array.isArray(usage) ? usage[0] : usage;
+  const reportedBytes = Number(usageRow?.bytes);
+  const reportedMebibytes = Number(usageRow?.megabytes);
+  const usedBytes = Number.isFinite(reportedBytes)
+    ? reportedBytes
+    : reportedMebibytes * 1048576;
+  if (!Number.isFinite(usedBytes) || usedBytes < 0) {
     throw new Error("Database usage measurement unavailable");
   }
-  const usedPercent = (usedMb / quotaMb) * 100;
-  const warnPercent = boundedPercent(input.quotaWarnPercent || process.env.DATABASE_QUOTA_WARN_PERCENT, 75);
-  const backfillPausePercent = boundedPercent(input.quotaBackfillPausePercent || process.env.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, 85);
-  const hardStopPercent = boundedPercent(input.quotaHardStopPercent || process.env.DATABASE_QUOTA_HARD_STOP_PERCENT, 90);
+  const usedMb = usedBytes / 1000000;
+  const usedPercent = (usedBytes / (quotaMb * 1000000)) * 100;
+  const warnPercent = boundedPercent(input.quotaWarnPercent || process.env.DATABASE_QUOTA_WARN_PERCENT, 70);
+  const backfillPausePercent = boundedPercent(input.quotaBackfillPausePercent || process.env.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, 75);
+  const hardStopPercent = boundedPercent(input.quotaHardStopPercent || process.env.DATABASE_QUOTA_HARD_STOP_PERCENT, 80);
   const quotaPaused = usedPercent >= hardStopPercent || (mode === "backfill" && usedPercent >= backfillPausePercent);
   return {
     quotaMb,
-    usedMb,
+    usedMb: Math.round(usedMb * 100) / 100,
+    usedBytes,
     usedPercent: Math.round(usedPercent * 100) / 100,
     warning: usedPercent >= warnPercent,
     quotaPaused,
