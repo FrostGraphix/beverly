@@ -44,7 +44,7 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
         }
       };
     }
-    if (pathname.includes("select=id")) {
+    if (pathname === "/daily_meter_readings?select=station_id&station_id=eq.TUNGA") {
       return {
         response: {
           headers: {
@@ -373,6 +373,9 @@ const signalRowAlarms = derivedAlarms.filter((row) => row.meterId === "M-1" && r
 const derivedAlarmKeys = signalRowAlarms.map((row) => row.alarmKey).sort();
 assert.deepStrictEqual(derivedAlarmKeys, ["magneticInterference", "relayOpen"].sort());
 
+const estateReport = await store.dailyMeterTableReport();
+assert.strictEqual(estateReport.totalRows, 2, "estate reports must count every stored reading");
+
 const report = await store.dailyMeterTableReport(["TUNGA"]);
 assert.strictEqual(report.enabled, true);
 assert.strictEqual(report.tableReady, true);
@@ -380,6 +383,10 @@ assert.strictEqual(report.totalRows, 12);
 assert.strictEqual(report.stations[0].station, "TUNGA");
 
 const stats = await store.dailyMeterStationStats(["TUNGA"]);
+assert(
+  requests.some((request) => request.pathname.includes("/daily_meter_readings?select=station_id")),
+  "row counts must select an existing composite-key column"
+);
 assert.strictEqual(stats.stations[0].earliestReadingDate, "2025-07-14");
 assert.strictEqual(stats.stations[0].latestReadingDate, "2026-05-09");
 

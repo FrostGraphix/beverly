@@ -494,19 +494,15 @@ export async function fetchStationConsumptionAnalytics({ stationId = null, from,
  */
 export async function triggerMeterAggregateRefresh(stationIds = null) {
   const stationList = await resolveStations(stationIds);
-  const response = await authedFetch("/api/v1/admin/consumption/refresh", {
+  const response = await authedFetch("/api/local/consumption/refresh-aggregates", {
     method: "POST",
     body: JSON.stringify({ stationIds: stationList }),
   });
   const json = await response.json().catch(() => ({}));
-  if (response.ok && json?.ok) return json;
-
-  const fallback = await authedFetch("/api/local/consumption/refresh-aggregates", { method: "POST" });
-  const fallbackJson = await fallback.json().catch(() => ({}));
-  if (!fallback.ok || !fallbackJson.ok) {
-    throw new Error(fallbackJson.error || json?.error || `Aggregate refresh failed (${fallback.status}).`);
+  if (!response.ok || !json?.ok) {
+    throw new Error(json?.error || `Aggregate refresh failed (${response.status}).`);
   }
-  return fallbackJson;
+  return json;
 }
 
 /**
