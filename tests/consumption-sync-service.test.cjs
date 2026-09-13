@@ -313,7 +313,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   writes.length = 0;
   supabase.restRequest = async (pathname, options = {}) => {
     writes.push({ pathname, options });
-    if (pathname === "/rpc/consumption_database_usage") return { megabytes: 430, bytes: 450887680 };
+    if (pathname === "/rpc/consumption_database_usage") return { megabytes: 357.63, bytes: 375000000 };
     return [];
   };
   const quotaPaused = await runConsumptionSync({
@@ -322,7 +322,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
     from: "2025-01-01",
     to: "2026-05-12",
   });
-  assert.equal(quotaPaused.quotaPaused, true, "backfills must pause above eighty-five percent");
+  assert.equal(quotaPaused.quotaPaused, true, "backfills must pause at seventy-five percent");
   assert.equal(liveCalls.filter((call) => call.url.endsWith("/api/DailyDataMeter/read")).length, 0);
   assert(writes.some((write) => write.pathname === "/consumption_sync_runs" && write.options.body.status === "quota_paused"), "quota pauses must remain durable");
 
