@@ -16,9 +16,9 @@ assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-daily" && cr
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-backfill" && cron.schedule === "0 18 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/consumption-sync" && cron.schedule === "0 3 * * *"));
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_MB, "500", "database quota must be explicit");
-assert.strictEqual(vercel.env?.DATABASE_QUOTA_WARN_PERCENT, "75", "database warning gate must be explicit");
-assert.strictEqual(vercel.env?.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, "85", "database backfill gate must be explicit");
-assert.strictEqual(vercel.env?.DATABASE_QUOTA_HARD_STOP_PERCENT, "90", "database hard-stop gate must be explicit");
+assert.strictEqual(vercel.env?.DATABASE_QUOTA_WARN_PERCENT, "70", "database warning gate must preserve thirty-percent headroom");
+assert.strictEqual(vercel.env?.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, "75", "database backfill gate must preserve twenty-five-percent headroom");
+assert.strictEqual(vercel.env?.DATABASE_QUOTA_HARD_STOP_PERCENT, "80", "database hard-stop gate must preserve twenty-percent headroom");
 assert.strictEqual(vercel.env?.CONSUMPTION_HOT_RETENTION_DAYS, "120", "hot ingestion window must match retention");
 assert.strictEqual(vercel.env?.CONSUMPTION_SYNC_PAGE_SIZE, "500", "sync page size must stay bounded");
 assert.strictEqual(vercel.env?.CONSUMPTION_SYNC_INCREMENTAL_MAX_PAGES, "50", "incremental catchup budget must be explicit");

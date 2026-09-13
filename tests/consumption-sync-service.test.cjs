@@ -75,7 +75,20 @@ function responseWithCount(total, body = [{ id: "row" }]) {
     };
   };
 
-  const { runConsumptionSync, stationAttemptsForMode, syncWindow } = require("../backend/src/services/consumption-sync-service");
+  const { databaseQuotaState, runConsumptionSync, stationAttemptsForMode, syncWindow } = require("../backend/src/services/consumption-sync-service");
+
+  supabase.restRequest = async (pathname) => {
+    if (pathname === "/rpc/consumption_database_usage") return { megabytes: 357.63, bytes: 375000000 };
+    return [];
+  };
+  const decimalQuota = await databaseQuotaState({ databaseQuotaMb: 500 }, "backfill");
+  assert.equal(decimalQuota.usedPercent, 75, "quota percentages must match decimal provider limits");
+  assert.equal(decimalQuota.quotaPaused, true, "backfills must pause at seventy-five percent");
+  supabase.restRequest = async (pathname, options = {}) => {
+    writes.push({ pathname, options });
+    if (pathname === "/rpc/consumption_database_usage") return { megabytes: 300, bytes: 314572800 };
+    return [];
+  };
 
   const incrementalWindow = syncWindow("incremental", { latestReadingDate: "2026-05-10" }, { to: "2026-05-12" });
   assert.equal(incrementalWindow.from, "2026-05-10");
