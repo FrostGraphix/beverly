@@ -540,6 +540,12 @@ function stationAnalyticsRequestScope(request, payload = {}) {
   return { ...payload, stationId, stationIds: [stationId] };
 }
 
+function requestedStationIds(payload = {}) {
+  const values = Array.isArray(payload.stationIds) ? [...payload.stationIds] : [];
+  if (payload.stationId) values.push(payload.stationId);
+  return [...new Set(values.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean))];
+}
+
 function protectedPath(pathname, method = "GET") {
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
@@ -3144,8 +3150,20 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if (pathname === "/api/local/consumption/refresh-aggregates") {
     try {
-      const result = await refreshMeterReadingAggregates(await fetchLiveStationIds(request));
-      return { status: 200, body: { ok: true, durationMs: result.durationMs } };
+      const scopedPayload = stationAnalyticsRequestScope(request, requestData.parsedBody);
+      if (!scopedPayload) return authFailure(403, pathname, "Station assignment required");
+      const requested = requestedStationIds(scopedPayload);
+      const stationIds = requested.length ? requested : await fetchLiveStationIds(request);
+      const result = await refreshMeterReadingAggregates(stationIds);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          durationMs: result.durationMs,
+          stations: result.stations,
+          fallback: !!result.fallback,
+        },
+      };
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
@@ -5814,6 +5832,7 @@ module.exports._test = {
   crmSessionStatus,
   refreshTargets,
   stationAnalyticsRequestScope,
+  requestedStationIds,
   upstreamCapabilitiesFromRows,
   routeHashForWritePath,
   authorizeRequest,

@@ -297,7 +297,7 @@ function rowsToDeltas(rows) {
 
 async function countDailyMeterRows(stationId = "") {
   const station = normalizeStation(stationId);
-  const filters = ["select=id"];
+  const filters = ["select=station_id"];
   if (station) filters.push(`station_id=eq.${encodeURIComponent(station)}`);
   const { response } = await supabase.restRequestWithResponse(`/daily_meter_readings?${filters.join("&")}`, {
     headers: {
@@ -336,8 +336,11 @@ async function dailyMeterStationStats(stations = []) {
 
   try {
     const stationStats = [];
-    let totalRows = 0;
-    for (const station of stations) {
+    const normalizedStations = [...new Set((Array.isArray(stations) ? stations : [])
+      .map(normalizeStation)
+      .filter(Boolean))];
+    let totalRows = normalizedStations.length ? 0 : await countDailyMeterRows();
+    for (const station of normalizedStations) {
       const rows = await countDailyMeterRows(station);
       let rawDuplicateRows = 0;
       try {

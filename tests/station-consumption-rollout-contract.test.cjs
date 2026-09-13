@@ -18,8 +18,8 @@ const migrationB = read("supabase/migrations/20260521220000_meter_agg_per_statio
 const migrationC = read("supabase/migrations/20260521231000_fix_station_aggregate_refresh.sql");
 
 assert(
-  stationService.includes("/api/v1/admin/consumption/refresh"),
-  "station consumption service must use admin refresh endpoint"
+  stationService.includes("/api/local/consumption/refresh-aggregates"),
+  "station consumption service must use CRM cookie-authenticated refresh endpoint"
 );
 assert(
   stationService.includes("stationIds"),
@@ -55,5 +55,5 @@ assert(
 
 console.log(JSON.stringify({
   status: "station consumption rollout contract passed",
-  refreshEndpoint: "/api/v1/admin/consumption/refresh",
+  refreshEndpoint: "/api/local/consumption/refresh-aggregates",
 }, null, 2));

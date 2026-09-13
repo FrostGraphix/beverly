@@ -23,6 +23,12 @@ assert.strictEqual(
   "unassigned non-super-admin staff must fail closed"
 );
 
+assert.deepStrictEqual(
+  _test.requestedStationIds({ stationIds: ["ofemili", " OFEMILI ", "tunga", ""] }),
+  ["OFEMILI", "TUNGA"],
+  "aggregate refresh station identifiers must normalize and deduplicate"
+);
+
 function startServer(listener) {
   return new Promise((resolve) => {
     const server = http.createServer(listener);
@@ -217,6 +223,15 @@ async function main() {
       });
       assert.strictEqual(readableLiveWriteStatus.status, 200);
       assert.strictEqual(readableLiveWriteStatus.body.data.canManage, false);
+
+      const cookieAuthenticatedStatus = await request(port, "GET", "/api/system/live-write-control", null, {
+        Cookie: sessionCookie("ops-token")
+      });
+      assert.strictEqual(
+        cookieAuthenticatedStatus.status,
+        200,
+        "a valid HttpOnly CRM session must authorize without a JavaScript-readable bearer token"
+      );
 
       const readableTelemetry = await request(port, "GET", "/api/system/client-errors?limit=1", null, {
         Authorization: "Bearer ops-token",
