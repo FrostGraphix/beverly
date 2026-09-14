@@ -10,23 +10,9 @@
         </p>
       </div>
       <div class="archive-reports__actions">
-        <WalletExportMenu
-          :rows="reports"
-          :columns="archiveExportColumns"
-          :meta="archiveExportMeta"
-          :loading="loading"
-          :station-options="stationOptions"
-          :status-options="exportTypeOptions"
-          :date-value="report => report.periodStart"
-          :station-value="report => report.stationId"
-          :status-value="report => report.reportType"
-          :resolve-rows="resolveArchiveExportRows"
-          filename="beverly-archive-catalogue"
-          title="Archive report catalogue"
-          subtitle="Verified coverage, freshness, and download metadata."
-          status-label="Report type"
-          label="Export catalogue"
-        />
+        <BaseButton variant="primary" :disabled="loading || !readySiteCount" @click="openExport()">
+          Export archives
+        </BaseButton>
         <BaseButton variant="secondary" :disabled="loading" @click="load()">
           {{ loading ? "Loading…" : "Refresh" }}
         </BaseButton>
@@ -85,105 +71,61 @@
       </article>
     </div>
 
-    <div class="archive-reports__filters">
+    <div class="archive-reports__filters archive-reports__site-tools">
       <label class="archive-filter">
-        <span>Station</span>
-        <BaseSelect v-model="filters.stationId" @change="applyFilters">
-          <option value="">All stations</option>
-          <option v-for="station in stationOptions" :key="station.value" :value="station.value">{{ station.label }}</option>
-        </BaseSelect>
+        <span>Search sites</span>
+        <BaseInput v-model="siteSearch" type="search" placeholder="Site name or StationID" autocomplete="off" />
       </label>
       <label class="archive-filter">
-        <span>Year</span>
-        <BaseSelect v-model="filters.year" @change="applyFilters">
-          <option value="">All years</option>
-          <option v-for="year in yearOptions" :key="year" :value="year">{{ year }}</option>
+        <span>Archive status</span>
+        <BaseSelect v-model="siteStateFilter">
+          <option value="">All sites</option>
+          <option value="ready">Archive ready</option>
+          <option value="empty">No archives</option>
         </BaseSelect>
       </label>
-      <label class="archive-filter">
-        <span>Type</span>
-        <BaseSelect v-model="filters.reportType" @change="applyFilters">
-          <option value="">All types</option>
-          <option v-for="type in typeOptions" :key="type" :value="type">{{ titleCase(type) }}</option>
-        </BaseSelect>
-      </label>
-      <label class="archive-filter">
-        <span>Granularity</span>
-        <BaseSelect v-model="filters.granularity" @change="applyFilters">
-          <option value="">All grains</option>
-          <option v-for="grain in granularityOptions" :key="grain" :value="grain">{{ titleCase(grain) }}</option>
-        </BaseSelect>
-      </label>
-      <label class="archive-filter">
-        <span>Month</span>
-        <BaseSelect v-model="filters.month" :disabled="!filters.year || filters.granularity === 'yearly'" @change="applyFilters">
-          <option value="">All months</option>
-          <option v-for="(name, index) in monthNames" :key="name" :value="index + 1">{{ name }}</option>
-        </BaseSelect>
-      </label>
-      <BaseButton
-        v-if="hasActiveFilters"
-        variant="ghost"
-        class="archive-reports__clear"
-        @click="clearFilters"
-      >
-        Clear filters
-      </BaseButton>
       <span class="archive-reports__filtercount" aria-live="polite">
-        {{ formatNumber(totalCount) }} {{ totalCount === 1 ? "partition" : "partitions" }}
+        {{ formatNumber(filteredSites.length) }} of {{ formatNumber(siteRows.length) }} sites
       </span>
     </div>
 
-    <div class="archive-reports__tablewrap" tabindex="0" aria-label="Archive report catalogue; scroll horizontally to see all columns">
+    <div class="archive-reports__tablewrap" tabindex="0" aria-label="Archive coverage by site; scroll horizontally to see all columns">
       <table class="archive-table" :aria-busy="loading ? 'true' : 'false'">
         <thead>
           <tr>
             <th scope="col">OEM</th>
-            <th scope="col">Station</th>
-            <th scope="col">Type</th>
-            <th scope="col">Grain</th>
-            <th scope="col">Period</th>
-            <th scope="col">Covers</th>
-            <th scope="col" class="archive-table__num">Rows</th>
-            <th scope="col" class="archive-table__num">Size</th>
-            <th scope="col">Refreshed</th>
-            <th scope="col">Actions</th>
+            <th scope="col">Site</th>
+            <th scope="col">Status</th>
+            <th scope="col">Reports</th>
+            <th scope="col">Coverage</th>
+            <th scope="col" class="archive-table__num">Files</th>
+            <th scope="col" class="archive-table__num">Source rows</th>
+            <th scope="col" class="archive-table__num">Storage</th>
+            <th scope="col">Last refreshed</th>
+            <th scope="col">Export</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
             <td colspan="10" class="archive-table__empty">Loading archive catalogue…</td>
           </tr>
-          <tr v-else-if="!reports.length">
+          <tr v-else-if="!filteredSites.length">
             <td colspan="10" class="archive-table__empty">
-              No archived partitions yet. Months are exported once they have been closed
-              for {{ graceDays }} days.
+              No sites match these filters.
             </td>
           </tr>
-          <tr v-for="report in reports" v-else :key="report.id">
-            <td class="archive-table__muted">{{ report.oemSlug || '—' }}</td>
-            <td class="archive-table__station">{{ formatStationLabel(report.stationId) }}</td>
+          <tr v-for="site in filteredSites" v-else :key="site.stationId">
+            <td class="archive-table__muted">{{ site.oemSlug || '—' }}</td>
+            <td class="archive-table__station">{{ site.label }}</td>
+            <td><span :class="['archive-site-state', `archive-site-state--${site.state}`]">{{ site.state === 'ready' ? 'Ready' : 'No archives' }}</span></td>
+            <td>{{ site.reportTypes.length ? site.reportTypes.map(titleCase).join(', ') : '—' }}</td>
+            <td class="archive-table__muted">{{ site.coversFrom && site.coversTo ? `${site.coversFrom} → ${site.coversTo}` : 'Awaiting first archive' }}</td>
+            <td class="archive-table__num">{{ formatNumber(site.reportCount) }}</td>
+            <td class="archive-table__num">{{ formatNumber(site.rowCount) }}</td>
+            <td class="archive-table__num">{{ formatSize(site.byteSize) }}</td>
+            <td class="archive-table__muted">{{ formatDateTime(site.refreshedAt) }}</td>
             <td>
-              <span :class="['archive-table__type', `archive-table__type--${report.reportType}`]">
-                {{ titleCase(report.reportType) }}
-              </span>
-            </td>
-            <td>{{ titleCase(report.granularity) }}</td>
-            <td>{{ report.granularity === 'yearly' ? report.periodStart.slice(0, 4) : formatMonth(report.periodStart) }}</td>
-            <td class="archive-table__muted">
-              {{ report.coversFrom || "—" }} → {{ report.coversTo || "—" }}
-            </td>
-            <td class="archive-table__num">{{ formatNumber(report.rowCount) }}</td>
-            <td class="archive-table__num">{{ formatSize(report.byteSize) }}</td>
-            <td class="archive-table__muted">{{ formatDateTime(report.refreshedAt) }}</td>
-            <td>
-              <BaseButton
-                variant="ghost"
-                :disabled="downloadingId === report.id"
-                @click="download(report)"
-              >
-                {{ downloadingId === report.id ? "Preparing…" : "Download" }}
-              </BaseButton>
+              <BaseButton variant="ghost" :disabled="site.state !== 'ready'" @click="openExport(site)">Configure</BaseButton>
             </td>
           </tr>
         </tbody>
@@ -192,57 +134,29 @@
 
     <div class="archive-mobile-list" :aria-busy="loading ? 'true' : 'false'">
       <p v-if="loading" class="archive-table__empty">Loading archive catalogue…</p>
-      <p v-else-if="!reports.length" class="archive-table__empty">
-        No archived partitions match these filters.
+      <p v-else-if="!filteredSites.length" class="archive-table__empty">
+        No sites match these filters.
       </p>
-      <article v-for="report in reports" v-else :key="report.id" class="archive-mobile-card">
+      <article v-for="site in filteredSites" v-else :key="site.stationId" class="archive-mobile-card">
         <div class="archive-mobile-card__head">
           <div>
-            <span class="archive-mobile-card__eyebrow">{{ report.oemSlug || "Unmapped OEM" }}</span>
-            <h3>{{ formatStationLabel(report.stationId) }}</h3>
+            <span class="archive-mobile-card__eyebrow">{{ site.oemSlug || "Unmapped OEM" }}</span>
+            <h3>{{ site.label }}</h3>
           </div>
-          <span :class="['archive-table__type', `archive-table__type--${report.reportType}`]">
-            {{ titleCase(report.reportType) }}
-          </span>
+          <span :class="['archive-site-state', `archive-site-state--${site.state}`]">{{ site.state === 'ready' ? 'Ready' : 'Empty' }}</span>
         </div>
         <dl>
-          <div><dt>Period</dt><dd>{{ report.granularity === "yearly" ? report.periodStart.slice(0, 4) : formatMonth(report.periodStart) }}</dd></div>
-          <div><dt>Grain</dt><dd>{{ titleCase(report.granularity) }}</dd></div>
-          <div><dt>Rows</dt><dd>{{ formatNumber(report.rowCount) }}</dd></div>
-          <div><dt>Size</dt><dd>{{ formatSize(report.byteSize) }}</dd></div>
-          <div><dt>Refreshed</dt><dd>{{ formatDateTime(report.refreshedAt) }}</dd></div>
-          <div class="archive-mobile-card__coverage"><dt>Covers</dt><dd>{{ report.coversFrom || "—" }} → {{ report.coversTo || "—" }}</dd></div>
+          <div><dt>Files</dt><dd>{{ formatNumber(site.reportCount) }}</dd></div>
+          <div><dt>Source rows</dt><dd>{{ formatNumber(site.rowCount) }}</dd></div>
+          <div><dt>Reports</dt><dd>{{ site.reportTypes.length ? site.reportTypes.map(titleCase).join(', ') : '—' }}</dd></div>
+          <div><dt>Storage</dt><dd>{{ formatSize(site.byteSize) }}</dd></div>
+          <div><dt>Refreshed</dt><dd>{{ formatDateTime(site.refreshedAt) }}</dd></div>
+          <div class="archive-mobile-card__coverage"><dt>Covers</dt><dd>{{ site.coversFrom && site.coversTo ? `${site.coversFrom} → ${site.coversTo}` : 'Awaiting first archive' }}</dd></div>
         </dl>
-        <BaseButton variant="secondary" :disabled="downloadingId === report.id" @click="download(report)">
-          {{ downloadingId === report.id ? "Preparing…" : "Download CSV.gz" }}
+        <BaseButton variant="secondary" :disabled="site.state !== 'ready'" @click="openExport(site)">
+          Configure export
         </BaseButton>
       </article>
-    </div>
-
-    <!-- Same controls and helpers as TablePage's footer (pageNumbers / totalPages /
-         paginateRows from table-service), so paging behaves identically across the CRM. -->
-    <div v-if="reports.length" class="archive-pagination">
-      <span>Showing {{ visibleStart }}–{{ visibleEnd }} of {{ formatNumber(totalCount) }}</span>
-      <span class="archive-pagination__spacer"></span>
-      <BaseSelect v-model.number="pageSize" aria-label="Page size" @change="changePageSize">
-        <option v-for="option in pageSizeOptions" :key="option" :value="option">{{ option }}/page</option>
-      </BaseSelect>
-      <BaseButton class="page-chip" size="sm" :disabled="currentPage === 1" aria-label="Previous page" @click="goToPage(currentPage - 1)">&#8249;</BaseButton>
-      <BaseButton
-        v-for="page in pages"
-        :key="page"
-        :class="['page-chip', page === currentPage ? 'active' : '']"
-        size="sm"
-        :aria-current="page === currentPage ? 'page' : null"
-        @click="goToPage(page)"
-      >{{ page }}</BaseButton>
-      <BaseButton class="page-chip" size="sm" :disabled="currentPage === pageCount" aria-label="Next page" @click="goToPage(currentPage + 1)">&#8250;</BaseButton>
-      <span>Page {{ currentPage }} / {{ pageCount }}</span>
-      <label class="archive-pagination__goto">
-        <span>Go to</span>
-        <BaseInput v-model="gotoPageInput" type="number" min="1" :max="pageCount" aria-label="Go to page" @keyup.enter="applyGoto" />
-      </label>
-      <BaseButton class="page-chip" size="sm" @click="applyGoto">Go</BaseButton>
     </div>
 
     <p class="archive-reports__footnote">
@@ -254,6 +168,14 @@
       also how SparkMeter's own report API works. Monthly and yearly consumption totals
       remain queryable live and are never archived away.
     </p>
+
+    <ArchiveExportWizard
+      v-if="exportWizardOpen"
+      :reports="reports"
+      :sites="siteRows"
+      :initial-station-id="exportStationId"
+      @close="closeExport"
+    />
   </section>
 </template>
 
@@ -261,41 +183,18 @@
 import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
-import WalletExportMenu from "@beverly/tokens/WalletExportMenu.vue";
+import ArchiveExportWizard from "./ArchiveExportWizard.vue";
 import {
   fetchArchiveReports,
   fetchArchiveReportsSummary,
-  requestArchiveDownloadUrl,
 } from "../services/consumption-service.mjs";
-import {
-  pageNumbers,
-  pageSizeOptions,
-  totalPages,
-} from "../services/table-helpers.mjs";
 import { formatStationDisplayLabel } from "../services/station-registry.mjs";
 import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-const ARCHIVE_EXPORT_COLUMNS = [
-  { key: "oemSlug", header: "OEM", value: (report) => report.oemSlug || "" },
-  { key: "stationId", header: "StationID", value: (report) => report.stationId || "" },
-  { key: "reportType", header: "Type", value: (report) => report.reportType || "" },
-  { key: "granularity", header: "Grain", value: (report) => report.granularity || "" },
-  { key: "periodStart", header: "Period start", value: (report) => report.periodStart || "" },
-  { key: "coversFrom", header: "Covers from", value: (report) => report.coversFrom || "" },
-  { key: "coversTo", header: "Covers through", value: (report) => report.coversTo || "" },
-  { key: "rowCount", header: "Rows", value: (report) => report.rowCount || 0 },
-  { key: "byteSize", header: "Bytes", value: (report) => report.byteSize || 0 },
-  { key: "refreshedAt", header: "Refreshed", value: (report) => report.refreshedAt || "" },
-];
+import { buildArchiveSiteRows, loadArchiveCatalogue } from "../services/archive-content-export.mjs";
 
 export default {
   name: "ArchiveReportsPage",
-  components: { BaseButton, BaseInput, BaseSelect, WalletExportMenu },
+  components: { ArchiveExportWizard, BaseButton, BaseInput, BaseSelect },
   props: {
     route: {
       type: Object,
@@ -309,78 +208,39 @@ export default {
       notProvisioned: false,
       summary: null,
       reports: [],
-      totalCount: 0,
-      downloadingId: "",
-      graceDays: 35,
-      monthNames: MONTH_NAMES,
-      filters: { stationId: "", year: "", month: "", reportType: "", granularity: "" },
-      currentPage: 1,
-      pageSize: 10,
-      pageSizeOptions,
-      archiveExportColumns: ARCHIVE_EXPORT_COLUMNS,
-      gotoPageInput: "1",
+      siteDirectory: [],
+      siteSearch: "",
+      siteStateFilter: "",
+      exportWizardOpen: false,
+      exportStationId: "",
       loadToken: 0,
     };
   },
   computed: {
-    hasActiveFilters() {
-      return Object.values(this.filters).some(Boolean);
-    },
     stationOptions() {
-      const summaryStations = Object.keys(this.summary?.byStation || {});
-      const dynamicStations = tableSiteOptions.map((s) => s.value).filter(Boolean);
-      const allIds = Array.from(new Set([...summaryStations, ...dynamicStations])).sort();
+      const reportStations = this.reports.map((report) => report.stationId).filter(Boolean);
+      const dynamicStations = this.siteDirectory.map((site) => site.value).filter(Boolean);
+      const allIds = Array.from(new Set([...reportStations, ...dynamicStations])).sort();
       const map = new Map();
       for (const id of allIds) {
-        const label = this.formatStationLabel(id);
-        if (!map.has(label)) {
-          map.set(label, { value: id, label });
-        }
+        const match = this.siteDirectory.find((site) => String(site.value).toUpperCase() === String(id).toUpperCase());
+        map.set(String(id).toUpperCase(), { value: id, label: match?.label || this.formatStationLabel(id) });
       }
-      return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+      return Array.from(map.values()).sort((left, right) => left.label.localeCompare(right.label));
     },
-    pageCount() {
-      return totalPages(this.totalCount, this.pageSize);
+    siteRows() {
+      return buildArchiveSiteRows(this.stationOptions, this.reports);
     },
-    pages() {
-      return pageNumbers(this.currentPage, this.pageCount);
+    filteredSites() {
+      const term = this.siteSearch.trim().toLowerCase();
+      return this.siteRows.filter((site) => {
+        if (this.siteStateFilter && site.state !== this.siteStateFilter) return false;
+        return !term || `${site.label} ${site.stationId} ${site.oemSlug}`.toLowerCase().includes(term);
+      });
     },
-    visibleStart() {
-      return this.totalCount ? (this.currentPage - 1) * this.pageSize + 1 : 0;
-    },
-    visibleEnd() {
-      return Math.min(this.currentPage * this.pageSize, this.totalCount);
-    },
-    typeOptions() {
-      return Object.keys(this.summary?.byType || {}).sort();
-    },
-    exportTypeOptions() {
-      return this.typeOptions.map((value) => ({ value, label: this.titleCase(value) }));
-    },
-    archiveExportMeta() {
-      return [
-        { label: "Coverage through", value: this.summary?.coverageRange?.latest || this.summary?.dateRange?.latest || "Unavailable" },
-        { label: "Maximum source lag", value: `${this.summary?.syncHealth?.maximumLagDays ?? "Unavailable"} days` },
-      ];
-    },
-    granularityOptions() {
-      // Monthly before yearly -- alphabetical would invert the natural reading order.
-      return Object.keys(this.summary?.byGranularity || {})
-        .sort((a, b) => (a === "monthly" ? -1 : b === "monthly" ? 1 : a.localeCompare(b)));
-    },
-    yearOptions() {
-      const earliest = this.summary?.dateRange?.earliest;
-      const latest = this.summary?.dateRange?.latest;
-      if (!earliest || !latest) return [];
-      const from = Number(String(earliest).slice(0, 4));
-      const to = Number(String(latest).slice(0, 4));
-      const years = [];
-      for (let year = to; year >= from; year -= 1) years.push(year);
-      return years;
-    },
+    readySiteCount() { return this.siteRows.filter((site) => site.state === "ready").length; },
   },
   mounted() {
-    loadDynamicStationOptions(undefined, true).catch(() => null);
     this.load();
   },
   methods: {
@@ -390,39 +250,22 @@ export default {
       const match = tableSiteOptions.find((opt) => String(opt.value || "").toUpperCase() === norm.toUpperCase());
       return formatStationDisplayLabel(rawId, match?.label);
     },
-    async load({ includeSummary = true } = {}) {
+    async load() {
       const loadToken = ++this.loadToken;
       this.loading = true;
       this.error = "";
       this.notProvisioned = false;
-      const requests = [
-        fetchArchiveReports({
-          stationId: this.filters.stationId || null,
-          year: this.filters.year || null,
-          // A yearly row's period_start is 1 Jan, so a month filter would exclude every
-          // yearly bundle. Drop it when the grain filter is explicitly yearly.
-          month: this.filters.granularity === "yearly" ? null : (this.filters.month || null),
-          reportType: this.filters.reportType || null,
-          granularity: this.filters.granularity || null,
-          page: this.currentPage,
-          pageSize: this.pageSize,
-        }),
-      ];
-      // Pagination and filters only need the requested catalogue slice. The global KPI
-      // summary can be expensive on an environment that has not deployed the aggregate
-      // RPC yet, so refresh it only on initial load and an explicit Refresh click.
-      if (includeSummary) requests.unshift(fetchArchiveReportsSummary());
-      const settled = await Promise.allSettled(requests);
-      const summary = includeSummary ? settled[0] : null;
-      const listing = settled[includeSummary ? 1 : 0];
+      const settled = await Promise.allSettled([
+        loadDynamicStationOptions(undefined, true),
+        fetchArchiveReportsSummary(),
+        loadArchiveCatalogue(fetchArchiveReports),
+      ]);
 
       if (loadToken !== this.loadToken) return;
-
-      if (summary?.status === "fulfilled") this.summary = summary.value;
-      this.reports = listing.status === "fulfilled" ? (listing.value?.reports || []) : [];
-      this.totalCount = listing.status === "fulfilled" ? Number(listing.value?.totalCount || 0) : 0;
-
-      const failures = [summary, listing].filter((result) => result?.status === "rejected");
+      if (settled[0].status === "fulfilled") this.siteDirectory = Array.from(settled[0].value || tableSiteOptions);
+      if (settled[1].status === "fulfilled") this.summary = settled[1].value;
+      if (settled[2].status === "fulfilled") this.reports = settled[2].value;
+      const failures = settled.filter((result) => result.status === "rejected");
       if (failures.length) {
         const messages = failures.map((result) => String(result.reason?.message || result.reason));
         // PGRST205 is PostgREST's "table missing from schema cache" -- i.e. the migration
@@ -432,77 +275,13 @@ export default {
       }
       this.loading = false;
     },
-    async goToPage(page) {
-      const next = Math.min(Math.max(1, Number(page) || 1), Math.max(1, this.pageCount));
-      if (next === this.currentPage && this.reports.length) return;
-      this.currentPage = next;
-      this.gotoPageInput = String(next);
-      await this.load({ includeSummary: false });
+    openExport(site = null) {
+      this.exportStationId = site?.stationId || "";
+      this.exportWizardOpen = true;
     },
-    applyFilters() {
-      if (this.filters.granularity === "yearly") this.filters.month = "";
-      this.currentPage = 1;
-      this.gotoPageInput = "1";
-      this.load({ includeSummary: false });
-    },
-    changePageSize() {
-      this.currentPage = 1;
-      this.gotoPageInput = "1";
-      this.load({ includeSummary: false });
-    },
-    applyGoto() {
-      this.goToPage(this.gotoPageInput);
-    },
-    clearFilters() {
-      this.filters = { stationId: "", year: "", month: "", reportType: "", granularity: "" };
-      this.applyFilters();
-    },
-    async download(report) {
-      this.downloadingId = report.id;
-      this.error = "";
-      try {
-        // Signed URLs are short-lived, so one is minted per click rather than cached
-        // with the row.
-        const result = await requestArchiveDownloadUrl(report.id);
-        if (!result?.url) throw new Error(result?.reason || "No download URL returned");
-        const anchor = document.createElement("a");
-        anchor.href = result.url;
-        anchor.rel = "noopener";
-        if (result.filename) anchor.download = result.filename;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-      } catch (err) {
-        this.error = String(err?.message || err);
-      } finally {
-        this.downloadingId = "";
-      }
-    },
-    async resolveArchiveExportRows(selection) {
-      const rows = [];
-      let page = 1;
-      let pageCount = 1;
-      do {
-        const result = await fetchArchiveReports({
-          stationId: selection.station || this.filters.stationId || null,
-          year: this.filters.year || null,
-          month: this.filters.granularity === "yearly" ? null : (this.filters.month || null),
-          reportType: selection.status || this.filters.reportType || null,
-          granularity: this.filters.granularity || null,
-          page,
-          pageSize: 100,
-        });
-        rows.push(...(result?.reports || []));
-        pageCount = Math.max(1, Number(result?.pageCount || 1));
-        page += 1;
-      } while (page <= pageCount);
-
-      return rows.filter((report) => {
-        const day = String(report.periodStart || "").slice(0, 10);
-        if (selection.since && day < selection.since) return false;
-        if (selection.until && day > selection.until) return false;
-        return true;
-      });
+    closeExport() {
+      this.exportWizardOpen = false;
+      this.exportStationId = "";
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString();
@@ -512,12 +291,6 @@ export default {
       if (size < 1024) return `${size} B`;
       if (size < 1048576) return `${(size / 1024).toFixed(1)} KB`;
       return `${(size / 1048576).toFixed(2)} MB`;
-    },
-    formatMonth(value) {
-      const text = String(value || "");
-      if (text.length < 7) return text || "—";
-      const month = Number(text.slice(5, 7));
-      return `${MONTH_NAMES[month - 1] || text.slice(5, 7)} ${text.slice(0, 4)}`;
     },
     formatDateTime(value) {
       if (!value) return "—";
@@ -708,6 +481,8 @@ export default {
 }
 
 .archive-filter :deep(select) { min-width: 160px; }
+.archive-reports__site-tools .archive-filter:first-child { flex: 1 1 280px; }
+.archive-reports__site-tools .archive-filter:first-child :deep(input) { width: 100%; }
 
 .archive-reports__filtercount {
   margin-left: auto;
@@ -783,22 +558,18 @@ export default {
   white-space: normal;
 }
 
-.archive-table__type {
+.archive-site-state {
   display: inline-flex;
   align-items: center;
-  padding: 0.1rem 0.5rem;
+  padding: 0.18rem 0.5rem;
   border-radius: var(--bev-radius-pill, 999px);
-  border: 1px solid var(--border-color);
-  font-size: var(--bev-font-size-xs, 0.75rem);
-  /* Type is also carried by the label text, never by colour alone. */
-  color: var(--text-muted);
+  font-size: var(--bev-font-size-2xs, 0.6875rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-
-.archive-table__type--payments {
-  color: var(--success);
-  border-color: var(--success);
-  background: var(--success-bg);
-}
+.archive-site-state--ready { color: var(--success); background: var(--success-bg); }
+.archive-site-state--empty { color: var(--text-muted); background: var(--bg-page); }
 
 .archive-mobile-list { display: none; }
 
@@ -857,44 +628,6 @@ export default {
 }
 .archive-mobile-card__coverage { grid-column: 1 / -1; }
 
-/* ── pagination (mirrors TablePage's footer controls) ──────────────────────── */
-
-.archive-pagination {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.25rem 0.125rem;
-  font-size: var(--bev-font-size-xs, 0.75rem);
-  color: var(--text-muted);
-}
-
-.archive-pagination__spacer { margin-left: auto; }
-
-.archive-pagination :deep(.page-chip) {
-  min-width: 32px;
-  padding-inline: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.archive-pagination :deep(.page-chip.active) {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.archive-pagination :deep(select) { min-width: 96px; }
-
-.archive-pagination__goto {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--bev-space-2);
-}
-
-.archive-pagination__goto :deep(input) {
-  width: 64px;
-  min-height: var(--bev-touch-target-min);
-}
-
 .archive-reports__footnote {
   margin: 0;
   max-width: 78ch;
@@ -915,10 +648,6 @@ export default {
   .archive-reports__filtercount { margin-left: 0; }
   .archive-reports__tablewrap { display: none; }
   .archive-mobile-list { display: grid; gap: var(--bev-space-3); }
-  .archive-pagination { align-items: stretch; }
-  .archive-pagination__spacer { display: none; }
-  .archive-pagination :deep(select) { flex: 1 1 100%; width: 100%; }
-  .archive-pagination__goto { margin-left: auto; }
 }
 
 @media (max-width: 420px) {
