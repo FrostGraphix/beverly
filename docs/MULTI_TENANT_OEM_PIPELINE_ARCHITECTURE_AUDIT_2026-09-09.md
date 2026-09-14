@@ -1697,5 +1697,6 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - This initial contract does not query or authorize candidates. Its caller must supply actor- and resource-scoped candidates. No CRM, wallet, or telemetry caller has switched to it yet.
 - Phase 1 remains incomplete. Adapter interfaces, capability enforcement, canonical operation models, gateway execution, and conformance still require separate red-green slices.
 - Phase 1 verification: `node tests/oem-contracts.test.cjs`, `node tests/oem-registry.test.cjs`, `node tests/supabase-migrations.test.cjs`, `npm run build`, `npm test`, and the full wallet Vitest suite all passed locally. Wallet Vitest reported 62 files and 434 tests passed. The new contract test is included in `pretest` for subsequent runs.
+- A second red-green contract slice now rejects inactive installations. Tenant mismatch also fails closed. Active, matching-tenant identity passes. The contract still lacks actor permission and resource mapping; no live caller may rely on it alone.
 - Browser, remote CI, deployed preview, staging, Node 22, database restore, and real-OEM sandbox checks remain unverified. Local passing tests do not establish end-to-end certification.
 - No migration, OEM dispatch, production configuration, or activation was changed.

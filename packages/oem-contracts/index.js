@@ -30,4 +30,22 @@ function resolveInstallation(candidates) {
   return candidate;
 }
 
-module.exports = { OemContractError, resolveInstallation };
+/**
+ * Authorize a resolved installation for ordinary live operations.
+ * Sandbox and canary operations require separate, explicit controls.
+ * @param {{ id: string, tenantId: string, status: string }} installation
+ * @param {string} tenantId
+ * @returns {{ id: string, tenantId: string, status: string }}
+ */
+function authorizeInstallation(installation, tenantId) {
+  resolveInstallation([installation]);
+  if (!tenantId || installation.tenantId !== tenantId) {
+    throw new OemContractError('OEM_TENANT_FORBIDDEN', 'Tenant cannot access installation');
+  }
+  if (installation.status !== 'active') {
+    throw new OemContractError('OEM_INSTALLATION_INACTIVE', 'Installation is not active');
+  }
+  return installation;
+}
+
+module.exports = { OemContractError, resolveInstallation, authorizeInstallation };
