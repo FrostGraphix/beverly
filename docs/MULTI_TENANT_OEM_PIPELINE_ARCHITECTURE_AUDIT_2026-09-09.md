@@ -1649,3 +1649,45 @@ Beverly should evolve the current OEM Hub into an integration control plane and 
 The first engineering task should not be adding more endpoint rows for another manufacturer. It should be extracting Calinmeter into the first versioned adapter and proving that existing Beverly behavior remains unchanged. Once that boundary exists, the second OEM becomes the acceptance test of the architecture rather than another set of conditionals embedded across CRM, wallet, telemetry, and frontend code.
 
 Commence the work only after the current KYC changes are safely checkpointed, `main` is clean and pushed, the last-known-good application and database state are backed up, and a fresh OEM worktree has been created from that exact starting commit.
+
+---
+
+## 23. Fresh-Worktree End-to-End Readiness Check (2026-09-14)
+
+This checkpoint applies to `codex/multi-tenant-oem-pipeline` at `ff54438d`, in `Beverly-multi-oem-v2`. The worktree was clean when checked. The historical `Beverly-multi-oem-gateway` worktree was not used. This is a static and local-test checkpoint, not sandbox or production certification.
+
+### 23.1 Verified execution-path blockers
+
+| Path | Current evidence | Required gate |
+|---|---|---|
+| CRM request to OEM | `api/reference.js` uses `X-Oem-Id`, resolves a manufacturer, and falls back to the incoming path when translation fails around line 5020. | Authorize installation, require a mapped canonical operation, enforce status and capability, and transform method, request, and response. |
+| CRM station/meter mirror | `api/reference.js` uses `oemConfig?.id` near lines 5143 and 5155, and calls `upsertMeterRecord(item)` without installation near line 5114. | Use validated installation UUIDs in every mapping and mirror write. |
+| Wallet registry | `backend/wallet/src/services/oem-registry.ts` queries `oem_credentials.station_id` near line 144, despite the foundation migration defining no such column. | Introduce installation credentials. Remove the invalid filter. |
+| Wallet vendor vend | `backend/wallet/src/services/vending.ts` first calls `lookupMeter(input.meterId)` near line 183; order records carry manufacturer `oem_id`, not installation identity. | Resolve one authorized installation before pricing, hold, idempotency, or dispatch. |
+| Wallet customer vend | `backend/wallet/src/services/customer-purchase.ts` first calls `lookupMeter(input.meterId)` near line 300. The purchase insert near line 331 lacks installation identity. | Resolve approved link and installation. Persist both before any hold. |
+| Token execution | `backend/wallet/src/services/token-engine.ts` retains provider-specific payloads and a direct-credit rejection. | Extract Calinmeter unchanged. Keep unknown strategies unsupported until specified. |
+| Telemetry and sync | `daily_meter_readings` indexes station/meter/date. `consumption_sync_station_state` inserts and claims by station alone. | Expand schema, backfill installation IDs, verify collisions, then switch uniqueness and claims. |
+| Credential security | Wallet registry warns and uses a default encryption key when configuration is missing. CRM crypto has a development fallback. | Production startup and readiness fail closed; version and rotate keys. |
+
+### 23.2 Cross-cutting acceptance gates
+
+The following must be proven together, not independently:
+
+1. An authenticated actor can see only authorized tenant installations. Unknown, draft, suspended, retired, and ambiguous installations cannot reach an upstream call.
+2. An internal station or meter UUID resolves to exactly one installation-scoped external identifier. Duplicate external IDs across installations remain separate in CRM, wallet, telemetry, reports, and archived evidence.
+3. Every advertised operation has a validated canonical request and response, explicit method, capability, timeout, error classification, and adapter version. Missing mappings fail closed.
+4. Production outbound calls use approved HTTPS hosts, DNS/private-network checks, redacted logs, and installation-scoped credentials. Credential rotation and stale-revision rejection work across instances.
+5. A vend hold and durable command exist before dispatch. Confirmed delivery captures once; definitive failure releases once; timeout remains unknown until status reconciliation. Duplicate requests cannot double-vend.
+6. Signed webhooks reject missing or invalid signatures, stale timestamps, reused nonces, and duplicate event IDs. Polling and webhook delivery converge on one canonical reading and one outcome.
+7. Installation-scoped leases, quotas, circuit breakers, retries, and cursors work across serverless instances. A process-local cache cannot serve as their authority.
+8. Backfill verification compares row counts, collision sets, daily deltas, tariff valuations, rollups, reports, customer links, purchase orders, receipts, and ledger totals before any read switch.
+9. Configuration revisions are immutable. Rollback stops new commands but preserves pending command evidence and reconciliation. Old application code remains compatible with expanded schema.
+10. The same adapter conformance suite passes Calinmeter and a deliberately different offline fake OEM. A real second OEM additionally requires its specification, sandbox, authorized test resources, and canary approval.
+
+### 23.3 Verification limits and external blockers
+
+Local `node tests/oem-registry.test.cjs` passed. Local `node tests/supabase-migrations.test.cjs` passed. This fresh worktree has no `node_modules`; wallet tests, full regression, and builds have not yet run here. No database backup, deployment flag inventory, remote CI result, preview smoke, staging guard, sandbox evidence, or rollback drill was available in this checkout. No real second-OEM specification, credentials, sandbox, or written canary authorization was supplied. These missing inputs must remain explicit blockers; no OEM semantics or production readiness should be inferred.
+
+### 23.4 Phase gate
+
+Phase 1 may begin against the confirmed public seams: adapter contract, gateway API, wallet vending API, and telemetry ingestion API. Phase 2 must preserve captured Calinmeter behavior. Phases 4–6 require expand-and-contract migrations and measured backfill verification. Phase 8 and production activation remain blocked on real-OEM evidence and authorization.
