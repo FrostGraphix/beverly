@@ -302,6 +302,7 @@ async function signOut() {
     closeUserMenu();
     closeDrawer();
     try {
+        await adminPushNotifications.disable().catch(() => undefined);
         auth.logout();
         await router.push('/login');
     } finally {

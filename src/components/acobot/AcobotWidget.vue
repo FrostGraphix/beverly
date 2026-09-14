@@ -750,4 +750,64 @@ export default {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* Match the wallet assistant's surfaces and keep the console usable on phones. */
+.beverly-ai-widget-wrapper {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  right: 16px;
+}
+.beverly-ai-modal {
+  width: min(380px, calc(100vw - 24px));
+  height: min(520px, calc(100dvh - 112px));
+  max-width: none;
+  max-height: none;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  right: 12px;
+  background: var(--surface);
+  border-color: var(--border-color, var(--border-strong));
+  color: var(--text-main, var(--text));
+}
+.beverly-ai-header,
+.beverly-ai-footer { background: var(--surface-2); border-color: var(--border-color, var(--border-strong)); }
+.beverly-ai-header { padding: 10px 12px; }
+.beverly-ai-avatar {
+  background: var(--brand-mark-url, url('/brand/beverly-mark.png')) center / contain no-repeat var(--surface-2);
+  border: 1px solid var(--primary, #16a34a);
+}
+.beverly-ai-status-dot { background: var(--primary, #16a34a); }
+.beverly-ai-messages { padding: 12px; }
+.beverly-ai-popup-greeting {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--surface-2) 90%, var(--primary, #16a34a));
+  border-color: color-mix(in srgb, var(--primary, #16a34a) 32%, transparent);
+}
+.beverly-ai-chip-grid-2x2 { gap: 8px; }
+.beverly-ai-chip-card { padding: 9px; background: var(--surface-2); border-color: var(--border-color, var(--border-strong)); }
+.beverly-ai-chip-card:hover { background: var(--surface-3, var(--surface-2)); color: var(--primary, #16a34a); }
+.beverly-ai-footer { padding: 9px 12px; }
+.beverly-ai-input-wrap { border-color: var(--border-color, var(--border-strong)); }
+.beverly-ai-input-wrap:focus-within { border-color: var(--primary, #16a34a); }
+
+@media (max-width: 600px) {
+  .beverly-ai-widget-wrapper { right: 12px; }
+  .beverly-ai-modal {
+    width: calc(100vw - 16px);
+    height: min(510px, calc(100dvh - 96px));
+    right: 8px;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    border-radius: 14px;
+  }
+  .beverly-ai-chip-card { min-width: 0; }
+}
+
+@media (max-width: 360px) {
+  .beverly-ai-chip-grid-2x2 { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beverly-ai-modal,
+  .beverly-ai-trigger-btn,
+  .beverly-ai-chip-card { animation: none; transition: none; }
+}
 </style>

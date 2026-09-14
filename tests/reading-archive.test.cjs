@@ -20,10 +20,15 @@ const archive = require("../backend/src/services/reading-archive-service");
 
 {
   const ordered = archive.prioritizeArchivePartitions([
-    { stationId: "TUNGA", reportType: "readings", granularity: "monthly", periodStart: "2025-01-01", live: false },
-    { stationId: "OFEMILI", reportType: "readings", granularity: "monthly", periodStart: "2026-09-01", live: true },
+    { stationId: "TUNGA", reportType: "readings", granularity: "monthly", periodStart: "2025-01-01", live: false, missing: false },
+    { stationId: "OFEMILI", reportType: "readings", granularity: "monthly", periodStart: "2026-09-01", live: true, missing: true },
   ]);
-  assert.strictEqual(ordered[0].stationId, "OFEMILI", "live archive refreshes must run first");
+  assert.strictEqual(ordered[0].stationId, "OFEMILI", "missing partitions must outrank refreshes");
+  const missing = archive.prioritizeArchivePartitions([
+    { stationId: "TUNGA", reportType: "readings", granularity: "monthly", periodStart: "2026-08-01", live: true, missing: false },
+    { stationId: "OFEMILI", reportType: "readings", granularity: "monthly", periodStart: "2026-08-01", live: true, missing: true },
+  ]);
+  assert.strictEqual(missing[0].stationId, "OFEMILI", "new station archives must not starve behind refreshes");
 }
 
 // ── 0. Catalogue pagination/filter validation ───────────────────────────────

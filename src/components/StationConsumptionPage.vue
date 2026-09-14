@@ -906,11 +906,20 @@ export default {
         this.data = data;
         this.topMetersPage = 1;
         if (!data || !data.totals || !data.totals.sourceRows) {
-          this.rangeNote = "No meter readings stored for this range yet. Aggregates may still be building.";
+          const latest = data?.freshness?.latestStoredDate;
+          const pending = data?.freshness?.stations?.filter((station) => station.stale).length || 0;
+          this.rangeNote = latest && latest < this.from
+            ? `No readings in this range. Latest stored reading: ${latest}. Choose an earlier range while station sync catches up.`
+            : pending
+              ? `No readings in this range. ${pending} station sync${pending === 1 ? ' is' : 's are'} pending or stale.`
+              : "No meter readings stored for this range yet.";
         } else if (data.range && data.range.granularityCoarsened) {
           const reqLabel = (this.GRANS.find((g) => g.key === data.range.requestedGranularity) || {}).label || "Daily";
           const effLabel = (this.GRANS.find((g) => g.key === data.range.granularity) || {}).label || "Monthly";
           this.rangeNote = `${reqLabel} view auto-switched to ${effLabel} for this wide range (keeps the query fast and the chart readable).`;
+        } else if (data?.freshness?.staleCount) {
+          const count = data.freshness.staleCount;
+          this.rangeNote = `${count} station sync${count === 1 ? ' is' : 's are'} pending or stale. This range may exclude their latest readings.`;
         }
       } catch (err) {
         if (myReq !== this.reqId) return;

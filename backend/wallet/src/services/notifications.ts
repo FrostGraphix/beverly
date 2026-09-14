@@ -20,12 +20,14 @@ import { logAction } from './audit.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env }       from '../config/env.js';
 import { notificationsQueue } from '../queue/index.js';
+import { sendWebPush } from './push-notifications.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type NotificationType =
     | 'token_purchased'
     | 'wallet_funded'
+    | 'funding_update'
     | 'kyc_update'
     | 'dispute_update'
     | 'admin_announcement'
@@ -33,7 +35,8 @@ export type NotificationType =
     | 'payment_failed'
     | 'refund_update'
     | 'meter_order_update'
-    | 'meter_link_update';
+    | 'meter_link_update'
+    | 'remote_send_update';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -67,7 +70,7 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     // The notification service handles in-app + email for this event.
     sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
     email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, refund_update: true, meter_order_update: true, meter_link_update: true },
-    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, refund_update: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
+    in_app: { token_purchased: true,  wallet_funded: true, funding_update: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, refund_update: true, meter_order_update: true, meter_link_update: true, remote_send_update: true, admin_announcement: true },
 };
 
 export interface NotificationJobData {
@@ -165,7 +168,7 @@ async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: 
     // Ownership decisions change access and are always recorded in the inbox.
     if (payload.type !== 'meter_link_update' && !prefEnabled(prefs, 'in_app', payload.type)) return;
     try {
-        await adminClient.from('notifications').insert({
+        const { data, error } = await adminClient.from('notifications').insert({
             customer_id: cu.id,
             recipient_type: 'customer',
             recipient_id: cu.id,
@@ -174,7 +177,14 @@ async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: 
             body:        payload.body,
             metadata:    payload.metadata ?? {},
             read:        false,
-        });
+        }).select('id').single();
+        if (error) throw error;
+        await sendWebPush('customer', cu.id, {
+            title: payload.title,
+            body: payload.body,
+            url: typeof payload.metadata?.path === 'string' ? payload.metadata.path : '/notifications',
+            tag: `notification:${data.id}`,
+        }, 'customer').catch((pushError) => console.error('[notifications] device delivery failed:', pushError));
     } catch (err) {
         console.error('[notifications] in-app write failed:', err);
     }

@@ -13,6 +13,8 @@ import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wal
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
+import { notifyWalletFunded, sendNotification } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
 import crypto from 'node:crypto';
 
 const PROOF_BUCKET = 'uploads';
@@ -541,6 +543,21 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         after: { status: 'approved', walletId: canonicalWallet.id, ledgerEntryId: entry.id },
     });
 
+    const ownerType = funding.owner_type ?? (funding.customer_id ? 'customer' : 'vendor');
+    if (ownerType === 'customer' && funding.customer_id) {
+        await notifyWalletFunded(funding.customer_id, {
+            amountMinor: funding.amount_minor, reference: funding.id,
+        }).catch(() => undefined);
+    } else if (funding.vendor_organization_id) {
+        await notifyVendor({
+            vendorOrganizationId: funding.vendor_organization_id,
+            type: 'funding_update', title: 'Wallet funding approved',
+            body: `Your wallet was credited with ₦${(funding.amount_minor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}.`,
+            path: '/wallet/funding', dedupeKey: `funding.approved.${funding.id}`,
+            metadata: { fundingRequestId: funding.id, amountMinor: funding.amount_minor },
+        }).catch(() => undefined);
+    }
+
     return { funding: updated as FundingRequest, ledgerEntry: entry };
 }
 
@@ -663,6 +680,23 @@ export async function rejectFundingRequest(opts: {
         targetId: opts.fundingRequestId,
         after: { status: 'rejected', reason: opts.reason },
     });
+
+    const rejected = data as FundingRequest;
+    if (rejected.owner_type === 'customer' && rejected.customer_id) {
+        await sendNotification(rejected.customer_id, {
+            type: 'funding_update', title: 'Funding request declined',
+            body: `Your funding request was declined. ${opts.reason}`,
+            metadata: { fundingRequestId: rejected.id, status: 'rejected', path: '/wallet' },
+        }).catch(() => undefined);
+    } else if (rejected.vendor_organization_id) {
+        await notifyVendor({
+            vendorOrganizationId: rejected.vendor_organization_id,
+            type: 'funding_update', title: 'Funding request declined',
+            body: `Your funding request was declined. ${opts.reason}`,
+            path: '/wallet/funding', dedupeKey: `funding.rejected.${rejected.id}`,
+            metadata: { fundingRequestId: rejected.id, status: 'rejected' },
+        }).catch(() => undefined);
+    }
 
     return data as FundingRequest;
 }

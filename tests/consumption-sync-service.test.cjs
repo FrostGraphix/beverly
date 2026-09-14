@@ -75,7 +75,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
     };
   };
 
-  const { databaseQuotaState, runConsumptionSync, stationAttemptsForMode, syncWindow } = require("../backend/src/services/consumption-sync-service");
+  const { databaseQuotaState, runConsumptionSync, runScheduledConsumptionSync, stationAttemptsForMode, syncWindow } = require("../backend/src/services/consumption-sync-service");
 
   supabase.restRequest = async (pathname) => {
     if (pathname === "/rpc/consumption_database_usage") return { megabytes: 357.63, bytes: 375000000 };
@@ -119,6 +119,13 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert(writes.some((write) => write.pathname.includes("/consumption_sync_runs?id=eq.")), "sync must record durable run outcomes");
   assert(writes.some((write) => write.pathname.includes("/consumption_sync_station_state?on_conflict=station_id")), "sync must persist station cursors");
   assert(rpcCalls.includes("/rpc/refresh_meter_reading_aggregates_for_station"), "sync must refresh station aggregates");
+
+  liveCalls.length = 0;
+  const scheduledTarget = await runScheduledConsumptionSync({
+    mode: "incremental", stations: "TUNGA", to: "2026-05-12", pageSize: 2, maxPages: 4, maxStations: 4,
+  });
+  assert.equal(scheduledTarget.runs, 1, "an explicitly targeted station must run once");
+  assert.equal(scheduledTarget.syncedStations, 1);
 
   liveCalls.length = 0;
   writes.length = 0;

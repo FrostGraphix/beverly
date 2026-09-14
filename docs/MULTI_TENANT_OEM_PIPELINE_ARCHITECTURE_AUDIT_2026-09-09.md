@@ -2,12 +2,391 @@
 
 ## Architecture Audit, Target Design, Delivery Pipeline, and Recovery Strategy
 
-**Audit date:** 2026-09-09  
-**Repository:** Beverly  
-**Audited branch:** `main`  
-**Audited commit:** `7b4e0fc2`  
-**Audit type:** Static architecture and implementation audit with targeted automated verification  
+**Audit date:** 2026-09-13
+**Repository:** Beverly
+**Audited branch:** `codex/fix-crm-cookie-auth-consumption`
+**Audited commit:** `c1b98ac9`
+**Audit type:** Static architecture and implementation audit with targeted automated verification
 **Scope:** Beverly CRM, Wallet Admin, vendor portal, customer portal, OEM registry, Calinmeter integration, vending, remote meter operations, telemetry, consumption, reports, station onboarding, configuration, security, deployment, rollback, and delivery workflow.
+
+---
+
+## 0. Full-Project Re-audit Verdict
+
+### 0.1 Release verdict
+
+**Status: not production-ready.**
+
+The registry foundation works. The Calinmeter flow works. The system is not yet a multi-tenant, multi-OEM gateway.
+
+The present design can change an upstream URL, credentials, and selected paths. It cannot safely absorb arbitrary OEM contracts. It cannot guarantee tenant isolation. It cannot guarantee OEM-safe vending. It cannot prevent telemetry collisions.
+
+No second real OEM is certified. No deliberately different fake OEM passes an end-to-end conformance suite. Production expansion must remain blocked.
+
+### 0.2 Coverage method
+
+The refreshed audit scanned all source domains:
+
+- `api`
+- `src`
+- `backend`
+- `backend/wallet`
+- `apps/admin`
+- `apps/vendor`
+- `apps/customer`
+- `apps/wallet-landing`
+- `supabase/migrations`
+- `tests`
+- `tools`
+- `docs`
+
+The scan covered 1,027 candidate files. It found 795 domain-signal files. Those signals included OEM, Calinmeter, meters, stations, vending, tokens, readings, consumption, and reports.
+
+This was a dependency-surface audit. It was not merely an OEM-folder review.
+
+### 0.3 System-wide coverage matrix
+
+| Surface | Current state | Release state | Required closure |
+|---|---|---:|---|
+| OEM registry | Implemented twice | Blocked | One gateway authority |
+| OEM Hub | CRUD exists | Blocked | Certification workflow |
+| Credentials | Encrypted storage exists | Critical | Fail-closed keys |
+| Authentication | CRM supports four modes | Critical | Wallet parity |
+| Endpoint paths | Partial translation exists | Critical | Canonical operation adapters |
+| Request mapping | Stored only | Critical | Execute validated mappings |
+| Response mapping | Stored only | Critical | Normalize canonical responses |
+| Pagination | Stored only | Critical | Execute per operation |
+| Capabilities | Sidebar gating exists | High | Server enforcement |
+| OEM status | Stored but bypassable | Critical | Enforce every invocation |
+| Tenant model | Missing | Critical | Add tenant ownership |
+| Installation model | Missing | Critical | Add installation boundary |
+| Station mapping | Manufacturer-scoped | Critical | Installation-scoped mapping |
+| Station creation | Proxied upstream | High | Recoverable onboarding saga |
+| Meter onboarding | Partly synchronized | Critical | Canonical identity mapping |
+| Meter updates | Calin-shaped proxy | Critical | Adapter command pipeline |
+| CRM reads | Path-switched proxy | Critical | Canonical gateway reads |
+| CRM writes | Path-switched proxy | Critical | Command safety controls |
+| Vendor vending | Default-first lookup | Critical | Resolve installation first |
+| Customer vending | Default-first lookup | Critical | Persist OEM identity |
+| Token generation | Calin-specific payload | Critical | Adapter vending contract |
+| Direct credit | Rejected safely | Blocked | Real specification required |
+| Remote send | Calin-specific lifecycle | Critical | Adapter command lifecycle |
+| Token policies | Meter-only lookups | Critical | Installation-scoped policies |
+| Consumption polling | Calin-shaped endpoints | Critical | Installation-aware ingestion |
+| Reading webhook | One global secret | Critical | Signed OEM webhooks |
+| Raw readings | Collision-prone keys | Critical | Installation-scoped uniqueness |
+| Aggregates | Station/meter keys | Critical | Installation-scoped keys |
+| Sync governance | Station-only state | Critical | Installation-scoped leases |
+| Reports | Archive partly scoped | High | Scope every report source |
+| Wallet ledger | Strong foundation | High | Attach OEM command evidence |
+| Receipts | Strong foundation | High | Add provider identifiers |
+| Reconciliation | Financial pieces exist | Critical | OEM outcome reconciliation |
+| Notifications | Generic pipeline exists | High | OEM command outcomes |
+| Audit logs | Generic pipeline exists | High | Immutable config history |
+| Rate limiting | Partial process cache | High | Distributed installation limits |
+| Circuit breaking | Missing | Critical | Per-operation breakers |
+| Retry policy | Generic read retries | Critical | Adapter retry classification |
+| Idempotency | Wallet order exists | Critical | OEM command idempotency |
+| Observability | Generic logging exists | High | Installation operation metrics |
+| Secret rotation | Version field only | Critical | Rotation workflow |
+| SSRF controls | Missing | Critical | Approved HTTPS destinations |
+| Configuration rollback | Missing | Critical | Immutable revisions |
+| Canary rollout | Missing | Critical | Shadow and canary states |
+| Adapter tests | Missing | Critical | Shared conformance suite |
+| Second OEM proof | Missing | Critical | Sandbox certification |
+| Production rollback | Documented conceptually | High | Tested rollback drill |
+
+### 0.4 Newly verified critical gaps
+
+These findings extend Section 4.
+
+#### Gap 12: disabled OEMs remain callable
+
+Registry loading does not reject `draft` or `disabled` manufacturers. A supplied `X-Oem-Id` can still resolve credentials.
+
+**Required correction:** Enforce installation state inside the gateway. Never rely on UI visibility.
+
+#### Gap 13: customer vending loses OEM identity
+
+Customer purchase creation omits `purchase_orders.oem_id`. Customer token generation also omits `oemId`.
+
+**Required correction:** Resolve the approved meter installation first. Persist it before holding funds.
+
+#### Gap 14: initial wallet lookup defaults blindly
+
+Vendor and customer entry flows call `lookupMeter(meterId)` without an OEM. Meter identifiers are not globally unique.
+
+**Required correction:** Require installation context. Reject ambiguous meter matches.
+
+#### Gap 15: customer meter links collide
+
+`customer_meters` has no OEM identity. Its unique key is `(customer_id, meter_id)`.
+
+**Required correction:** Add `oem_installation_id`. Replace the unique key.
+
+#### Gap 16: wallet idempotency omits OEM identity
+
+Vendor order hashing includes station and meter. It omits the OEM installation. Customer hashing also lacks installation identity.
+
+**Required correction:** Bind idempotency to installation and operation.
+
+#### Gap 17: token policies remain globally keyed
+
+Runtime lookups for `meter_token_overrides` use `meter_id` only. SGC rules use `sgc` only. Added `oem_id` columns are not used.
+
+**Required correction:** Scope reads, writes, deletes, and uniqueness by installation.
+
+#### Gap 18: station credentials contradict schema
+
+Wallet code queries `oem_credentials.station_id`. The deployed table has no `station_id`. Its primary key remains `oem_id`.
+
+**Required correction:** Remove the invalid query. Introduce installation credentials deliberately.
+
+#### Gap 19: OAuth client secrets are disconnected
+
+CRM stores `encrypted_client_secret`. Token acquisition uses username and password fields. Wallet lacks dynamic OAuth support entirely.
+
+**Required correction:** Define one typed credential contract. Validate every strategy during certification.
+
+#### Gap 20: reading webhooks are not OEM-safe
+
+The webhook uses one global secret. Payloads carry no trusted installation identity. Replay protection is absent.
+
+**Required correction:** Use per-installation signatures, timestamps, nonces, and event identifiers.
+
+#### Gap 21: reading keys remain collision-prone
+
+`daily_meter_readings` is unique by station, meter, and date. `daily_meter_raw_duplicates` and derived tables use similar raw identities.
+
+**Required correction:** Prefix every operational key with installation identity.
+
+#### Gap 22: sync locks remain station-only
+
+Consumption run state and claims use `station_id` alone. Two OEM installations can share station identifiers.
+
+**Required correction:** Claim `(installation, station)` tuples.
+
+#### Gap 23: capabilities are presentation controls
+
+Capabilities hide navigation. The gateway does not enforce capability manifests before upstream execution.
+
+**Required correction:** Authorize capabilities server-side. Reject unsupported operations consistently.
+
+#### Gap 24: configured methods remain ignored
+
+Endpoint configuration stores HTTP methods. Live proxy execution preserves the incoming Beverly method.
+
+**Required correction:** Let the adapter build the upstream request.
+
+#### Gap 25: OEM deletion destroys control data
+
+Deleting a manufacturer cascades credentials, endpoints, and station mappings. No retirement workflow exists.
+
+**Required correction:** Disable first. Retain immutable configuration history.
+
+#### Gap 26: outbound destinations are unrestricted
+
+Administrators can configure arbitrary base URLs. Approved hosts and private-network protections are absent.
+
+**Required correction:** Enforce HTTPS, DNS checks, host allowlists, and egress policy.
+
+#### Gap 27: money and OEM commands separate
+
+Wallet holds are durable. OEM calls are direct network requests. No durable command record precedes dispatch.
+
+**Required correction:** Create commands transactionally. Dispatch through an outbox worker.
+
+#### Gap 28: provider responses lack evidence records
+
+There is no installation-scoped request attempt ledger. Ambiguous writes cannot be reconstructed reliably.
+
+**Required correction:** Persist redacted request hashes, provider IDs, attempts, and outcomes.
+
+#### Gap 29: tenants and OEMs are conflated
+
+`oem_manufacturers` is described as a tenant entity. An OEM is a provider. One tenant may use several OEMs. One OEM may serve several tenants.
+
+**Required correction:** Model tenants, providers, installations, stations, and mappings separately.
+
+#### Gap 30: the historical OEM worktree is stale
+
+`Beverly-multi-oem-gateway` remains at `22fc3146`. Current production work is at `c1b98ac9`. The branch has diverged significantly.
+
+**Required correction:** Preserve it for reference. Start a fresh worktree from the chosen release commit.
+
+#### Gap 31: station mapping uses wrong identity
+
+CRM station synchronization reads `oemConfig.id`. The registry returns `oemConfig.oemId`. Slug fallbacks can then reach a UUID column.
+
+**Required correction:** Use validated installation UUIDs only. Test create, update, and delete.
+
+#### Gap 32: local meter mirrors default incorrectly
+
+Successful CRM meter writes call `upsertMeterRecord(item)` without OEM identity. The storage adapter defaults missing identity to Calinmeter.
+
+**Required correction:** Pass the resolved installation through every mirror write.
+
+#### Gap 33: missing endpoint mappings fall through
+
+Explicit non-default OEM requests reuse the incoming Calinmeter path when translation fails. Missing configuration does not fail closed.
+
+**Required correction:** Reject missing required operation mappings.
+
+#### Gap 34: cache invalidation is process-local
+
+CRM cache busting does not invalidate wallet instances. Serverless instances can retain older credentials and settings.
+
+**Required correction:** Publish versioned invalidations. Reject stale revisions.
+
+#### Gap 35: rate limiting is process-local
+
+Rate buckets live in memory. Horizontal instances cannot enforce one shared OEM quota.
+
+**Required correction:** Use distributed quotas. Respect provider response headers.
+
+#### Gap 36: two OEM consoles can drift
+
+The CRM OEM Hub is live-backed. Wallet Admin also contains `DevOemConsole.vue`, hardcoded OEM defaults, and fallback records.
+
+**Required correction:** Keep one control plane. Remove simulated production fallbacks.
+
+#### Gap 37: portals lack provider context
+
+Vendor and customer portals do not display resolved OEM installations. Users cannot verify provider routing before vending.
+
+**Required correction:** Show server-resolved provider and station identity.
+
+#### Gap 38: station selectors can collapse identities
+
+Some admin controls use station identifiers as option values. Duplicate station identifiers across OEMs become ambiguous.
+
+**Required correction:** Use installation-scoped station keys everywhere.
+
+#### Gap 39: fallback fixtures remain provider-specific
+
+Wallet archive fallback reads Calinmeter-shaped contract samples. Returned records lack trustworthy installation ownership.
+
+**Required correction:** Disable production fixture fallback. Scope certified fixtures by adapter version.
+
+#### Gap 40: test connection proves too little
+
+The connection test exercises authentication and one GET endpoint. It does not certify writes, mappings, pagination, vending, or reversibility.
+
+**Required correction:** Replace it with staged conformance certification.
+
+### 0.5 Evidence traceability
+
+| Concern | Primary evidence |
+|---|---|
+| CRM OEM selection | `src/services/api.js` |
+| Browser persistence | `src/stores/oem-store.js` |
+| Background isolation | `src/services/oem-prefetch.mjs` |
+| OEM Hub behavior | `src/components/oem-hub/` |
+| Capability navigation | `src/data/route-manifest.js` |
+| CRM authorization | `api/reference.js` |
+| CRM proxy execution | `api/reference.js` |
+| CRM registry | `backend/src/services/oem-registry-service.js` |
+| Wallet registry | `backend/wallet/src/services/oem-registry.ts` |
+| Credential encryption | `backend/src/services/oem-credential-crypto.js` |
+| Registry persistence | `backend/src/services/storage-adapter.js` |
+| Local registry mirror | `backend/src/services/local-database.js` |
+| Calinmeter seed | `backend/scripts/seed-calinmeter-oem.cjs` |
+| Dimension ingestion | `backend/src/services/oem-dimension-sync-service.js` |
+| Wallet token engine | `backend/wallet/src/services/token-engine.ts` |
+| Vendor vending | `backend/wallet/src/services/vending.ts` |
+| Customer vending | `backend/wallet/src/services/customer-purchase.ts` |
+| Payment fulfillment | `backend/wallet/src/services/payment-transactions.ts` |
+| Vendor routes | `backend/wallet/src/routes/vendor.ts` |
+| Customer routes | `backend/wallet/src/routes/customer.ts` |
+| Admin recovery | `backend/wallet/src/routes/admin.ts` |
+| Reading ingestion | `backend/src/services/consumption-store.js` |
+| Reading polling | `backend/src/services/consumption-sync-service.js` |
+| CRM consumption | `src/services/consumption-service.mjs` |
+| Reading schema | `supabase/migrations/20260508120000_daily_meter_readings.sql` |
+| Consumption access | `supabase/migrations/20260717120000_consumption_access_model.sql` |
+| OEM foundation | `supabase/migrations/20260719140000_oem_manufacturers_foundation.sql` |
+| API-key support | `supabase/migrations/20260720100000_oem_credentials_api_key_header.sql` |
+| Dimension scoping | `supabase/migrations/20260806150000_oem_scoped_dimension_sync.sql` |
+| Archive scoping | `supabase/migrations/20260825130000_archive_reports_end_to_end_hardening.sql` |
+| Sync governance | `supabase/migrations/20260910120000_consumption_sync_governance.sql` |
+| Registry tests | `tests/oem-registry.test.cjs` |
+| Prefetch tests | `tests/oem-prefetch-isolation.test.cjs` |
+| Hub tests | `tests/oem-hub-resilience.test.cjs` |
+| Store tests | `tests/oem-store-resilience.test.mjs` |
+| Token tests | `backend/wallet/src/services/__tests__/token-engine.test.ts` |
+
+No matching implementation exists for:
+
+- `tenants`
+- `oem_installations`
+- `oem_adapter_versions`
+- `oem_config_revisions`
+- `external_resource_mappings`
+- `oem_sync_cursors`
+- `oem_commands`
+- `oem_command_attempts`
+- `oem_raw_events`
+- `oem_webhook_events`
+- `outbox_events`
+- `oem_health_snapshots`
+
+### 0.6 Calinmeter extraction boundary
+
+Calinmeter behavior currently spans:
+
+- CRM canonical route names.
+- CRM request sanitization.
+- CRM response expectations.
+- Dimension sync field parsing.
+- Wallet meter lookup.
+- Token payload construction.
+- Token response parsing.
+- Remote task creation.
+- Remote task polling.
+- Consumption polling.
+- Reading signal aliases.
+- Historical fallback fixtures.
+
+Extraction must preserve behavior. Extraction must remove hidden ownership. No application layer may retain Calinmeter semantics afterward.
+
+### 0.7 Release blockers
+
+All blockers must close:
+
+1. Canonical gateway contracts exist.
+2. Calinmeter becomes an adapter.
+3. Tenant ownership becomes explicit.
+4. Installation identity becomes mandatory.
+5. Every operational key is scoped.
+6. Wallet resolves installations first.
+7. Customer orders persist OEM identity.
+8. Endpoint mappings execute safely.
+9. Disabled providers fail closed.
+10. Credential handling reaches parity.
+11. Production keys fail closed.
+12. Outbound hosts are restricted.
+13. Commands become durable first.
+14. Ambiguous vending gets reconciled.
+15. Webhooks become replay-safe.
+16. Configuration becomes versioned.
+17. Rollback becomes one action.
+18. Conformance tests become mandatory.
+19. A different fake OEM passes.
+20. A real second OEM passes.
+
+### 0.8 Refreshed verification
+
+Executed on 2026-09-13:
+
+- OEM registry test: passed.
+- OEM prefetch isolation: passed.
+- OEM Hub resilience: passed.
+- OEM store resilience: passed.
+- Migration hygiene: passed.
+- Wallet token tests: 21 passed.
+- Remote migration parity: matched.
+
+These prove narrow regression safety. They do not prove multi-OEM readiness.
 
 ---
 
@@ -50,7 +429,7 @@ The audit reviewed the following implementation areas:
 - Existing multi-OEM blueprints and status reports.
 - Git branch, worktree, and current working-tree state.
 
-Targeted verification executed during the audit:
+Targeted verification executed during the original audit:
 
 - `tests/oem-registry.test.cjs`: passed.
 - Wallet backend Vitest suite: **51 test files passed, 389 tests passed**.
@@ -59,7 +438,18 @@ These tests establish that the existing foundation and current Calinmeter wallet
 
 ### 2.1 Important working-tree condition
 
-At audit time, the current `main` checkout contains uncommitted KYC-related work. These changes must be preserved and must not be mixed accidentally into the OEM implementation branch.
+At re-audit time, the current checkout contains uncommitted authentication and consumption changes. These changes must be preserved. They must not enter OEM commits accidentally.
+
+The uncommitted files are:
+
+- `api/reference.js`
+- `backend/src/services/consumption-store.js`
+- `package.json`
+- `src/services/consumption-service.mjs`
+- `tests/api-authz.test.cjs`
+- `tests/consumption-store.test.cjs`
+- `tests/station-consumption-rollout-contract.test.cjs`
+- `tests/consumption-refresh-auth-boundary.test.mjs`
 
 An existing worktree also exists at:
 

@@ -28,7 +28,7 @@ import {
     SmsGuardrailError,
     type SmsTrafficKind,
 } from './sms-guardrails.js';
-import { notifyTokenPurchased } from './notifications.js';
+import { notifyTokenPurchased, sendNotification } from './notifications.js';
 import { assertStationVendAllowed, StationVendScopeError } from './station-vend-scope.js';
 
 export class CustomerPurchaseError extends Error {
@@ -551,6 +551,12 @@ export async function dispatchGeneratedCustomerToken(
                     ? { failure_reason: `remote_send_failed: ${status.remark ?? 'Meter rejected the token.'}`.slice(0, 500) }
                     : {}),
             }).eq('id', po.id);
+            if (status.status !== 'pending') await sendNotification(customerId, {
+                type: 'remote_send_update',
+                title: status.status === 'success' ? 'Remote send delivered' : 'Remote send failed',
+                body: status.status === 'success' ? `Token delivered to meter ${po.meter_id}.` : `Remote delivery failed for meter ${po.meter_id}. Enter the token manually.`,
+                metadata: { purchaseOrderId: po.id, deliveryState, path: '/transactions' },
+            }).catch(() => undefined);
         }
 
         const explicitRemark = status.status === 'success'
@@ -614,6 +620,14 @@ export async function dispatchGeneratedCustomerToken(
             targetId: po.id,
             after: { meterId: po.meter_id, remoteTaskId: task.taskId, deliveryState },
         });
+        await sendNotification(customerId, {
+            type: 'remote_send_update',
+            title: task.status === 'success' ? 'Remote send delivered' : task.status === 'failed' ? 'Remote send failed' : 'Remote send started',
+            body: task.status === 'success' ? `Token delivered to meter ${po.meter_id}.`
+                : task.status === 'failed' ? `Remote delivery failed for meter ${po.meter_id}. Enter the token manually.`
+                    : `Remote delivery is processing for meter ${po.meter_id}.`,
+            metadata: { purchaseOrderId: po.id, deliveryState, path: '/transactions' },
+        }).catch(() => undefined);
         return {
             purchaseOrder: { ...po, remote_task_id: task.taskId, delivery_state: deliveryState },
             remoteTaskId: task.taskId,

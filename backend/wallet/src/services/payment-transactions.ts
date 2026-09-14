@@ -6,6 +6,7 @@ import { postEntry } from './ledger.js';
 import { logAction } from './audit.js';
 import { sendTokenSmsToCustomer } from './customer-purchase.js';
 import { notifyPaymentFailed, notifyTokenPurchased, notifyWalletFunded } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
 import { assertWalletCanTransact, findWalletByOwner, type Wallet } from './wallets.js';
 import { PAYMENT_STATUS, PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
 
@@ -295,6 +296,13 @@ async function fulfillVendorFunding(
         })
         .eq('id', (fr as any).id);
     if (fundingApprovalError) throw fundingApprovalError;
+    await notifyVendor({
+        vendorOrganizationId: (fr as any).vendor_organization_id,
+        type: 'funding_update', title: 'Wallet funding successful',
+        body: `Your wallet was credited with ₦${(Number((fr as any).amount_minor) / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}.`,
+        path: '/wallet/funding', dedupeKey: `funding.paystack.${(fr as any).id}`,
+        metadata: { fundingRequestId: (fr as any).id, amountMinor: (fr as any).amount_minor },
+    }).catch(() => undefined);
     return {};
 }
 

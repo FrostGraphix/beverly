@@ -5,6 +5,8 @@ import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { publishNotificationCount } from '@beverly/tokens';
 import NotificationDetailModal from '@beverly/tokens/NotificationDetailModal.vue';
+import type { DeviceNotificationState } from '@beverly/tokens/push-notifications';
+import { customerPushNotifications } from '../lib/push-notifications';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,6 +40,37 @@ interface PreferenceGroup {
 
 const tab = ref<'inbox' | 'settings'>('inbox');
 const router = useRouter();
+const deviceState = ref<DeviceNotificationState>(customerPushNotifications.state());
+const deviceBusy = ref(false);
+const deviceError = ref('');
+
+async function toggleDeviceNotifications() {
+    if (deviceBusy.value) return;
+    deviceBusy.value = true;
+    deviceError.value = '';
+    try {
+        deviceState.value = deviceState.value === 'enabled'
+            ? await customerPushNotifications.disable()
+            : await customerPushNotifications.enable();
+    } catch (error: any) {
+        deviceError.value = error?.message ?? 'Device notifications failed.';
+    } finally {
+        deviceBusy.value = false;
+    }
+}
+
+async function sendDeviceTest() {
+    if (deviceBusy.value || deviceState.value !== 'enabled') return;
+    deviceBusy.value = true;
+    deviceError.value = '';
+    try {
+        await customerPushNotifications.test();
+    } catch (error: any) {
+        deviceError.value = error?.message ?? 'Test notification failed.';
+    } finally {
+        deviceBusy.value = false;
+    }
+}
 
 // Inbox
 const items       = ref<Notification[]>([]);
@@ -58,7 +91,7 @@ const filteredItems = computed(() => items.value.filter((item) =>
 const prefs       = ref<Preferences>({
     sms:    { token_purchased: false, wallet_funded: true, admin_announcement: false },
     email:  { token_purchased: false, wallet_funded: false, admin_announcement: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
+    in_app: { token_purchased: true, wallet_funded: true, funding_update: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, remote_send_update: true, admin_announcement: true },
 });
 const savingPrefs = ref(false);
 const prefsError  = ref('');
@@ -76,6 +109,7 @@ const NOTIF_ICON: Record<string, string> = {
     payment_failed:    'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M12 3C6.48 3 2 7.48 2 12s4.48 9 10 9 10-4.48 10-10S17.52 3 12 3z',
     meter_order_update:'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
     meter_link_update: 'M13 2 4 14h7l-1 8 10-13h-7l1-9z',
+    remote_send_update: 'M13 2 4 14h7l-1 8 10-13h-7l1-9z',
     wallet_activity:    'M2 6h20v14H2zM2 10h20M16 14h2',
 };
 
@@ -89,6 +123,7 @@ const NOTIF_COLOR: Record<string, string> = {
     payment_failed:    'oklch(60% 0.22 25)',
     meter_order_update:'oklch(70% 0.15 220)',
     meter_link_update: 'var(--brand)',
+    remote_send_update: 'var(--brand)',
     wallet_activity:    'var(--brand)',
 };
 
@@ -167,6 +202,11 @@ const PREF_GROUPS: PreferenceGroup[] = [
             { channel: 'in_app' as const, label: 'In-app · required', required: true },
             { channel: 'email'  as const, label: 'Email'  },
         ],
+    },
+    {
+        label: 'Remote send updates',
+        key: 'remote_send_update',
+        channels: [{ channel: 'in_app' as const, label: 'In-app and device' }],
     },
     {
         label: 'Beverly announcements',
@@ -293,11 +333,22 @@ async function savePrefs() {
 
 onMounted(async () => {
     await Promise.all([loadInbox(), loadPrefs()]);
+    void customerPushNotifications.sync().then((state) => { deviceState.value = state; }).catch(() => undefined);
 });
 </script>
 
 <template>
   <AppShell>
+    <section class="bw-card" aria-label="Device notifications" style="margin-bottom: var(--s-4)">
+      <p style="font-weight:600">Device notifications</p>
+      <p class="bw-page-sub">Receive Beverly updates outside the app.</p>
+      <p v-if="deviceError" class="bw-alert danger">{{ deviceError }}</p>
+      <button class="bw-btn" type="button" :disabled="deviceBusy || deviceState === 'unsupported' || deviceState === 'blocked' || deviceState === 'unavailable'" @click="toggleDeviceNotifications">
+        {{ deviceBusy ? 'Updating…' : deviceState === 'enabled' ? 'Turn off' : 'Turn on' }}
+      </button>
+      <button v-if="deviceState === 'enabled'" class="bw-btn" type="button" :disabled="deviceBusy" @click="sendDeviceTest">Send test</button>
+      <span style="margin-left: var(--s-2)">{{ deviceState }}</span>
+    </section>
     <!-- Header -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: var(--s-4)">
       <div>

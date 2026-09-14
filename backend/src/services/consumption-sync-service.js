@@ -354,7 +354,7 @@ async function syncStation(stationId, stationStats, options) {
     storedRows,
     rawTotal,
     stopReason,
-    complete: maxPages === 0 ? fetchedRows >= rawTotal : !rawTotal || fetchedRows >= rawTotal || pagesFetched < maxPages,
+    complete: stopReason === "cursor_crossed" || maxPages === 0 || !rawTotal || fetchedRows >= rawTotal || pagesFetched < maxPages,
     sourceEarliestReadingDate: earliest,
     sourceLatestReadingDate: latest,
     storedThrough,
@@ -455,9 +455,33 @@ async function runConsumptionSync(input = {}) {
   };
 }
 
+async function runScheduledConsumptionSync(input = {}) {
+  const limit = input.stations || input.stationId ? 1 : Math.min(4, positiveInteger(input.maxStations, 4));
+  const deadline = Date.now() + 180000;
+  const results = [];
+  for (let index = 0; index < limit && Date.now() < deadline; index += 1) {
+    const result = await runConsumptionSync({ ...input, maxPagesPerStation: input.maxPagesPerStation ?? 8 });
+    results.push(result);
+    if (result.quotaPaused || result.failedStations) break;
+  }
+  return {
+    ok: results.every((result) => result.ok),
+    stationCount: results.reduce((sum, result) => sum + result.stationCount, 0),
+    syncedStations: results.reduce((sum, result) => sum + result.syncedStations, 0),
+    failedStations: results.reduce((sum, result) => sum + result.failedStations, 0),
+    fetchedRows: results.reduce((sum, result) => sum + result.fetchedRows, 0),
+    storedRows: results.reduce((sum, result) => sum + result.storedRows, 0),
+    quotaPaused: results.some((result) => result.quotaPaused),
+    stations: results.flatMap((result) => result.stations || []),
+    failures: results.flatMap((result) => result.failures || []),
+    runs: results.length,
+  };
+}
+
 module.exports = {
   databaseQuotaState,
   runConsumptionSync,
+  runScheduledConsumptionSync,
   stationAttemptsForMode,
   syncWindow,
 };

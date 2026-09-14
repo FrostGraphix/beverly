@@ -1,5 +1,7 @@
 import { adminClient } from '../db/supabase.js';
 import { notifyKycUpdate, sendNotification } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 import { runMalwareScan } from './file-scan.js';
 
 const KYC_BUCKET = 'wallet-kyc-documents';
@@ -166,7 +168,21 @@ export async function submitKycReview(input: {
         const code = String(error?.message ?? '').includes('sequential') ? 'tier_not_sequential' : 'review_submit_failed';
         throw new KycReviewError(error?.message ?? 'Review submission failed.', code, code === 'tier_not_sequential' ? 409 : 500);
     }
-    return Array.isArray(data) ? data[0] : data;
+    const review = Array.isArray(data) ? data[0] : data;
+    try {
+        const stationIds = input.subjectType === 'vendor'
+            ? await adminClient.from('vendor_organizations').select('operating_stations').eq('id', input.subjectId).maybeSingle()
+                .then(({ data: vendor }) => (vendor?.operating_stations ?? []) as string[])
+            : await adminClient.from('customer_meters').select('station_id').eq('customer_id', input.subjectId)
+                .then(({ data: meters }) => (meters ?? []).map((meter: any) => meter.station_id).filter(Boolean));
+        await notifyOperationalStaff({
+            permission: 'wallet.kyc.view', type: 'kyc_review', title: 'KYC review submitted',
+            body: `${input.subjectType === 'vendor' ? 'Vendor' : 'Customer'} KYC Tier ${input.requestedTier} needs review.`,
+            path: '/kyc-reviews', dedupeKey: `kyc.review.submitted.${review.id}`,
+            stationIds, metadata: { reviewRequestId: review.id, subjectType: input.subjectType, subjectId: input.subjectId },
+        });
+    } catch { /* notification delivery must not reverse the accepted review */ }
+    return review;
 }
 
 export async function listKycReviews(input: {
@@ -272,18 +288,16 @@ export async function decideKycReview(input: {
         }
     } else {
         try {
-            await adminClient.from('notifications').insert({
-                customer_id: null,
-                vendor_organization_id: (review as any).vendor_organization_id,
-                recipient_type: 'vendor',
-                recipient_id: (review as any).vendor_organization_id,
+            await notifyVendor({
+                vendorOrganizationId: (review as any).vendor_organization_id,
                 type: 'kyc_update',
                 title: input.decision === 'approved' ? 'KYC tier approved' : 'KYC needs changes',
                 body: input.decision === 'approved'
                     ? `Your business is now verified at Tier ${(review as any).requested_tier}.`
                     : `Your KYC review needs changes. ${input.note.trim()}`,
-                metadata: { reviewRequestId: input.requestId, status: input.decision, path: '/kyc' },
-                read: false,
+                path: '/kyc',
+                dedupeKey: `kyc.review.${input.requestId}.${input.decision}`,
+                metadata: { reviewRequestId: input.requestId, status: input.decision },
             });
         } catch { /* ignore notification failure */ }
     }

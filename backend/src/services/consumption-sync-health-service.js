@@ -44,6 +44,13 @@ async function consumptionSyncHealth(stationIds = [], now = new Date()) {
       error: row.last_error,
     };
   });
+  let latestStoredDate = null;
+  if (normalized.length === 1) {
+    try {
+      const latest = await supabase.restRequest(`/daily_meter_readings?select=reading_date&station_id=eq.${encodeURIComponent(normalized[0])}&order=reading_date.desc&limit=1`);
+      latestStoredDate = Array.isArray(latest) ? latest[0]?.reading_date || null : null;
+    } catch { /* optional diagnostic */ }
+  }
   return {
     available: true,
     stationCount: stations.length,
@@ -52,6 +59,7 @@ async function consumptionSyncHealth(stationIds = [], now = new Date()) {
     failedCount: stations.filter((station) => station.status === "failed").length,
     partialCount: stations.filter((station) => station.status === "partial").length,
     maximumLagDays: stations.reduce((maximum, station) => Math.max(maximum, station.lagDays ?? 0), 0),
+    latestStoredDate,
     stations,
   };
 }

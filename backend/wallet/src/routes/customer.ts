@@ -73,7 +73,7 @@ import {
     signDisputeEvidencePaths, toDisputeEvidencePath, DisputeEvidenceError,
 } from '../services/dispute-evidence.js';
 import { runMalwareScan } from '../services/file-scan.js';
-import { createCustomerPortalMeterOrder, getMeterPrices } from '../services/meter-orders.js';
+import { createCustomerPortalMeterOrder, getMeterPrices, notifyPaidMeterOrder } from '../services/meter-orders.js';
 import {
     abandonWalletIdempotency,
     assertClientIdempotencyKey,
@@ -85,6 +85,7 @@ import { revokePortalSession } from '../services/portal-session.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { verifiedPrincipalAmount, verifyTransaction } from '../adapters/paystack.js';
 import { initiateBankProofFunding, listCustomerFunding, uploadBankFundingProof, removeBankFundingProof, FundingError } from '../services/funding.js';
+import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -149,7 +150,7 @@ function customerAuthPayload(result: { challengeId: string; expiresAt: string; r
 const NOTIFICATION_PREF_DEFAULTS = {
     sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false, admin_announcement: false },
     email: { token_purchased: false, wallet_funded: true, promotions: false, kyc_update: true, dispute_update: true, payment_failed: true, admin_announcement: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
+    in_app: { token_purchased: true, wallet_funded: true, funding_update: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, remote_send_update: true, admin_announcement: true },
 };
 
 function mergeNotificationPrefs(existing: any, incoming: any = {}) {
@@ -1333,6 +1334,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return latest ?? order;
             }
             await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.payment_confirmed', targetId: id });
+            await notifyPaidMeterOrder(paidOrder as any).catch(() => undefined);
             return paidOrder;
         }
         return order;
@@ -1649,6 +1651,32 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+
+    fastify.get('/push/config', { preHandler: fastify.requireCustomer() }, async () => pushConfig());
+
+    fastify.post('/push/subscription', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const subscription = z.object({
+            endpoint: z.string().url().max(2048),
+            keys: z.object({ p256dh: z.string().min(20).max(512), auth: z.string().min(8).max(256) }),
+        }).parse(req.body ?? {});
+        await savePushSubscription({ actorType: 'customer', actorId: req.actor!.customerId!, portal: 'customer', subscription, userAgent: req.headers['user-agent'] });
+        return { ok: true };
+    });
+
+    fastify.delete('/push/subscription', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
+        await removePushSubscription({ actorType: 'customer', actorId: req.actor!.customerId!, endpoint });
+        return { ok: true };
+    });
+
+    fastify.post('/push/test', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        if (!pushConfig().available) return reply.code(503).send({ error: 'push_unavailable' });
+        const delivery = await sendWebPush('customer', req.actor!.customerId!, {
+            title: 'Beverly notifications enabled', body: 'Your device can receive wallet updates.',
+            url: '/notifications', tag: `customer-test:${req.actor!.customerId}`,
+        }, 'customer');
+        return { ok: delivery.sent > 0, delivery };
+    });
 
     // ── Notifications inbox ───────────────────────────────────────────────────
 

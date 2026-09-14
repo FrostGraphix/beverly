@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { api, ApiError } from '../lib/api';
+import { customerPushNotifications } from '../lib/push-notifications';
 import { clearCustomerToken, readCustomerProfile, readCustomerToken, storeCustomerToken, CUSTOMER_TOKEN_KEY, CUSTOMER_USER_KEY, type CustomerTokenOptions } from '../lib/auth-flow';
 
 export interface CustomerProfile {
@@ -85,6 +86,7 @@ export const useAuthStore = defineStore('auth', {
             storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customer));
         },
         async logout() {
+            try { await customerPushNotifications.disable(); } catch { /* device cleanup is best-effort */ }
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }
             this.accessToken = null;
             this.customer = null;
