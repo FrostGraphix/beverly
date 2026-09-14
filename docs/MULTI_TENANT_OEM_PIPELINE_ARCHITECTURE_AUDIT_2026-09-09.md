@@ -1700,3 +1700,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A second red-green contract slice now rejects inactive installations. Tenant mismatch also fails closed. Active, matching-tenant identity passes. The contract still lacks actor permission and resource mapping; no live caller may rely on it alone.
 - Browser, remote CI, deployed preview, staging, Node 22, database restore, and real-OEM sandbox checks remain unverified. Local passing tests do not establish end-to-end certification.
 - No migration, OEM dispatch, production configuration, or activation was changed.
+
+### 23.6 Canonical adapter checkpoint (2026-09-14)
+
+- The shared package now defines the audited core adapter methods, installation-scoped lookup and vend command types, a capability-state model, and the five normalized vend outcomes.
+- Red-green contract tests deny missing or insufficient capabilities. Another red-green test denies a claimed vend success lacking a provider reference.
+- A further red-green test rejects malformed provider references on pending outcomes. Optional token evidence now requires a non-empty string.
+- A compile-time public adapter fixture checks the core interface. `npm run test:oem` runs runtime and type checks during root `pretest`.
+- `npm run test:oem`, `npm run build`, and `npm test` passed after the final vend-outcome validation. The full wallet Vitest suite last passed before this slice; it remains a separate final regression gate.
+- These are contracts, not a conforming Calinmeter adapter. No wallet capture path consumes the outcome validator yet. Phase 1 and all later phases remain incomplete.

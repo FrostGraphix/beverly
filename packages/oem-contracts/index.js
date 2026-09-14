@@ -48,4 +48,55 @@ function authorizeInstallation(installation, tenantId) {
   return installation;
 }
 
-module.exports = { OemContractError, resolveInstallation, authorizeInstallation };
+/**
+ * Enforce an operation's declared support level.
+ * Missing and non-executable states always deny execution.
+ * @param {Readonly<Record<string, string>>} manifest
+ * @param {string} capability
+ * @param {'read' | 'write'} access
+ * @returns {string}
+ */
+function requireCapability(manifest, capability, access) {
+  const state = manifest && Object.hasOwn(manifest, capability) ? manifest[capability] : undefined;
+  const allowed = access === 'read'
+    ? ['read_only', 'write_supported', 'async_supported']
+    : access === 'write'
+      ? ['write_supported', 'async_supported']
+      : [];
+  if (!allowed.includes(state)) {
+    throw new OemContractError('OEM_CAPABILITY_UNSUPPORTED', 'OEM operation is unsupported');
+  }
+  return state;
+}
+
+/**
+ * Validate a canonical adapter result before financial state changes.
+ * @param {unknown} outcome
+ * @returns {Record<string, unknown>}
+ */
+function requireVendOutcome(outcome) {
+  if (!outcome || typeof outcome !== 'object' || Array.isArray(outcome)) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM outcome is invalid');
+  }
+  const value = /** @type {Record<string, unknown>} */ (outcome);
+  const status = value.status;
+  const statuses = ['confirmed_success', 'confirmed_failure', 'pending', 'unknown', 'requires_manual_review'];
+  if (!statuses.includes(status)) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM outcome is invalid');
+  }
+  if (value.providerReference !== undefined && (typeof value.providerReference !== 'string' || !value.providerReference.trim())) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM provider reference is invalid');
+  }
+  if (value.token !== undefined && (typeof value.token !== 'string' || !value.token.trim())) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM token is invalid');
+  }
+  if (status === 'confirmed_success' && (typeof value.providerReference !== 'string' || !value.providerReference.trim())) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'Confirmed success lacks provider evidence');
+  }
+  if ((status === 'confirmed_failure' || status === 'requires_manual_review') && (typeof value.reason !== 'string' || !value.reason.trim())) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM outcome lacks a reason');
+  }
+  return value;
+}
+
+module.exports = { OemContractError, resolveInstallation, authorizeInstallation, requireCapability, requireVendOutcome };
