@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "project": {
+    "name": "beverly",
+    "productType": null,
+    "stack": [
+      "vite",
+      "vue"
+    ]
+  },
+  "sources": {
+    "tokens": [],
+    "components": [],
+    "assets": [
+      "public/brand",
+      "assets"
+    ],
+    "instructions": [
+      "PRODUCT.md"
+    ]
+  },
+  "design": {
+    "colorMode": "unknown",
+    "colors": {},
+    "typography": {},
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [
+      "Show one inventory row per registered site",
+      "Build multi-report exports entirely inside the browser",
+      "Create signed archive links only after confirmation"
+    ],
+    "avoid": [
+      "Duplicate partition cards on the primary inventory",
+      "Create database rows or storage objects during export"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Use a site-first inventory with a three-step archive export wizard.",
+      "reason": "Operators need one clear site overview before choosing report coverage and bundle format.",
+      "evidence": "User-confirmed archive workflow, September 14 2026"
+    },
+    {
+      "decision": "Package selected archives as a browser-built TAR bundle.",
+      "reason": "This supports multiple existing files without adding database or storage quota usage.",
+      "evidence": "Existing signed-download archive API"
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "project.instructions",
+      "source": "PRODUCT.md"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vue",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-14T09:10:39.744Z"
+}

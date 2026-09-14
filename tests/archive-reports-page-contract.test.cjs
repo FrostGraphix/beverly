@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const page = read("src/components/ArchiveReportsPage.vue");
+const wizard = read("src/components/ArchiveExportWizard.vue");
 const manifest = read("src/data/route-manifest.js");
 const consumptionService = read("src/services/consumption-service.mjs");
 const apiReference = read("api/reference.js");
@@ -15,29 +16,31 @@ const backendArchiveService = read("backend/src/services/reading-archive-service
 const archiveMigration = read("supabase/migrations/20260825130000_archive_reports_end_to_end_hardening.sql");
 
 // 1. Component contract checks
-assert.match(page, /import[\s\S]*?pageSizeOptions[\s\S]*?from\s*"..\/services\/table-helpers.mjs";/, "ArchiveReportsPage must import pageSizeOptions from table-helpers.mjs");
-assert.match(page, /import[\s\S]*?pageNumbers[\s\S]*?from\s*"..\/services\/table-helpers.mjs";/, "ArchiveReportsPage must import pageNumbers from table-helpers.mjs");
-assert.match(page, /import[\s\S]*?totalPages[\s\S]*?from\s*"..\/services\/table-helpers.mjs";/, "ArchiveReportsPage must import totalPages from table-helpers.mjs");
-assert.match(page, /pageSizeOptions,/, "ArchiveReportsPage data must include pageSizeOptions");
-assert.match(page, /pageSize:\s*10,/, "Archive Reports must default to 10 rows like CRM TablePage");
-assert.match(page, /page:\s*this\.currentPage/, "Archive Reports must request the active server page");
-assert.match(page, /pageSize:\s*this\.pageSize/, "Archive Reports must request the selected server page size");
-assert.match(page, /totalCount:\s*0,/, "Archive Reports must track the server-side total");
+assert.match(page, /buildArchiveSiteRows\(this\.stationOptions, this\.reports\)/, "Archive Reports must group partitions into one site row");
+assert.match(page, /loadArchiveCatalogue\(fetchArchiveReports\)/, "Archive Reports must load every catalogue page");
+assert.match(page, /v-for="site in filteredSites"/, "Archive Reports must render sites instead of partitions");
+assert.doesNotMatch(page, /v-for="report in reports"/, "Archive Reports must not render one card per partition");
 assert.match(page, /archive-mobile-list/, "Archive Reports must provide a readable mobile record layout");
 assert.match(page, /--wallet-card-radius/, "Archive KPI cards must reuse the shared wallet card token");
 assert.match(page, /props:\s*\{\s*route:\s*\{\s*type:\s*Object/, "ArchiveReportsPage must accept route prop");
-assert.match(page, /applyFilters\(\)/, "Archive Reports must reset paging when filters change");
-assert.match(page, /this\.load\(\{\s*includeSummary:\s*false\s*\}\)/, "Archive pagination and filters must not block on a full KPI summary refresh");
-assert.match(page, /WalletExportMenu/, "Archive Reports must reuse wallet exporting");
-assert.match(page, /resolveArchiveExportRows/, "Archive exports must fetch complete filtered results");
+assert.match(page, /<ArchiveExportWizard/, "Archive Reports must open the archive export wizard");
+assert.match(wizard, /Choose archive sites/, "Archive wizard must provide site selection");
+assert.match(wizard, /Define report coverage/, "Archive wizard must provide report options");
+assert.match(wizard, /Review archive bundle/, "Archive wizard must provide review confirmation");
+assert.match(wizard, /type="date"/, "Archive wizard must provide date-range controls");
+assert.match(wizard, /buildArchiveBundle\(this\.matchedReports/, "Archive wizard must build the selected bundle");
+assert.match(wizard, /requestDownload:\s*requestArchiveDownloadUrl/, "Archive wizard must mint signed links during export");
+assert.match(wizard, /trapFocus\(event\)/, "Archive wizard must retain keyboard focus");
+assert.match(wizard, /previousBodyOverflow/, "Archive wizard must restore page scrolling");
 assert.match(page, /Source freshness/, "Archive Reports must surface synchronization freshness");
 assert.match(page, /Coverage through/, "Archive Reports must distinguish actual coverage");
 assert.match(page, /Refreshed/, "Archive Reports must distinguish refresh timestamps");
 assert.match(page, /summary\.syncHealth/, "Archive Reports must consume durable sync health");
-assert.match(page, /report\.refreshedAt/, "Archive Reports must show report refresh time");
+assert.match(page, /site\.refreshedAt/, "Archive Reports must show site refresh time");
 
 // 2. Manifest contract checks
 assert.match(manifest, /hash:\s*"#\/prepay-report\/archive-reports"/, "Manifest must declare #/prepay-report/archive-reports route");
+assert.match(manifest, /actions:\s*\["Export archives",\s*"Refresh"\]/, "Manifest must expose the site-first archive workflow");
 assert.match(manifest, /customComponent:\s*"ArchiveReportsPage"/, "Manifest must map customComponent to ArchiveReportsPage");
 assert.match(manifest, /\/api\/local\/archive\/reports\/summary/, "Manifest must include summary API endpoint");
 assert.match(manifest, /\/api\/local\/archive\/reports\/list/, "Manifest must include list API endpoint");
