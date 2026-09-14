@@ -52,7 +52,7 @@ Keep write safety strict.
 ## Backend
 
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
-- `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats. Existing token-engine exports remain compatibility facades during migration.
+- `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
 - OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.

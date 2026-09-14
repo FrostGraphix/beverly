@@ -1717,3 +1717,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Two adapter-seam tests failed before extraction, then passed. The existing token-engine suite passed all 21 tests afterward. No real OEM specification was inferred.
 - This is not complete adapter extraction. Meter lookup, station reads, token response parsing, remote-task lifecycle, telemetry, CRM proxy behavior, and dynamic authentication remain Calinmeter-shaped elsewhere.
 - No production routing, database schema, activation, or financial state transition changed. Full wallet Vitest passed: 63 files, 436 tests. `npm run build` and `npm test` passed. Tests ran under local Node 24, not the declared Node 22. Browser, remote CI, staging, and real-OEM checks remain unverified.
+
+### 23.8 Calinmeter response checkpoint (2026-09-14)
+
+- Credit-token response aliases and fallbacks now parse inside `calinmeter-v1.ts`. The test uses `contracts/samples/credit-token-generate.code-reason-result.json`, which is labelled an observed-shape capture rather than a certified live sandbox record.
+- The adapter test failed before implementation, then passed. Existing token-engine tests passed all 21 cases. Missing tokens still produce the wallet's `token_missing` error.
+- The parser preserves current amount, units, timestamp, record-ID, and token alias behavior. It does not yet validate monetary finiteness or certify upstream financial truth; those remain separate fail-closed gateway and reconciliation work.
+- Full wallet regression passed: 63 files, 437 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding.

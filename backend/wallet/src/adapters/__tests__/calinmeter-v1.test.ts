@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload } from '../calinmeter-v1.js';
+import capturedCreditToken from '../../../../../contracts/samples/credit-token-generate.code-reason-result.json';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, parseCalinmeterCreditTokenResponse } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
+    it('normalizes the captured credit-token response', () => {
+        const result = parseCalinmeterCreditTokenResponse(capturedCreditToken.body, {
+            reference: 'PO-1',
+            amountMinor: 500000,
+            units: 14.2857,
+            generatedAtFallback: '2026-04-28T12:30:00.000Z',
+        });
+
+        expect(result).toEqual({
+            token: '0021 2636 8628 4408 6688',
+            tokenRecordId: '1745843400000',
+            amountMinor: 500000,
+            units: 14.2857,
+            generatedAt: '2026-04-28 09:47:55',
+            upstreamPayload: capturedCreditToken.body.result,
+        });
+    });
+
     it('preserves the observed credit-token request', () => {
         const payload = buildCalinmeterCreditTokenPayload({
             customerId: '47005363529',

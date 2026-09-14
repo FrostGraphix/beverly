@@ -21,7 +21,7 @@ import { adminClient } from '../db/supabase.js';
 import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload } from '../adapters/calinmeter-v1.js';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, parseCalinmeterCreditTokenResponse } from '../adapters/calinmeter-v1.js';
 
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
@@ -759,19 +759,16 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
         }
         throw upstreamFailure(response, 'token_generation_failed');
     }
-    const data = (response.result || response.data || response) as Record<string, unknown>;
-    const token = String(data.token || data.tokenFirst || '').trim();
-    if (!token) {
+    const result = parseCalinmeterCreditTokenResponse(response, {
+        reference: input.reference,
+        amountMinor: input.amountMinor,
+        units: input.units,
+        generatedAtFallback: new Date().toISOString(),
+    });
+    if (!result) {
         throw new TokenEngineError('energy backend did not return a token', 'token_missing');
     }
-    return {
-        token,
-        tokenRecordId: String(data.tokenRecordId || data.receiptId || data.id || input.reference),
-        amountMinor: Math.round(Number(data.amount ?? data.totalPaid ?? input.amountMinor / 100) * 100),
-        units: Number(data.units ?? data.totalUnit ?? input.units),
-        generatedAt: String(data.createdAt || data.createTime || data.createDate || new Date().toISOString()),
-        upstreamPayload: data,
-    };
+    return result;
 }
 
 export function buildCreditTokenPreviewPlan(input: GenerateTokenInput) {
