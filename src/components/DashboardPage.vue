@@ -63,6 +63,11 @@
 
     <section class="dashboard-chart-card dashboard-consumption-card" :aria-label="`${consumptionTitle} chart`">
       <div class="dashboard-consumption-top">
+        <div class="dashboard-consumption-heading">
+          <h2>{{ consumptionTitle }}</h2>
+          <span v-if="consumptionMode === 'monthly' && monthlyThrough">Selected period ends {{ monthlyThrough }} · current month is partial</span>
+        </div>
+        <div class="dashboard-consumption-modes" aria-label="Consumption period">
         <BaseButton
           v-for="mode in consumptionModes"
           :key="mode.id"
@@ -72,8 +77,10 @@
         >
           {{ mode.label }}
         </BaseButton>
+        </div>
       </div>
-      <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading consumption chart">
+      <div v-if="monthlyError && consumptionMode === 'monthly'" class="dashboard-chart-empty" role="alert">{{ monthlyError }} <BaseButton size="sm" @click="loadMonthlyConsumption">Retry</BaseButton></div>
+      <div v-else-if="loading || (monthlyLoading && consumptionMode === 'monthly')" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading consumption chart">
         <span class="dashboard-chart-skeleton-title"></span>
         <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
           <span v-for="height in [34, 62, 46, 72, 54, 42, 68, 58]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
@@ -88,7 +95,8 @@
 <script>
 import EChartPanel from "./EChartPanel.vue";
 import BaseButton from "./base/BaseButton.vue";
-import { fetchDashboardData } from "../services/dashboard-service.mjs";
+import { dashboardMonthlyWindow, fetchDashboardData, mapStoredMonthlyConsumption } from "../services/dashboard-service.mjs";
+import { fetchStationConsumptionAnalytics } from "../services/consumption-service.mjs";
 import { createBarOption, createLineOption, createPieOption, dashboardSeries } from "../services/dashboard-chart-options.mjs";
 import { dashboardChartTitles } from "../services/mappers/dashboard-mapper.mjs";
 import { useOemStore } from "../stores/oem-store";
@@ -134,6 +142,11 @@ export default {
       top: { title: dashboardChartTitles[3], labels: [], values: [] },
       consumption: { title: dashboardChartTitles[4], labels: [], values: [] },
       dailyConsumption: { title: dashboardChartTitles[4], labels: [], values: [] },
+      monthlyConsumption: null,
+      monthlyLoading: false,
+      monthlyError: "",
+      monthlyThrough: "",
+      monthlyRequestId: 0,
       success: { labels: [], values: [] },
       alarms: [],
       consumptionMode: "daily",
@@ -167,7 +180,13 @@ export default {
       return createBarOption(dashboardSeries(this.top.labels, this.top.values), this.top.title || dashboardChartTitles[this.activeType], this.chartTheme);
     },
     consumptionChartOption() {
-      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), this.consumptionTitle, this.chartTheme);
+      const option = createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), this.consumptionTitle, this.chartTheme);
+      option.title.show = false;
+      option.grid = { left: 8, right: 8, top: 12, bottom: 8, containLabel: true };
+      option.yAxis.axisLabel.formatter = (value) => Number(value).toLocaleString("en-NG", { notation: "compact", maximumFractionDigits: 1 });
+      option.series[0].name = "kWh";
+      option.tooltip.valueFormatter = (value) => `${Number(value || 0).toLocaleString("en-NG", { maximumFractionDigits: 2 })} kWh`;
+      return option;
     },
     consumptionTitle() {
       return this.consumption.title || dashboardChartTitles[this.consumptionType] || "Daily Consumption";
@@ -219,9 +238,29 @@ export default {
     setConsumptionMode(mode) {
       if (this.consumptionMode === mode) return;
       this.consumptionMode = mode;
-      this.consumption = mode === "monthly"
-        ? this.toMonthlyConsumption(this.dailyConsumption)
-        : this.dailyConsumption;
+      if (mode === "monthly") {
+        this.consumption = this.monthlyConsumption || { title: "Monthly Consumption", labels: [], values: [] };
+        void this.loadMonthlyConsumption();
+      } else {
+        this.consumption = this.dailyConsumption;
+      }
+    },
+    async loadMonthlyConsumption() {
+      const requestId = ++this.monthlyRequestId;
+      this.monthlyLoading = true;
+      this.monthlyError = "";
+      const { from, to } = dashboardMonthlyWindow();
+      try {
+        const data = await fetchStationConsumptionAnalytics({ from, to, granularity: "monthly", topMeters: 1 });
+        if (requestId !== this.monthlyRequestId) return;
+        this.monthlyConsumption = mapStoredMonthlyConsumption(data);
+        this.monthlyThrough = data?.range?.to || to;
+        if (this.consumptionMode === "monthly") this.consumption = this.monthlyConsumption;
+      } catch (error) {
+        if (requestId === this.monthlyRequestId) this.monthlyError = error?.message || "Monthly readings are unavailable.";
+      } finally {
+        if (requestId === this.monthlyRequestId) this.monthlyLoading = false;
+      }
     },
     applyDataset(dataset) {
       this.panel = dataset.panel;
@@ -229,7 +268,7 @@ export default {
       this.top = dataset.top;
       this.dailyConsumption = dataset.consumption;
       this.consumption = this.consumptionMode === "monthly"
-        ? this.toMonthlyConsumption(this.dailyConsumption)
+        ? this.monthlyConsumption || { title: "Monthly Consumption", labels: [], values: [] }
         : this.dailyConsumption;
       this.success = dataset.success;
       this.alarms = dataset.alarms;
@@ -254,23 +293,10 @@ export default {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
         if (loadId !== this.dashboardLoadId) return;
         this.applyDataset(dataset);
+        if (this.consumptionMode === "monthly" && !this.monthlyLoading) void this.loadMonthlyConsumption();
       } finally {
         if (showLoading && loadId === this.dashboardLoadId) this.loading = false;
       }
-    },
-    toMonthlyConsumption(daily) {
-      const totals = new Map();
-      daily.labels.forEach((label, index) => {
-        const month = String(label || "").slice(0, 7) || "Unknown";
-        totals.set(month, (totals.get(month) || 0) + Number(daily.values[index] || 0));
-      });
-      const labels = [...totals.keys()];
-      const values = labels.map((label) => Number((totals.get(label) || 0).toFixed(2)));
-      return {
-        title: "Monthly Consumption",
-        labels,
-        values
-      };
     },
     formatStatValue(card, value) {
       const num = Number(value || 0);

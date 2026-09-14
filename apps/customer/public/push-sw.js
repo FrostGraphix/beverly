@@ -7,7 +7,7 @@ self.addEventListener('push', (event) => {
     badge: payload.icon || './pwa-192.png',
     tag: payload.tag || 'beverly-update',
     renotify: true,
-    data: { url: payload.url || './notifications' },
+    data: { url: payload.url || 'notifications' },
   }));
 });
 

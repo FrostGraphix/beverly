@@ -1,4 +1,7 @@
 import { adminClient } from '../db/supabase.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { notifyMeterOrderUpdate } from './notifications.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { postEntry, LedgerError } from './ledger.js';
 import { findWalletByOwner, assertWalletCanTransact } from './wallets.js';
@@ -304,6 +307,29 @@ async function createOrderRow(input: {
     return data as MeterOrderRecord;
 }
 
+export async function notifyPaidMeterOrder(order: MeterOrderRecord): Promise<void> {
+    const stationIds = order.vendor_organization_id
+        ? await adminClient.from('vendor_organizations').select('operating_stations').eq('id', order.vendor_organization_id).maybeSingle()
+            .then(({ data }) => (data?.operating_stations ?? []) as string[])
+        : await adminClient.from('customer_meters').select('station_id').eq('customer_id', order.customer_id)
+            .then(({ data }) => (data ?? []).map((meter: any) => meter.station_id).filter(Boolean));
+    await Promise.allSettled([
+        notifyOperationalStaff({
+            permission: 'wallet.vendors.review', type: 'meter_order_queue', title: 'Paid meter order received',
+            body: `Meter order ${order.id} awaits processing.`, path: '/meter-orders',
+            dedupeKey: `meter.order.paid.${order.id}`, stationIds,
+            metadata: { orderId: order.id, customerId: order.customer_id },
+        }),
+        notifyMeterOrderUpdate(order.customer_id, { orderId: order.id, status: 'paid' }),
+        ...(order.vendor_organization_id ? [notifyVendor({
+            vendorOrganizationId: order.vendor_organization_id,
+            type: 'meter_order_update', title: 'Meter order placed',
+            body: `Meter order ${order.id} was paid and submitted.`, path: '/meter-orders',
+            dedupeKey: `meter.order.paid.${order.id}`, metadata: { orderId: order.id, status: 'paid' },
+        })] : []),
+    ]);
+}
+
 export async function createCustomerPortalMeterOrder(input: {
     customerId: string;
     customerUserId: string;
@@ -455,6 +481,7 @@ async function createVendorSponsoredMeterOrderOnce(input: VendorMeterOrderInput)
         .select('*')
         .single();
     if (error) throw new MeterOrderError(error.message, 'meter_order_update_failed', 500);
+    await notifyPaidMeterOrder(data as MeterOrderRecord).catch(() => undefined);
     return data as MeterOrderRecord;
 }
 
@@ -536,7 +563,7 @@ export async function createAdminMeterOrder(input: {
             const customer = await readCustomer(input.customerId);
             const category = input.propertyCategory ?? 'residential';
             const amountMinor = await meterOrderAmountMinor(category);
-            return createOrderRow({
+            const order = await createOrderRow({
                 customerId: input.customerId,
                 customerName: customer.full_name,
                 meterType: input.meterType,
@@ -557,6 +584,8 @@ export async function createAdminMeterOrder(input: {
                 createdByActorId: input.staffUserId,
                 notes: input.notes?.trim() || 'Staff-assisted meter order.',
             });
+            await notifyPaidMeterOrder(order).catch(() => undefined);
+            return order;
         },
     );
 }

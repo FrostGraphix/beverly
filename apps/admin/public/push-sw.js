@@ -14,10 +14,12 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil((async () => {
-    const target = new URL(event.notification.data?.url || './', self.registration.scope);
-    if (target.origin !== self.location.origin) return;
+    const path = String(event.notification.data?.url || 'notifications').replace(/^\/+/, '');
+    const target = new URL(path, self.registration.scope);
+    if (target.origin !== self.location.origin || !target.pathname.startsWith(new URL(self.registration.scope).pathname)) return;
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {
+      if (!new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname)) continue;
       if ('navigate' in client) await client.navigate(target.href);
       if ('focus' in client) return client.focus();
     }

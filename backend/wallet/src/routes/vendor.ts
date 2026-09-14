@@ -73,6 +73,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
+import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -447,6 +448,38 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (error) {
             return reply.code(422).send({ error: 'profile_picture_activation_failed' });
         }
+    });
+
+    fastify.get('/push/config', { preHandler: fastify.requireVendor() }, async () => pushConfig());
+
+    fastify.post('/push/subscription', { preHandler: fastify.requireVendor() }, async (req) => {
+        const subscription = z.object({
+            endpoint: z.string().url().max(2048),
+            keys: z.object({ p256dh: z.string().min(20).max(512), auth: z.string().min(8).max(256) }),
+        }).parse(req.body ?? {});
+        const orgId = req.actor!.vendorOrganizationId;
+        if (!orgId) throw fastify.httpErrors.forbidden('Vendor organization required.');
+        await savePushSubscription({ actorType: 'vendor', actorId: orgId, portal: 'vendor', subscription, userAgent: req.headers['user-agent'] });
+        return { ok: true };
+    });
+
+    fastify.delete('/push/subscription', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
+        const orgId = req.actor!.vendorOrganizationId;
+        if (!orgId) throw fastify.httpErrors.forbidden('Vendor organization required.');
+        await removePushSubscription({ actorType: 'vendor', actorId: orgId, endpoint });
+        return { ok: true };
+    });
+
+    fastify.post('/push/test', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        if (!pushConfig().available) return reply.code(503).send({ error: 'push_unavailable' });
+        const orgId = req.actor!.vendorOrganizationId;
+        if (!orgId) throw fastify.httpErrors.forbidden('Vendor organization required.');
+        const delivery = await sendWebPush('vendor', orgId, {
+            title: 'Beverly notifications enabled', body: 'Your device can receive vending updates.',
+            url: '/notifications', tag: `vendor-test:${orgId}`,
+        }, 'vendor');
+        return { ok: delivery.sent > 0, delivery };
     });
 
     fastify.get('/notifications', { preHandler: fastify.requireVendor() }, async (req) => {

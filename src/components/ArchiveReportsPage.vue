@@ -644,8 +644,11 @@ export default {
   .archive-reports__freshness { align-items: flex-start; flex-direction: column; }
   .archive-reports__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .archive-reports__filters { flex-direction: column; align-items: stretch; }
+  .archive-reports__site-tools .archive-filter:first-child { flex: 0 0 auto; min-width: 0; }
+  .archive-reports__site-tools .archive-filter { width: 100%; }
+  .archive-reports__site-tools .archive-filter:first-child :deep(input) { min-width: 0; }
   .archive-filter :deep(select) { min-width: 0; width: 100%; }
-  .archive-reports__filtercount { margin-left: 0; }
+  .archive-reports__filtercount { margin-left: 0; align-self: flex-end; }
   .archive-reports__tablewrap { display: none; }
   .archive-mobile-list { display: grid; gap: var(--bev-space-3); }
 }

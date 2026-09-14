@@ -18,6 +18,8 @@
  *   • Capture fails (rare) → mark order delivery_pending_review for ops.
  */
 import { adminClient } from '../db/supabase.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { sendNotification } from './notifications.js';
 import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
@@ -383,6 +385,16 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         },
     });
 
+    await notifyVendor({
+        vendorOrganizationId: input.vendorOrganizationId,
+        type: 'vending_update',
+        title: 'Token purchase completed',
+        body: `A token purchase completed for meter ${meter.meterId}.`,
+        path: '/transactions',
+        dedupeKey: `vending.purchase.${po.id}`,
+        metadata: { purchaseOrderId: po.id, meterId: meter.meterId, deliveryState: po.delivery_state },
+    }).catch(() => undefined);
+
     return {
         purchaseOrder: po,
         token,
@@ -441,6 +453,13 @@ export async function dispatchGeneratedVendorToken(
                     ? { failure_reason: `remote_send_failed: ${status.remark ?? 'Meter rejected the token.'}`.slice(0, 500) }
                     : {}),
             }).eq('id', po.id);
+            if (status.status !== 'pending') await notifyVendor({
+                vendorOrganizationId, type: 'remote_send_update',
+                title: status.status === 'success' ? 'Remote send delivered' : 'Remote send failed',
+                body: status.status === 'success' ? `Token delivered to meter ${po.meter_id}.` : `Remote delivery failed for meter ${po.meter_id}. Enter the token manually.`,
+                path: '/remote-send', dedupeKey: `remote.send.${po.id}.${deliveryState}`,
+                metadata: { purchaseOrderId: po.id, deliveryState },
+            }).catch(() => undefined);
         }
 
         const explicitRemark = status.status === 'success'
@@ -503,6 +522,16 @@ export async function dispatchGeneratedVendorToken(
             targetId: po.id,
             after: { meterId: po.meter_id, remoteTaskId: task.taskId, deliveryState },
         });
+        await notifyVendor({
+            vendorOrganizationId,
+            type: 'remote_send_update',
+            title: task.status === 'success' ? 'Remote send delivered' : task.status === 'failed' ? 'Remote send failed' : 'Remote send started',
+            body: task.status === 'success' ? `Token delivered to meter ${po.meter_id}.`
+                : task.status === 'failed' ? `Remote delivery failed for meter ${po.meter_id}. Enter the token manually.`
+                    : `Remote delivery is processing for meter ${po.meter_id}.`,
+            path: '/remote-send', dedupeKey: `remote.send.${po.id}.${deliveryState}`,
+            metadata: { purchaseOrderId: po.id, remoteTaskId: task.taskId, deliveryState },
+        }).catch(() => undefined);
         return {
             purchaseOrder: { ...po, remote_task_id: task.taskId, delivery_state: deliveryState },
             remoteTaskId: task.taskId,
@@ -571,6 +600,16 @@ export async function reconcileRemoteSendOrders(limit = 25) {
                     token: row.token,
                     deliveryState: 'remote_send_failed_needs_review',
                 });
+                if (row.actor_type === 'vendor') await notifyVendor({
+                    vendorOrganizationId: row.actor_id, type: 'remote_send_update', title: 'Remote send failed',
+                    body: `Remote delivery failed for meter ${row.meter_id}. Review this purchase.`,
+                    path: '/remote-send', dedupeKey: `remote.reconcile.${row.id}.failed`, metadata: { purchaseOrderId: row.id },
+                }).catch(() => undefined);
+                else await sendNotification(row.actor_id, {
+                    type: 'remote_send_update', title: 'Remote send failed',
+                    body: `Remote delivery failed for meter ${row.meter_id}. Review this purchase.`,
+                    metadata: { purchaseOrderId: row.id, path: '/transactions' },
+                }).catch(() => undefined);
                 reviewed++;
                 continue;
             }
@@ -611,6 +650,16 @@ export async function reconcileRemoteSendOrders(limit = 25) {
                 status: 'delivered',
                 delivery_state: 'remote_send_delivered',
             }).eq('id', row.id);
+            if (row.actor_type === 'vendor') await notifyVendor({
+                vendorOrganizationId: row.actor_id, type: 'remote_send_update', title: 'Remote send delivered',
+                body: `Token delivered to meter ${row.meter_id}.`, path: '/remote-send',
+                dedupeKey: `remote.reconcile.${row.id}.delivered`, metadata: { purchaseOrderId: row.id },
+            }).catch(() => undefined);
+            else await sendNotification(row.actor_id, {
+                type: 'remote_send_update', title: 'Remote send delivered',
+                body: `Token delivered to meter ${row.meter_id}.`,
+                metadata: { purchaseOrderId: row.id, path: '/transactions' },
+            }).catch(() => undefined);
             delivered++;
         } catch (e: any) {
             await markPendingReview(row.id, e.code ?? 'remote_reconcile_failed', e.message ?? 'Remote reconciliation failed.', {

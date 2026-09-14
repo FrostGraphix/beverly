@@ -21,6 +21,7 @@ assert.match(page, /loadArchiveCatalogue\(fetchArchiveReports\)/, "Archive Repor
 assert.match(page, /v-for="site in filteredSites"/, "Archive Reports must render sites instead of partitions");
 assert.doesNotMatch(page, /v-for="report in reports"/, "Archive Reports must not render one card per partition");
 assert.match(page, /archive-mobile-list/, "Archive Reports must provide a readable mobile record layout");
+assert.match(page, /@media \(max-width: 760px\)[\s\S]*?\.archive-reports__site-tools \.archive-filter:first-child \{ flex: 0 0 auto; min-width: 0; \}/, "Mobile search must not retain its desktop 280px flex basis");
 assert.match(page, /--wallet-card-radius/, "Archive KPI cards must reuse the shared wallet card token");
 assert.match(page, /props:\s*\{\s*route:\s*\{\s*type:\s*Object/, "ArchiveReportsPage must accept route prop");
 assert.match(page, /<ArchiveExportWizard/, "Archive Reports must open the archive export wizard");

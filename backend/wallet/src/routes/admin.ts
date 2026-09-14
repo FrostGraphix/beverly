@@ -28,7 +28,7 @@ import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, g
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
-import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyAdminAnnouncement, staffInvitationReadiness } from '../services/admin-notifications.js';
+import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement, staffInvitationReadiness } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
@@ -37,6 +37,7 @@ import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder, assertMeterOrderTransition, getMeterPrices, rejectMeterOrder, updateMeterPrices } from '../services/meter-orders.js';
 import { revokePortalSession } from '../services/portal-session.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import { notifyVendor } from '../services/vendor-notifications.js';
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
 import adminVendorTransferRoutes from './admin-vendor-transfers.js';
 import adminDevRoutes from './admin-dev.js';
@@ -135,7 +136,7 @@ function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string
     }
 }
 
-type AnnouncementRecipientType = 'customer' | 'vendor';
+type AnnouncementRecipientType = 'customer' | 'vendor' | 'staff';
 type AnnouncementChannel = 'in_app' | 'email';
 type AnnouncementReachability = 'account' | 'email';
 
@@ -154,6 +155,7 @@ interface AnnouncementRecipient {
     email: string | null;
     phone: string | null;
     status: string | null;
+    station_ids: string[];
 }
 
 interface WalletOwnerRow {
@@ -175,8 +177,15 @@ function normalizeAnnouncementRecipient(row: any, type: AnnouncementRecipientTyp
             email: row.email ?? null,
             phone: row.phone ?? null,
             status: row.status ?? null,
+            station_ids: row.station_ids ?? [],
         };
     }
+    if (type === 'staff') return {
+        key: recipientKey('staff', row.auth_user_id), type: 'staff', id: row.auth_user_id,
+        name: row.user_name || row.email || 'Unnamed staff', email: row.email ?? null,
+        phone: null, status: row.role_key ?? null,
+        station_ids: normalizeStaffStationIds(row.station_ids ?? [row.station_id]),
+    };
     const name = row.trading_name || row.legal_name || row.contact_email || 'Unnamed vendor';
     return {
         key: recipientKey('vendor', row.id),
@@ -186,6 +195,7 @@ function normalizeAnnouncementRecipient(row: any, type: AnnouncementRecipientTyp
         email: row.contact_email ?? null,
         phone: row.contact_phone ?? null,
         status: row.status ?? null,
+        station_ids: row.station_ids ?? [],
     };
 }
 
@@ -209,6 +219,7 @@ async function listWalletVendorIds(): Promise<string[]> {
 
 async function listAnnouncementRecipients(opts: {
     audiences: AnnouncementRecipientType[];
+    stationIds?: string[];
     reachability?: AnnouncementReachability;
     search?: string;
     limit?: number;
@@ -219,9 +230,21 @@ async function listAnnouncementRecipients(opts: {
     const term = cleanSearchTerm(opts.search);
     const emailOnly = opts.reachability === 'email';
     const recipients: AnnouncementRecipient[] = [];
+    let stationCustomerIds: string[] | null = null;
+    let stationVendorIds: string[] | null = null;
+    if (opts.stationIds?.length) {
+        const [meters, vendors] = await Promise.all([
+            adminClient.from('customer_meters').select('customer_id').in('station_id', opts.stationIds),
+            adminClient.from('vendor_organizations').select('id').overlaps('operating_stations', opts.stationIds),
+        ]);
+        if (meters.error) throw meters.error;
+        if (vendors.error) throw vendors.error;
+        stationCustomerIds = [...new Set((meters.data ?? []).map((row: any) => row.customer_id).filter(Boolean))];
+        stationVendorIds = (vendors.data ?? []).map((row: any) => row.id);
+    }
 
     if (opts.audiences.includes('customer')) {
-        const walletCustomerIds = await listWalletCustomerIds();
+        const walletCustomerIds = (await listWalletCustomerIds()).filter((id) => !stationCustomerIds || stationCustomerIds.includes(id));
         if (walletCustomerIds.length) {
             let query = adminClient
                 .from('customers')
@@ -239,7 +262,7 @@ async function listAnnouncementRecipients(opts: {
     }
 
     if (opts.audiences.includes('vendor')) {
-        const walletVendorIds = await listWalletVendorIds();
+        const walletVendorIds = (await listWalletVendorIds()).filter((id) => !stationVendorIds || stationVendorIds.includes(id));
         if (walletVendorIds.length) {
             let query = adminClient
                 .from('vendor_organizations')
@@ -256,45 +279,44 @@ async function listAnnouncementRecipients(opts: {
         }
     }
 
+    if (opts.audiences.includes('staff')) {
+        const staffRows: any[] = [];
+        for (let page = 0; ; page++) {
+            let query: any = adminClient.from('users')
+                .select('auth_user_id, user_name, email, role_key, station_id, station_ids')
+                .not('auth_user_id', 'is', null)
+                .order('created_at', { ascending: false })
+                .range(page * 1000, page * 1000 + 999);
+            if (emailOnly) query = query.not('email', 'is', null).neq('email', '');
+            if (term) query = query.or(`user_name.ilike.%${term}%,email.ilike.%${term}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            staffRows.push(...(data ?? []));
+            if ((data?.length ?? 0) < 1000) break;
+        }
+        const staff = staffRows.map((row: any) => normalizeAnnouncementRecipient(row, 'staff'))
+            .filter((row: AnnouncementRecipient) => !opts.stationIds?.length || row.station_ids.includes(ALL_STATIONS_SCOPE)
+                || row.station_ids.some((id: string) => opts.stationIds!.includes(id)));
+        recipients.push(...staff.slice(offset, offset + limit));
+    }
+
     return recipients;
 }
 
-async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string; reachability?: AnnouncementReachability }) {
-    const term = cleanSearchTerm(opts.search);
-    const emailOnly = opts.reachability === 'email';
-    let customers = 0;
-    let vendors = 0;
-    if (opts.audiences.includes('customer')) {
-        const walletCustomerIds = await listWalletCustomerIds();
-        if (walletCustomerIds.length) {
-            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).neq('status', 'deleted');
-            if (emailOnly) query = query.not('email', 'is', null).neq('email', '');
-            if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
-            const { count, error } = await query;
-            if (error) throw error;
-            customers = count ?? 0;
-        }
-    }
-    if (opts.audiences.includes('vendor')) {
-        const walletVendorIds = await listWalletVendorIds();
-        if (walletVendorIds.length) {
-            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).neq('status', 'deleted');
-            if (emailOnly) query = query.not('contact_email', 'is', null).neq('contact_email', '');
-            if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
-            const { count, error } = await query;
-            if (error) throw error;
-            vendors = count ?? 0;
-        }
-    }
-    return { customers, vendors, total: customers + vendors };
+async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string; reachability?: AnnouncementReachability; stationIds?: string[] }) {
+    const rows = await listAllAnnouncementRecipients(opts.audiences, opts.reachability ?? 'account', opts.search, opts.stationIds);
+    const customers = rows.filter((row) => row.type === 'customer').length;
+    const vendors = rows.filter((row) => row.type === 'vendor').length;
+    const staff = rows.filter((row) => row.type === 'staff').length;
+    return { customers, vendors, staff, total: rows.length };
 }
 
-async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[], reachability: AnnouncementReachability, search?: string): Promise<AnnouncementRecipient[]> {
+async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[], reachability: AnnouncementReachability, search?: string, stationIds?: string[]): Promise<AnnouncementRecipient[]> {
     const pageSize = 1_000;
     const byKey = new Map<string, AnnouncementRecipient>();
     for (const audience of audiences) {
         for (let offset = 0; ; offset += pageSize) {
-            const rows = await listAnnouncementRecipients({ audiences: [audience], reachability, search, limit: pageSize, offset });
+            const rows = await listAnnouncementRecipients({ audiences: [audience], reachability, search, stationIds, limit: pageSize, offset });
             for (const row of rows) byKey.set(row.key, row);
             if (rows.length < pageSize) break;
         }
@@ -302,19 +324,21 @@ async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientTyp
     return Array.from(byKey.values());
 }
 
-async function summarizeAnnouncementEmails(audiences: AnnouncementRecipientType[], search?: string) {
-    const recipients = await listAllAnnouncementRecipients(audiences, 'email', search);
+async function summarizeAnnouncementEmails(audiences: AnnouncementRecipientType[], search?: string, stationIds?: string[]) {
+    const recipients = await listAllAnnouncementRecipients(audiences, 'email', search, stationIds);
     const customerEmails = new Set<string>();
     const vendorEmails = new Set<string>();
+    const staffEmails = new Set<string>();
     const allEmails = new Set<string>();
     for (const recipient of recipients) {
         const email = recipient.email?.trim().toLowerCase();
         if (!email) continue;
         allEmails.add(email);
         if (recipient.type === 'customer') customerEmails.add(email);
-        else vendorEmails.add(email);
+        else if (recipient.type === 'vendor') vendorEmails.add(email);
+        else staffEmails.add(email);
     }
-    return { customers: customerEmails.size, vendors: vendorEmails.size, total: allEmails.size };
+    return { customers: customerEmails.size, vendors: vendorEmails.size, staff: staffEmails.size, total: allEmails.size };
 }
 
 async function insertAnnouncementNotifications(rows: any[]) {
@@ -540,6 +564,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /support/chat/:id/assign': 'wallet.support.manage',
     'POST /support/chat/:id/end': 'wallet.support.manage',
     'GET /announcements': 'wallet.announcements.manage',
+    'GET /announcements/stations': 'wallet.announcements.manage',
     'GET /announcements/recipients': 'wallet.announcements.manage',
     'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
     'POST /announcements': 'wallet.announcements.manage',
@@ -1232,6 +1257,12 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetId: roleKey,
             after: { permissions: next },
         });
+        const { data: affectedStaff } = await adminClient.from('users').select('auth_user_id').eq('role_key', roleKey);
+        await Promise.allSettled((affectedStaff ?? []).filter((staff: any) => staff.auth_user_id).map((staff: any) => notifyStaffAccountChange(
+            staff.auth_user_id, 'permissions_update', 'Your permissions changed',
+            'Your Beverly access permissions were updated. Review your available tools.',
+            `permissions.${roleKey}.${Date.now()}`,
+        )));
         return { ok: true, roleKey, permissions: next };
     });
 
@@ -1491,6 +1522,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
 
         await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: stationScope.allStations ? 'All stations (including future stations)' : normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.includes(ALL_STATIONS_SCOPE) ? 'All stations' : ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
+        await notifyStaffAccountChange(userId, 'station_update', 'Your station access changed',
+            stationScope.allStations ? 'You can now access all stations.' : `Your assigned stations: ${normalized.join(', ')}.`,
+            `station.assignment.${userId}.${Date.now()}`).catch(() => undefined);
 
         return { ok: true, userId, stationIds: normalized, allStations: stationScope.allStations };
     });
@@ -3426,17 +3460,14 @@ const route: FastifyPluginAsync = async (fastify) => {
                 refundDestination: order.rejection_refund_destination ?? 'none',
             }).catch(() => undefined);
             if (order.vendor_organization_id) {
-                await adminClient.from('notifications').insert({
-                    customer_id: null,
-                    recipient_type: 'vendor',
-                    recipient_id: order.vendor_organization_id,
-                    vendor_organization_id: order.vendor_organization_id,
+                await notifyVendor({
+                    vendorOrganizationId: order.vendor_organization_id,
                     type: 'meter_order_update',
                     title: 'Meter order rejected',
                     body: `The meter order for ${order.customer_name_snapshot ?? 'your customer'} was rejected. ${reason}`,
-                    metadata: { orderId: id, status: 'rejected', reason, refundDestination: order.rejection_refund_destination ?? 'none', path: '/meter-orders' },
-                    read: false,
-                }).then(() => undefined, () => undefined);
+                    path: '/meter-orders', dedupeKey: `meter.order.${id}.rejected`,
+                    metadata: { orderId: id, status: 'rejected', reason, refundDestination: order.rejection_refund_destination ?? 'none' },
+                }).catch(() => undefined);
             }
             return order;
         } catch (error: any) {
@@ -3500,6 +3531,15 @@ const route: FastifyPluginAsync = async (fastify) => {
                     orderId: id,
                     status: body.status,
                     technicianName: body.technician_name ?? null,
+                }).catch(() => undefined);
+            }
+            if (order.vendor_organization_id) {
+                await notifyVendor({
+                    vendorOrganizationId: order.vendor_organization_id,
+                    type: 'meter_order_update', title: `Meter order ${body.status}`,
+                    body: `The meter order for ${order.customer_name_snapshot ?? 'your customer'} is ${body.status}.`,
+                    path: '/meter-orders', dedupeKey: `meter.order.${id}.${body.status}`,
+                    metadata: { orderId: id, status: body.status },
                 }).catch(() => undefined);
             }
         }
@@ -3758,9 +3798,30 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── announcements: admin broadcast console ──
+    fastify.get('/announcements/stations', async (req) => {
+        const assigned = staffStations(req);
+        const directory = await listStationDirectory();
+        const stations = directory.filter((station) => !assigned || assigned.includes(station.stationId.toUpperCase()));
+        return { stations };
+    });
+    async function announcementStationScope(req: any, requested: string[] | undefined) {
+        const assigned = staffStations(req);
+        if (assigned && !assigned.length) throw fastify.httpErrors.forbidden('No stations assigned.');
+        const selected = normalizeStaffStationIds(requested ?? []);
+        if (selected.includes(ALL_STATIONS_SCOPE)) throw fastify.httpErrors.badRequest('Select actual station IDs.');
+        if (assigned && selected.some((id) => !assigned.includes(id))) throw fastify.httpErrors.forbidden('Station outside your assignment.');
+        if (!selected.length && assigned) return assigned;
+        if (selected.length) {
+            const directory = await listStationDirectory();
+            const valid = new Set(directory.map((station) => station.stationId.toUpperCase()));
+            if (selected.some((id) => !valid.has(id))) throw fastify.httpErrors.badRequest('Unknown station selected.');
+        }
+        return selected;
+    }
     fastify.get('/announcements/recipients', async (req) => {
         const query = z.object({
-            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            audience: z.enum(['customers', 'vendors', 'staff', 'system']).optional(),
+            station_ids: z.string().optional(),
             delivery: z.enum(['notification', 'email', 'both']).default('both'),
             search: z.string().optional(),
             limit: z.coerce.number().int().min(1).max(1000).optional(),
@@ -3768,24 +3829,27 @@ const route: FastifyPluginAsync = async (fastify) => {
         const audiences: AnnouncementRecipientType[] =
             query.audience === 'vendors' ? ['vendor']
                 : query.audience === 'customers' ? ['customer']
-                    : ['customer', 'vendor'];
+                    : query.audience === 'staff' ? ['staff'] : ['customer', 'vendor', 'staff'];
+        const stationIds = await announcementStationScope(req, query.station_ids?.split(','));
         const reachability: AnnouncementReachability = query.delivery === 'email' ? 'email' : 'account';
         const [recipients, summary, emailSummary, notificationSummary] = await Promise.all([
             listAnnouncementRecipients({
                 audiences,
+                stationIds,
                 reachability,
                 search: query.search,
                 limit: query.limit ?? 100,
             }),
-            countAnnouncementRecipients({ audiences, search: query.search, reachability }),
-            summarizeAnnouncementEmails(audiences, query.search),
-            countAnnouncementRecipients({ audiences, search: query.search, reachability: 'account' }),
+            countAnnouncementRecipients({ audiences, search: query.search, reachability, stationIds }),
+            summarizeAnnouncementEmails(audiences, query.search, stationIds),
+            countAnnouncementRecipients({ audiences, search: query.search, reachability: 'account', stationIds }),
         ]);
         return {
             recipients,
             summary: {
                 customers: summary.customers,
                 vendors: summary.vendors,
+                staff: summary.staff,
                 total: summary.total,
             },
             email_summary: emailSummary,
@@ -3795,18 +3859,16 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/announcements/recipients/export.csv', async (req, reply) => {
         const query = z.object({
-            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            audience: z.enum(['customers', 'vendors', 'staff', 'system']).optional(),
+            station_ids: z.string().optional(),
             search: z.string().optional(),
         }).parse(req.query);
         const audiences: AnnouncementRecipientType[] =
             query.audience === 'vendors' ? ['vendor']
                 : query.audience === 'customers' ? ['customer']
-                    : ['customer', 'vendor'];
-        const recipients = await listAnnouncementRecipients({
-            audiences,
-            search: query.search,
-            limit: 1000,
-        });
+                    : query.audience === 'staff' ? ['staff'] : ['customer', 'vendor', 'staff'];
+        const stationIds = await announcementStationScope(req, query.station_ids?.split(','));
+        const recipients = await listAllAnnouncementRecipients(audiences, 'account', query.search, stationIds);
         reply.header('Content-Type', 'text/csv; charset=utf-8');
         reply.header('Content-Disposition', 'attachment; filename="announcement-recipients.csv"');
         return toCsv(recipients, ['type', 'name', 'email', 'phone', 'status', 'id']);
@@ -3819,7 +3881,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             since: z.string().datetime().optional(),
             until: z.string().datetime().optional(),
             status: z.enum(['unknown', 'sending', 'sent', 'partial', 'failed']).optional(),
-            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            audience: z.enum(['customers', 'vendors', 'staff', 'system']).optional(),
         }).parse(req.query);
         const limit = query.limit ?? 50;
         const offset = query.offset ?? 0;
@@ -3858,9 +3920,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({
             title: z.string().trim().min(3).max(120),
             body: z.string().trim().min(5).max(2000),
-            audiences: z.array(z.enum(['customers', 'vendors'])).min(1),
+            audiences: z.array(z.enum(['customers', 'vendors', 'staff'])).min(1),
+            station_ids: z.array(z.string()).max(100).optional(),
             send_to_all: z.boolean().optional(),
-            recipient_keys: z.array(z.string().regex(/^(customer|vendor):[0-9a-f-]{36}$/i)).optional(),
+            recipient_keys: z.array(z.string().regex(/^(customer|vendor|staff):[0-9a-f-]{36}$/i)).optional(),
             channels: z.array(z.enum(['in_app', 'email'])).min(1).max(2).default(['in_app', 'email']),
         });
         const body = schema.parse(req.body ?? {});
@@ -3894,22 +3957,22 @@ const route: FastifyPluginAsync = async (fastify) => {
         const wantsNotifications = channels.includes('in_app');
         const wantsEmail = channels.includes('email');
         const reachability: AnnouncementReachability = wantsEmail && !wantsNotifications ? 'email' : 'account';
-        const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : 'vendor'))) as AnnouncementRecipientType[];
+        const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : v === 'vendors' ? 'vendor' : 'staff'))) as AnnouncementRecipientType[];
+        const stationIds = await announcementStationScope(req, body.station_ids);
         const requestedKeys = new Set(body.recipient_keys ?? []);
-        let recipients = body.send_to_all
-            ? await listAllAnnouncementRecipients(audiences, reachability)
-            : await listAnnouncementRecipients({ audiences, reachability, limit: 1000 });
+        let recipients = await listAllAnnouncementRecipients(audiences, reachability, undefined, stationIds);
         if (!body.send_to_all) recipients = recipients.filter((r) => requestedKeys.has(r.key));
         if (!recipients.length) return reply.code(400).send({ error: 'no_recipients', message: 'Select at least one recipient.' });
         const emailRecipientCount = new Set(recipients.map((recipient) => recipient.email?.trim().toLowerCase()).filter(Boolean)).size;
 
-        const audienceLabel = audiences.length === 2 ? 'system' : audiences[0] === 'customer' ? 'customers' : 'vendors';
+        const audienceLabel = audiences.length > 1 ? 'system' : audiences[0] === 'customer' ? 'customers' : audiences[0] === 'vendor' ? 'vendors' : 'staff';
         let { data: announcement, error: annError } = await adminClient
             .from('admin_announcements')
             .insert({
                 title: body.title,
                 body: body.body,
                 audience: audienceLabel,
+                station_ids: stationIds,
                 target_mode: body.send_to_all ? 'all' : 'selected',
                 channel: channels.join(','),
                 request_key: requestKey,
@@ -3946,7 +4009,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             type: 'admin_announcement',
             title: body.title,
             body: body.body,
-            metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key },
+            metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key, path: '/notifications' },
             read: false,
         })) : [];
         try {
@@ -3986,6 +4049,18 @@ const route: FastifyPluginAsync = async (fastify) => {
                     ? 'Announcement delivery failed and needs administrator review.'
                     : 'Announcement delivery failed. No recipients were notified. Please retry.',
             });
+        }
+
+        if (wantsNotifications) {
+            for (let offset = 0; offset < recipients.length; offset += 100) {
+                await Promise.allSettled(recipients.slice(offset, offset + 100).map((recipient) =>
+                    sendWebPush(recipient.type, recipient.id, {
+                        title: body.title,
+                        body: body.body,
+                        url: '/notifications',
+                        tag: `announcement:${announcement.id}`,
+                    }, recipient.type === 'staff' ? 'admin' : recipient.type)));
+            }
         }
 
         let emailResult: { sent: number; recipients: number; messages: Array<{ email: string; messageId: string }> } = { sent: 0, recipients: 0, messages: [] };
@@ -4114,6 +4189,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             email: row.email,
             phone: null,
             status: null,
+            station_ids: [],
         }));
         const total = Number(announcement.email_recipient_count ?? 0);
         if (!recipients.length) {

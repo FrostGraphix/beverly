@@ -30,6 +30,7 @@ export default defineConfig(({ command }) => {
             },
             workbox: {
                 navigateFallback: assetPath('index.html'),
+                importScripts: ['push-sw.js'],
                 runtimeCaching: [
                     {
                         urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,

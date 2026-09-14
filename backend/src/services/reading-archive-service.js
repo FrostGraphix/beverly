@@ -621,7 +621,8 @@ const SWEEP_MATRIX = [
 ];
 
 function prioritizeArchivePartitions(partitions) {
-  return partitions.slice().sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live))
+  return partitions.slice().sort((a, b) => Number(Boolean(b.missing)) - Number(Boolean(a.missing))
+    || Number(Boolean(b.live)) - Number(Boolean(a.live))
     || a.reportType.localeCompare(b.reportType)
     || a.granularity.localeCompare(b.granularity)
     || a.periodStart.localeCompare(b.periodStart)
@@ -706,9 +707,9 @@ async function runArchiveSweep(options = {}) {
       findCandidatePartitions(newestMonth, entry.reportType, entry.granularity, refreshLive),
       existingPartitionKeys(entry.reportType, entry.granularity)
     ]);
-    const outstanding = candidates.filter((p) =>
-      !already.has(`${p.stationId}|${p.periodStart}`)
-      || (refreshLive && isLive(p, entry.granularity)));
+    const outstanding = candidates
+      .map((p) => ({ ...p, missing: !already.has(`${p.stationId}|${p.periodStart}`) }))
+      .filter((p) => p.missing || (refreshLive && isLive(p, entry.granularity)));
     const liveCount = outstanding.filter((p) => isLive(p, entry.granularity)).length;
     log(`${entry.reportType}/${entry.granularity}: ${candidates.length} candidates, ${already.size} archived, `
       + `${outstanding.length} pending (${liveCount} live refresh)`);

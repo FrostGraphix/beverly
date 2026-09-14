@@ -9,6 +9,8 @@ import {
     deviceNotificationState,
     disableDeviceNotifications,
     enableDeviceNotifications,
+    syncDeviceNotifications,
+    testDeviceNotifications,
     type DeviceNotificationState,
 } from '../lib/push-notifications';
 
@@ -171,9 +173,23 @@ async function toggleDeviceNotifications() {
     }
 }
 
+async function sendDeviceTest() {
+    if (deviceBusy.value || deviceState.value !== 'enabled') return;
+    deviceBusy.value = true;
+    deviceError.value = '';
+    try {
+        await testDeviceNotifications();
+    } catch (err: any) {
+        deviceError.value = err?.message ?? 'Test notification failed.';
+    } finally {
+        deviceBusy.value = false;
+    }
+}
+
 onMounted(() => {
     void loadInbox();
     deviceState.value = deviceNotificationState();
+    void syncDeviceNotifications().then((state) => { deviceState.value = state; }).catch(() => undefined);
 });
 </script>
 
@@ -225,6 +241,7 @@ onMounted(() => {
       >
         {{ deviceBusy ? 'Updating...' : deviceState === 'enabled' ? 'Turn off' : 'Turn on' }}
       </button>
+      <button v-if="deviceState === 'enabled'" type="button" class="bw-btn device-alerts-action" :disabled="deviceBusy" @click="sendDeviceTest">Send test</button>
     </section>
 
     <div v-if="error" class="bw-alert danger" style="margin-bottom: var(--s-3)">{{ error }}</div>

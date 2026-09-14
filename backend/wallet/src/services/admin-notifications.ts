@@ -8,16 +8,28 @@ import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { isResendConfigured, sendEmail, sendBatch } from '../adapters/resend.js';
+import { sendWebPush } from './push-notifications.js';
 import {
     staffInvitationEmail, staffEmailVerificationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
 } from '../emails/templates.js';
 
-async function findStaffUser(userId: string): Promise<{ email?: string; user_name?: string } | null> {
+async function findStaffUser(userId: string): Promise<{ email?: string; user_name?: string; auth_user_id?: string } | null> {
     const { data } = await adminClient.from('users')
-        .select('email, user_name')
+        .select('email, user_name, auth_user_id')
         .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
-    return data as { email?: string; user_name?: string } | null;
+    return data as { email?: string; user_name?: string; auth_user_id?: string } | null;
+}
+
+export async function notifyStaffAccountChange(userId: string, type: string, title: string, body: string, dedupeKey: string): Promise<void> {
+    const staff = await findStaffUser(userId);
+    if (!staff?.auth_user_id) return;
+    const { data, error } = await adminClient.from('notifications').upsert({
+        customer_id: null, recipient_type: 'staff', recipient_id: staff.auth_user_id,
+        type, title, body, metadata: { path: '/profile' }, dedupe_key: dedupeKey, read: false,
+    }, { onConflict: 'recipient_type,recipient_id,dedupe_key', ignoreDuplicates: true }).select('id').maybeSingle();
+    if (error) throw error;
+    if (data) await sendWebPush('staff', staff.auth_user_id, { title, body, url: '/profile', tag: `notification:${data.id}` }, 'admin');
 }
 
 async function flagEnabled(key: string): Promise<boolean> {
@@ -72,6 +84,7 @@ export async function notifyStaffInvitation(opts: {
 
 export async function notifyRoleAssignment(userId: string, roleLabel: string): Promise<void> {
     try {
+        await notifyStaffAccountChange(userId, 'role_update', 'Your access role changed', `Your Beverly role is now ${roleLabel}.`, `role.assignment.${userId}.${Date.now()}`).catch(() => undefined);
         const staff = await findStaffUser(userId);
         if (!staff?.email) return;
         if (!(await flagEnabled('notifications.email.role_assignment'))) return;

@@ -31,6 +31,18 @@ function main() {
   const migration = read("supabase/migrations/20260617120000_wallet_admin_announcements.sql");
   const emailDeliveryMigration = read("supabase/migrations/20260902113000_announcement_email_delivery.sql");
   const compatibilityMigration = read("supabase/migrations/20260714120000_notifications_legacy_compatibility.sql");
+  const scopedMigration = read("supabase/migrations/20260914130000_station_staff_announcements.sql");
+
+  assert(adminRoutes.includes("type AnnouncementRecipientType = 'customer' | 'vendor' | 'staff'"));
+  assert(adminRoutes.includes("announcementStationScope(req, body.station_ids)"));
+  assert(adminRoutes.includes("'GET /announcements/stations': 'wallet.announcements.manage'"));
+  assert(adminRoutes.includes(".from('customer_meters').select('customer_id').in('station_id', opts.stationIds)"));
+  assert(adminRoutes.includes(".overlaps('operating_stations', opts.stationIds)"));
+  assert(adminRoutes.includes(".eq('recipient_type', 'staff')"));
+  assert(adminPage.includes("station_ids: selectedStationIds.value"));
+  assert(adminPage.includes("setAudiencePreset('staff')"));
+  assert(scopedMigration.includes("'customers', 'vendors', 'staff', 'system'"));
+  assert(scopedMigration.includes("'customer', 'vendor', 'staff'"));
 
   for (const route of [
     "fastify.get('/announcements/recipients'",

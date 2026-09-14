@@ -73,7 +73,7 @@ const {
   ingestWebhookReadings,
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
-const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
+const { runConsumptionSync, runScheduledConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { syncOemDimensions } = require("../backend/src/services/oem-dimension-sync-service");
 const {
   listReports: listArchiveReports,
@@ -2748,7 +2748,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         }
       };
     }
-    return localJobResponse(await runLoggedConsumptionSync(request, {
+    return localJobResponse(await runScheduledConsumptionSync({
       ...cronQuery(request.url),
       mode: "incremental"
     }));

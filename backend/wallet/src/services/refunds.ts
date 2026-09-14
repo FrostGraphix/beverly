@@ -9,6 +9,7 @@ import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
 import { notifyRefundUpdate } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
 
 export class RefundError extends Error {
     constructor(message: string, public code: string) {
@@ -41,17 +42,15 @@ async function notifyRefundOwner(refund: any, status: 'approved' | 'rejected', r
     if (wallet.owner_type === 'vendor') {
         const approved = status === 'approved';
         const amount = `₦${(amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
-        await adminClient.from('notifications').insert({
-            customer_id: null,
-            recipient_type: 'vendor',
-            recipient_id: wallet.owner_id,
-            vendor_organization_id: wallet.owner_id,
+        await notifyVendor({
+            vendorOrganizationId: wallet.owner_id,
             type: 'refund_update',
             title: approved ? 'Refund approved' : 'Refund declined',
             body: approved ? `${amount} has been credited to your vendor wallet.` : `The ${amount} refund request was declined.${reason ? ` ${reason}` : ''}`,
-            metadata: { refundRequestId: refund.id, status, amountMinor, reason: reason ?? null, path: '/wallet' },
-            read: false,
-        }).then(() => undefined, () => undefined);
+            path: '/wallet',
+            dedupeKey: `refund.${refund.id}.${status}`,
+            metadata: { refundRequestId: refund.id, status, amountMinor, reason: reason ?? null },
+        }).catch(() => undefined);
     }
 }
 

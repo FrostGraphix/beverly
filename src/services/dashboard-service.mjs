@@ -18,6 +18,27 @@ export function dashboardDateWindow(now = new Date()) {
   return { from: start.toISOString(), to: safeEnd.toISOString() };
 }
 
+export function dashboardMonthlyWindow(now = new Date()) {
+  const end = new Date(now);
+  if (!Number.isFinite(end.getTime())) throw new Error("Invalid dashboard date.");
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1));
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+}
+
+export function mapStoredMonthlyConsumption(data) {
+  const labels = data?.temporal?.labels;
+  const values = data?.temporal?.kwhSeries;
+  if (!Array.isArray(labels) || !Array.isArray(values) || labels.length !== values.length) {
+    throw new Error("Monthly readings are unavailable.");
+  }
+  const rows = labels.map((label, index) => ({ label: String(label), value: Number(values[index]) }));
+  if (rows.some((row) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(row.label) || !Number.isFinite(row.value) || row.value < 0)) {
+    throw new Error("Monthly readings are invalid.");
+  }
+  rows.sort((left, right) => left.label.localeCompare(right.label));
+  return { title: "Monthly Consumption", labels: rows.map((row) => row.label), values: rows.map((row) => row.value) };
+}
+
 function dashboardOptions(options = {}) {
   const { now, ...provided } = options;
   return {

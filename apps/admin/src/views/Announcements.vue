@@ -8,17 +8,18 @@ import { formatNotificationBody } from '@beverly/tokens/notification-content';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
 
-type AudienceKey = 'customers' | 'vendors';
+type AudienceKey = 'customers' | 'vendors' | 'staff';
 type DeliveryMode = 'notification' | 'email' | 'both';
 
 interface Recipient {
     key: string;
-    type: 'customer' | 'vendor';
+    type: 'customer' | 'vendor' | 'staff';
     id: string;
     name: string;
     email: string | null;
     phone: string | null;
     status: string | null;
+    station_ids: string[];
 }
 
 interface Announcement {
@@ -26,6 +27,7 @@ interface Announcement {
     title: string;
     body: string;
     audience: string;
+    station_ids?: string[];
     target_mode: string;
     channel?: string;
     recipient_count: number;
@@ -39,15 +41,18 @@ interface Announcement {
 interface RecipientSummary {
     customers: number;
     vendors: number;
+    staff: number;
     total: number;
 }
 
-const audiences = ref<Record<AudienceKey, boolean>>({ customers: true, vendors: false });
+const audiences = ref<Record<AudienceKey, boolean>>({ customers: true, vendors: false, staff: false });
+const stations = ref<{ stationId: string; stationName?: string }[]>([]);
+const selectedStationIds = ref<string[]>([]);
 const deliveryMode = ref<DeliveryMode>('both');
-const summary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
-const audienceTotals = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
-const emailSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
-const notificationSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, total: 0 });
+const summary = ref<RecipientSummary>({ customers: 0, vendors: 0, staff: 0, total: 0 });
+const audienceTotals = ref<RecipientSummary>({ customers: 0, vendors: 0, staff: 0, total: 0 });
+const emailSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, staff: 0, total: 0 });
+const notificationSummary = ref<RecipientSummary>({ customers: 0, vendors: 0, staff: 0, total: 0 });
 const systemWide = ref(false);
 const sendToAll = ref(true);
 const search = ref('');
@@ -72,6 +77,7 @@ const announcementStatusOptions = [
 const announcementAudienceOptions = [
     { label: 'Customers', value: 'customers' },
     { label: 'Vendors', value: 'vendors' },
+    { label: 'Staff', value: 'staff' },
     { label: 'Everyone', value: 'system' },
 ];
 const announcementExportColumns: WalletExportColumn<Announcement>[] = [
@@ -79,6 +85,7 @@ const announcementExportColumns: WalletExportColumn<Announcement>[] = [
     { key: 'title', header: 'Title', value: (item) => item.title },
     { key: 'body', header: 'Message', value: (item) => item.body },
     { key: 'audience', header: 'Audience', value: (item) => item.audience },
+    { key: 'station_ids', header: 'Stations', value: (item) => item.station_ids?.join(', ') || 'All permitted' },
     { key: 'target_mode', header: 'Target Mode', value: (item) => item.target_mode },
     { key: 'channel', header: 'Medium', value: (item) => formatChannel(item.channel) },
     { key: 'recipient_count', header: 'Recipients', value: (item) => item.recipient_count },
@@ -107,12 +114,12 @@ let historyTrigger: HTMLElement | null = null;
 let previousBodyOverflow = '';
 
 const selectedAudiences = computed<AudienceKey[]>(() => {
-    if (systemWide.value) return ['customers', 'vendors'];
+    if (systemWide.value) return ['customers', 'vendors', 'staff'];
     return (Object.keys(audiences.value) as AudienceKey[]).filter((key) => audiences.value[key]);
 });
 
 const audienceParam = computed(() => {
-    if (selectedAudiences.value.length === 2) return 'system';
+    if (selectedAudiences.value.length > 1) return 'system';
     return selectedAudiences.value[0] ?? 'customers';
 });
 
@@ -133,7 +140,7 @@ const composeCanContinue = computed(() => composeStep.value === 1
     : title.value.trim().length >= 3 && message.value.trim().length >= 5);
 const audienceLabel = computed(() => systemWide.value
     ? 'Everyone'
-    : selectedAudiences.value.map((item) => item === 'customers' ? 'Customers' : 'Vendors').join(' and '));
+    : selectedAudiences.value.map((item) => item === 'customers' ? 'Customers' : item === 'vendors' ? 'Vendors' : 'Staff').join(' and '));
 const deliveryLabel = computed(() => deliveryMode.value === 'notification' ? 'In-app notification' : deliveryMode.value === 'email' ? 'Email' : 'Notification and email');
 const recipientGuidance = computed(() => deliveryMode.value === 'email'
     ? 'Only reachable email addresses.'
@@ -175,7 +182,7 @@ function showFeedback(tone: 'success' | 'error', feedbackTitle: string, feedback
 }
 
 function labelType(type: string) {
-    return type === 'vendor' ? 'Vendor' : 'Customer';
+    return type === 'vendor' ? 'Vendor' : type === 'staff' ? 'Staff' : 'Customer';
 }
 
 function openHistoryDetail(item: Announcement, event: MouseEvent) {
@@ -203,13 +210,15 @@ function formatChannel(channel?: string) {
     return values.includes('in_app') ? 'Notification' : 'Email';
 }
 
-function setAudiencePreset(value: 'customers' | 'vendors' | 'system') {
+function setAudiencePreset(value: 'customers' | 'vendors' | 'staff' | 'system') {
     systemWide.value = value === 'system';
     audiences.value = value === 'customers'
-        ? { customers: true, vendors: false }
+        ? { customers: true, vendors: false, staff: false }
         : value === 'vendors'
-            ? { customers: false, vendors: true }
-            : { customers: true, vendors: true };
+            ? { customers: false, vendors: true, staff: false }
+            : value === 'staff'
+                ? { customers: false, vendors: false, staff: true }
+                : { customers: true, vendors: true, staff: true };
     selectedKeys.value = [];
 }
 
@@ -235,6 +244,10 @@ async function loadRecipients() {
     try {
         const qs = new URLSearchParams({ audience: audienceParam.value, delivery: deliveryMode.value, limit: '500' });
         const totalsQs = new URLSearchParams({ audience: 'system', delivery: deliveryMode.value, limit: '1' });
+        if (selectedStationIds.value.length) {
+            qs.set('station_ids', selectedStationIds.value.join(','));
+            totalsQs.set('station_ids', selectedStationIds.value.join(','));
+        }
         if (search.value.trim()) qs.set('search', search.value.trim());
         if (search.value.trim()) totalsQs.set('search', search.value.trim());
         const [response, totalsResponse] = await Promise.all([
@@ -242,7 +255,7 @@ async function loadRecipients() {
             api.get<{ recipients: Recipient[]; summary: RecipientSummary; email_summary: RecipientSummary; notification_summary: RecipientSummary }>(`/api/v1/admin/announcements/recipients?${totalsQs}`),
         ]);
         recipients.value = response.recipients ?? [];
-        summary.value = response.summary ?? { customers: 0, vendors: 0, total: recipients.value.length };
+        summary.value = response.summary ?? { customers: 0, vendors: 0, staff: 0, total: recipients.value.length };
         audienceTotals.value = totalsResponse.summary ?? summary.value;
         emailSummary.value = response.email_summary ?? summary.value;
         notificationSummary.value = response.notification_summary ?? summary.value;
@@ -308,6 +321,7 @@ async function sendAnnouncement() {
             title: title.value.trim(),
             body: message.value.trim(),
             audiences: selectedAudiences.value,
+            station_ids: selectedStationIds.value,
             send_to_all: sendToAll.value,
             recipient_keys: sendToAll.value ? [] : selectedKeys.value,
             channels: channelPayload.value,
@@ -365,7 +379,7 @@ async function retryAnnouncementEmail() {
     }
 }
 
-watch([selectedAudiences, systemWide, deliveryMode], () => {
+watch([selectedAudiences, systemWide, deliveryMode, selectedStationIds], () => {
     void loadRecipients();
 });
 
@@ -382,6 +396,9 @@ watch(sendToAll, (enabled) => {
 });
 
 onMounted(() => {
+    api.get<{ stations: { stationId: string; stationName?: string }[] }>('/api/v1/admin/announcements/stations')
+        .then((response) => { stations.value = response.stations ?? []; })
+        .catch(() => { banner.value = { tone: 'danger', text: 'Station directory failed to load.' }; });
     document.addEventListener('keydown', handleKeydown);
     void Promise.all([loadRecipients(), loadHistory()]);
 });
@@ -480,7 +497,16 @@ onBeforeUnmount(() => {
           <button type="button" role="radio" :aria-checked="systemWide" :class="{ selected: systemWide }" @click="setAudiencePreset('system')">
             <strong>Everyone</strong><span>{{ audienceTotals.total }} reachable</span>
           </button>
+          <button type="button" role="radio" :aria-checked="!systemWide && audiences.staff" :class="{ selected: !systemWide && audiences.staff }" @click="setAudiencePreset('staff')">
+            <strong>Wallet admin staff</strong><span>{{ audienceTotals.staff }} reachable</span>
+          </button>
         </div>
+        <label class="an-field"><span>Stations</span>
+          <select v-model="selectedStationIds" class="bw-input" multiple aria-label="Announcement stations">
+            <option v-for="station in stations" :key="station.stationId" :value="station.stationId">{{ station.stationName || station.stationId }}</option>
+          </select>
+          <small>No selection includes every permitted station.</small>
+        </label>
         <div class="an-scope">
           <label class="an-check">
             <input v-model="sendToAll" type="checkbox" />
@@ -509,6 +535,7 @@ onBeforeUnmount(() => {
           <div class="an-step-copy"><h3>Review broadcast</h3><p>Confirm before sending.</p></div>
           <dl class="an-review-list">
             <div><dt>Audience</dt><dd>{{ audienceLabel }}</dd></div>
+            <div><dt>Stations</dt><dd>{{ selectedStationIds.length ? selectedStationIds.join(', ') : 'All permitted' }}</dd></div>
             <div><dt>Recipients</dt><dd>{{ selectedCount }}</dd></div>
             <div><dt>Delivery</dt><dd>{{ deliveryLabel }}</dd></div>
             <div v-if="selectedNotificationCount"><dt>Notifications</dt><dd>{{ selectedNotificationCount }}</dd></div>
@@ -593,6 +620,7 @@ onBeforeUnmount(() => {
             <span>{{ shortDate(selectedHistory.created_at) }}</span>
             <span>{{ formatChannel(selectedHistory.channel) }}</span>
             <span>{{ selectedHistory.delivery_status || 'unknown' }}</span>
+            <span>{{ selectedHistory.station_ids?.length ? selectedHistory.station_ids.join(', ') : 'All stations' }}</span>
           </div>
           <div class="an-detail-message">
             <template v-for="(block, index) in selectedHistoryBlocks" :key="`${block.kind}-${index}`">
