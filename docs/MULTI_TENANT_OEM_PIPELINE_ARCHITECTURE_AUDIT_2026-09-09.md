@@ -1689,3 +1689,13 @@ Local `node tests/oem-registry.test.cjs` passed. Local `node tests/supabase-migr
 ### 23.4 Phase gate
 
 Phase 1 may begin against the confirmed public seams: adapter contract, gateway API, wallet vending API, and telemetry ingestion API. Phase 2 must preserve captured Calinmeter behavior. Phase 3 requires expand-only migrations and measured backfill verification before gateway routing. Phase 5 must precede wallet write cutover. Phase 9 and production activation remain blocked on real-OEM evidence and authorization.
+
+### 23.5 Implementation checkpoint (2026-09-14)
+
+- The fresh worktree baseline built all existing applications successfully using the frozen lockfile. The local runtime is Node 24, while the repository requires Node 22; Node 22 and remote CI verification remain outstanding.
+- Phase 1 started at `packages/oem-contracts/`. A public-seam test first failed because the package did not exist, then passed after adding fail-closed resolution for ambiguous installation candidates.
+- This initial contract does not query or authorize candidates. Its caller must supply actor- and resource-scoped candidates. No CRM, wallet, or telemetry caller has switched to it yet.
+- Phase 1 remains incomplete. Adapter interfaces, capability enforcement, canonical operation models, gateway execution, and conformance still require separate red-green slices.
+- Phase 1 verification: `node tests/oem-contracts.test.cjs`, `node tests/oem-registry.test.cjs`, `node tests/supabase-migrations.test.cjs`, `npm run build`, `npm test`, and the full wallet Vitest suite all passed locally. Wallet Vitest reported 62 files and 434 tests passed. The new contract test is included in `pretest` for subsequent runs.
+- Browser, remote CI, deployed preview, staging, Node 22, database restore, and real-OEM sandbox checks remain unverified. Local passing tests do not establish end-to-end certification.
+- No migration, OEM dispatch, production configuration, or activation was changed.

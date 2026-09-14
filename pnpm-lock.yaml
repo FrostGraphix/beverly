@@ -283,6 +283,8 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.41)(terser@5.47.1)
 
+  packages/oem-contracts: {}
+
   packages/tokens: {}
 
 packages:

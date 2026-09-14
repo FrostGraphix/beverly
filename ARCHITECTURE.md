@@ -51,6 +51,8 @@ Keep write safety strict.
 
 ## Backend
 
+- `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
+- OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.
 - `backend/wallet/` owns canonical wallet writes.
