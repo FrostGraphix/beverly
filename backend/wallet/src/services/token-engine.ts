@@ -21,6 +21,7 @@ import { adminClient } from '../db/supabase.js';
 import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload } from '../adapters/calinmeter-v1.js';
 
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
@@ -675,26 +676,10 @@ export interface GenerateTokenResult {
 }
 
 export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
-    const amount = Math.round((input.amountMinor / 100) * 100) / 100;
-    const operatorName = input.operatorName || input.vendorName || input.customerName || 'Beverly';
-    return {
-        customerId: input.customerId,
-        meterId: input.meterId,
-        tariffId: input.tariffId,
+    return buildCalinmeterCreditTokenPayload({
+        ...input,
         authorizationPassword: env.ENERGY_AUTHORIZATION_PASSWORD ?? '',
-        remark: `Beverly vend ${input.reference}`,
-        isPreview: opts.isPreview ?? false,
-        isVendByTotalPaid: true,
-        amount,
-        totalUnit: input.units,
-        payDebtPercent: 0,
-        paymentMethod: 'Cash',
-        isS2: typeof opts.isS2 === 'boolean' ? opts.isS2 : input.isThreePhase === true,
-        operatorName,
-        userName: operatorName,
-        vendorName: operatorName,
-        operator: operatorName,
-    };
+    }, opts);
 }
 
 /**
@@ -821,21 +806,7 @@ function cleanToken(value: string) {
 }
 
 export function buildRemoteTokenTaskPayload(input: RemoteSendInput) {
-    const token = cleanToken(input.token);
-    return [{
-        customerId: input.customerId || input.meterId,
-        customerName: input.customerName ?? '',
-        meterId: input.meterId,
-        version: input.protocolVersion || '2.2',
-        flag: 'A120',
-        name: 'Send Token',
-        dataItem: 'Send Token',
-        dataDefault: '',
-        dataPrefix: '',
-        data: token,
-        stationId: input.stationId,
-        remark: `Beverly remote token ${input.reference}`,
-    }];
+    return buildCalinmeterRemoteTokenPayload(input);
 }
 
 export function buildRemoteTaskConfirmPayload(response: unknown) {

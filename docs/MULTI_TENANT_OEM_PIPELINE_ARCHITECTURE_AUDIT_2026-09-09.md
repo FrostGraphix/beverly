@@ -1709,3 +1709,11 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A compile-time public adapter fixture checks the core interface. `npm run test:oem` runs runtime and type checks during root `pretest`.
 - `npm run test:oem`, `npm run build`, and `npm test` passed after the final vend-outcome validation. The full wallet Vitest suite last passed before this slice; it remains a separate final regression gate.
 - These are contracts, not a conforming Calinmeter adapter. No wallet capture path consumes the outcome validator yet. Phase 1 and all later phases remain incomplete.
+
+### 23.7 Calinmeter extraction checkpoint (2026-09-14)
+
+- Phase 2 began with two observed wallet wire formats: credit-token generation and remote token task creation. Their request builders now live in `backend/wallet/src/adapters/calinmeter-v1.ts`.
+- Existing `token-engine.ts` exports remain compatibility facades. Authorization stays server-owned. The same call sites still use the same URL, method, authentication, and response handling.
+- Two adapter-seam tests failed before extraction, then passed. The existing token-engine suite passed all 21 tests afterward. No real OEM specification was inferred.
+- This is not complete adapter extraction. Meter lookup, station reads, token response parsing, remote-task lifecycle, telemetry, CRM proxy behavior, and dynamic authentication remain Calinmeter-shaped elsewhere.
+- No production routing, database schema, activation, or financial state transition changed. Full wallet Vitest passed: 63 files, 436 tests. `npm run build` and `npm test` passed. Tests ran under local Node 24, not the declared Node 22. Browser, remote CI, staging, and real-OEM checks remain unverified.
