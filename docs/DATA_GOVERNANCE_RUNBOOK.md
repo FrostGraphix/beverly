@@ -4,7 +4,7 @@
 
 Run governance daily.
 
-The hourly cron runs it at midnight UTC.
+The dedicated Vercel cron runs it at midnight UTC.
 
 Manual endpoint:
 
@@ -14,8 +14,9 @@ curl.exe -H "Authorization: Bearer $env:CRON_SECRET" "$env:PRODUCTION_TARGET_URL
 
 ## Retention
 
-- API cache: 7 days
-- Snapshots: 90 days
+- Hot meter readings: 90 days
+- API cache: 1 day
+- Snapshots: 14 days
 - Exports: 180 days
 - Receipts: 365 days
 - Imports: 365 days
@@ -23,12 +24,16 @@ curl.exe -H "Authorization: Bearer $env:CRON_SECRET" "$env:PRODUCTION_TARGET_URL
 - Automation deliveries: 90 days
 - Audit logs: keep forever
 
+Export retention covers export job metadata and stored export artifacts. The source reports and consumption archives remain governed by their own retention policies.
+
 ## Environment
 
 ```env
 DATA_GOVERNANCE_ENABLED=true
-CACHE_RETENTION_DAYS=7
-SNAPSHOT_RETENTION_DAYS=90
+CONSUMPTION_HOT_RETENTION_DAYS=90
+RAW_HOT_WINDOW_DAYS=90
+CACHE_RETENTION_DAYS=1
+SNAPSHOT_RETENTION_DAYS=14
 EXPORT_RETENTION_DAYS=180
 PRINT_RETENTION_DAYS=365
 IMPORT_RETENTION_DAYS=365

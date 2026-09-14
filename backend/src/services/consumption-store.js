@@ -880,14 +880,14 @@ function addDaysIso(day, offset) {
   return date.toISOString().slice(0, 10);
 }
 
-// Raw daily_meter_readings retention, kept in sync with pg_cron job 18 as last rewritten
-// by supabase/migrations/20260812170000_raw_retention_120d.sql. Overridable so a
+// Raw daily_meter_readings retention, kept in sync with the named consumption-retention
+// job created by the latest retention-policy migration. Overridable so a
 // deployment that chooses a different window does not have to patch code.
 //
 // If you change job 18's INTERVAL, change this too -- they are two halves of one policy,
 // and a mismatch makes the drill-down either claim data is archived when it is still
 // live, or silently return a short series with no explanation.
-const RAW_HOT_WINDOW_DAYS = Number(process.env.RAW_HOT_WINDOW_DAYS || 120);
+const RAW_HOT_WINDOW_DAYS = Number(process.env.RAW_HOT_WINDOW_DAYS || 90);
 
 /**
  * Describes how much of a requested range falls outside the raw hot window.

@@ -19,10 +19,12 @@ assert.strictEqual(vercel.env?.DATABASE_QUOTA_MB, "500", "database quota must be
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_WARN_PERCENT, "70", "database warning gate must preserve thirty-percent headroom");
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, "75", "database backfill gate must preserve twenty-five-percent headroom");
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_HARD_STOP_PERCENT, "80", "database hard-stop gate must preserve twenty-percent headroom");
-assert.strictEqual(vercel.env?.CONSUMPTION_HOT_RETENTION_DAYS, "120", "hot ingestion window must match retention");
+assert.strictEqual(vercel.env?.CONSUMPTION_HOT_RETENTION_DAYS, "90", "hot ingestion window must match retention");
+assert.strictEqual(vercel.env?.RAW_HOT_WINDOW_DAYS, "90", "hot read window must match retention");
 assert.strictEqual(vercel.env?.CONSUMPTION_SYNC_PAGE_SIZE, "500", "sync page size must stay bounded");
 assert.strictEqual(vercel.env?.CONSUMPTION_SYNC_INCREMENTAL_MAX_PAGES, "50", "incremental catchup budget must be explicit");
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/archive-readings" && cron.schedule === "0 1 * * *"), "archive sweep must run nightly before retention");
+assert(vercel.crons.some((cron) => cron.path === "/api/cron/governance-daily" && cron.schedule === "0 0 * * *"), "governance cleanup must run nightly");
 assert(api.includes("CRON_SECRET"), "cron secret check missing");
 assert(api.includes("runRefreshJob"), "refresh runner missing");
 assert(api.includes("writeDailyMeterRows"), "refresh runner must store daily meter rows");
