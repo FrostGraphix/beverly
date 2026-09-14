@@ -629,6 +629,31 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
+async function deleteStorageObjects(bucket, objectPaths) {
+  const key = serviceRoleKey();
+  const normalizedBucket = String(bucket || "").trim();
+  const paths = [...new Set((Array.isArray(objectPaths) ? objectPaths : [])
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean))];
+  if (!paths.length) return { bucket: normalizedBucket, paths: [], deleted: 0 };
+  if (!normalizedBucket) throw new Error("Supabase storage bucket is required");
+  if (paths.length > 1000) throw new Error("Supabase storage delete exceeds 1000 objects");
+  if (!storageEnabled() || !supabaseUrl() || !key) {
+    throw new Error("Supabase storage is not configured");
+  }
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/object/${encodeURIComponent(normalizedBucket)}`, {
+    method: "DELETE",
+    headers: jsonHeaders(key),
+    body: JSON.stringify({ prefixes: paths })
+  }));
+  if (!response.ok) throw new Error(body.message || body.msg || body.error || "Supabase storage delete failed");
+  return {
+    bucket: normalizedBucket,
+    paths,
+    deleted: Array.isArray(body) ? body.length : paths.length
+  };
+}
+
 /**
  * Mint a short-lived signed URL for a private Storage object.
  *
@@ -676,6 +701,7 @@ module.exports = {
   getAuthUserByIdentifier,
   getAuthUserByUserId,
   createSignedStorageUrl,
+  deleteStorageObjects,
   ensureStorageBuckets,
   restRequest,
   restRequestWithResponse,

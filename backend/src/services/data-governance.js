@@ -3,8 +3,9 @@
 const supabase = require("./supabase-service");
 
 const defaultRetention = {
-  cacheDays: 7,
-  snapshotDays: 90,
+  hotReadingDays: 90,
+  cacheDays: 1,
+  snapshotDays: 14,
   exportDays: 180,
   printDays: 365,
   importDays: 365,
@@ -18,6 +19,7 @@ function governanceEnabled() {
 
 function retentionPolicy() {
   return {
+    hotReadingDays: Number(process.env.CONSUMPTION_HOT_RETENTION_DAYS || defaultRetention.hotReadingDays),
     cacheDays: Number(process.env.CACHE_RETENTION_DAYS || defaultRetention.cacheDays),
     snapshotDays: Number(process.env.SNAPSHOT_RETENTION_DAYS || defaultRetention.snapshotDays),
     exportDays: Number(process.env.EXPORT_RETENTION_DAYS || defaultRetention.exportDays),
@@ -45,6 +47,47 @@ async function deleteOlderThan(table, column, cutoff, dryRun) {
   return { table, deleted: null, cutoff, dryRun: false };
 }
 
+async function deleteArtifactJobsOlderThan(table, column, cutoff, dryRun) {
+  if (dryRun) {
+    return { table, deleted: 0, storageDeleted: 0, cutoff, dryRun: true };
+  }
+  const rows = await supabase.restRequest(
+    `/${table}?select=id,storage_bucket,storage_path&${column}=lt.${encodeURIComponent(cutoff)}&order=${column}.asc&limit=500`
+  );
+  const jobs = Array.isArray(rows) ? rows : [];
+  const grouped = new Map();
+  for (const job of jobs) {
+    const bucket = String(job.storage_bucket || "").trim();
+    const objectPath = String(job.storage_path || "").trim();
+    if (!bucket || !objectPath) continue;
+    if (!grouped.has(bucket)) grouped.set(bucket, new Set());
+    grouped.get(bucket).add(objectPath);
+  }
+
+  let storageDeleted = 0;
+  for (const [bucket, objectPathSet] of grouped) {
+    const objectPaths = [...objectPathSet];
+    await supabase.deleteStorageObjects(bucket, objectPaths);
+    storageDeleted += objectPaths.length;
+  }
+
+  const ids = jobs.map((job) => String(job.id || "").trim()).filter(Boolean);
+  if (ids.length) {
+    await supabase.restRequest(`/${table}?id=in.(${ids.map(encodeURIComponent).join(",")})`, {
+      method: "DELETE",
+      prefer: "return=minimal"
+    });
+  }
+  return {
+    table,
+    deleted: ids.length,
+    storageDeleted,
+    cutoff,
+    dryRun: false,
+    batchLimited: jobs.length === 500
+  };
+}
+
 async function runRetentionCleanup(options = {}) {
   if (!governanceEnabled() || !supabase.serviceConfigured()) {
     return {
@@ -60,8 +103,6 @@ async function runRetentionCleanup(options = {}) {
   const jobs = [
     ["api_cache", "updated_at", policy.cacheDays],
     ["operational_snapshots", "captured_at", policy.snapshotDays],
-    ["export_jobs", "created_at", policy.exportDays],
-    ["print_jobs", "created_at", policy.printDays],
     ["import_jobs", "created_at", policy.importDays],
     ["write_confirmations", "created_at", policy.writeConfirmationDays],
     ["automation_deliveries", "created_at", policy.automationDeliveryDays]
@@ -70,6 +111,18 @@ async function runRetentionCleanup(options = {}) {
   const results = [];
   for (const [table, column, days] of jobs) {
     results.push(await deleteOlderThan(table, column, cutoffIso(days, now), dryRun));
+  }
+  results.splice(2, 0,
+    await deleteArtifactJobsOlderThan("export_jobs", "created_at", cutoffIso(policy.exportDays, now), dryRun),
+    await deleteArtifactJobsOlderThan("print_jobs", "created_at", cutoffIso(policy.printDays, now), dryRun)
+  );
+  if (!dryRun) {
+    results.push({
+      table: "application_retention",
+      deleted: await supabase.restRequest("/rpc/cleanup_app_retention", { method: "POST", body: {} }),
+      cutoff: null,
+      dryRun: false
+    });
   }
 
   return {
@@ -155,7 +208,7 @@ async function runGovernance(options = {}) {
 function governancePlan() {
   return {
     retention: retentionPolicy(),
-    cadence: "daily at midnight UTC through hourly cron",
+    cadence: "daily at 00:00 UTC via Vercel Cron",
     backup: {
       database: "Supabase dashboard scheduled backups or pg_dump",
       storage: "monthly bucket inventory and archive review",
@@ -173,6 +226,7 @@ function governancePlan() {
 
 module.exports = {
   cutoffIso,
+  deleteArtifactJobsOlderThan,
   governancePlan,
   retentionPolicy,
   rolePermissionAudit,

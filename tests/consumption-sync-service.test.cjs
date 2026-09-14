@@ -95,11 +95,11 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.equal(incrementalWindow.reason, "latest_reading");
 
   const backfillWindow = syncWindow("backfill", {}, { from: "2025-01-01", to: "2026-05-12" });
-  assert.equal(backfillWindow.from, "2026-01-01");
+  assert.equal(backfillWindow.from, "2026-02-01");
   assert.equal(backfillWindow.reason, "hot_backfill");
   assert.equal(stationAttemptsForMode("backfill", {}), 3);
   const emptyWindow = syncWindow("incremental", {}, { from: "2025-01-01", to: "2026-05-12" });
-  assert.equal(emptyWindow.from, "2026-01-01", "empty stations must bridge the retention month");
+  assert.equal(emptyWindow.from, "2026-02-01", "empty stations must bridge the retention month");
   assert.equal(emptyWindow.reason, "empty_station");
 
   const incremental = await runConsumptionSync({
@@ -138,7 +138,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
     maxPages: 1,
   });
   assert.equal(backfill.mode, "backfill");
-  assert.equal(liveCalls[0].payload.FROM, "2026-01-01");
+  assert.equal(liveCalls[0].payload.FROM, "2026-02-01");
   assert.equal(backfill.storedRows, 2);
   assert.equal(backfill.partialStations, 1);
   assert.equal(backfill.ok, false, "partial syncs must not report completion");

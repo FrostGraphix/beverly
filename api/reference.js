@@ -4803,7 +4803,7 @@ async function runRefreshJob(scope) {
     scope,
     refreshed: results.filter((entry) => entry.status < 400).length,
     failed: results.filter((entry) => entry.status >= 400).length,
-    governance: scope === "hourly" && new Date().getUTCHours() === 0 ? await runGovernance() : null,
+    governance: null,
     results
   };
 }

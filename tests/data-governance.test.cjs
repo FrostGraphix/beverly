@@ -11,8 +11,9 @@ const policy = retentionPolicy();
 const plan = governancePlan();
 const cutoff = cutoffIso(7, new Date("2026-05-12T00:00:00Z"));
 
-assert.strictEqual(policy.cacheDays, 7);
-assert.strictEqual(policy.snapshotDays, 90);
+assert.strictEqual(policy.hotReadingDays, 90);
+assert.strictEqual(policy.cacheDays, 1);
+assert.strictEqual(policy.snapshotDays, 14);
 assert.strictEqual(policy.exportDays, 180);
 assert(plan.audits.includes("role permission audit"));
 assert(plan.backup.restoreDrill.includes("monthly"));

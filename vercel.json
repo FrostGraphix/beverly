@@ -21,7 +21,16 @@
     "DATABASE_QUOTA_WARN_PERCENT": "70",
     "DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT": "75",
     "DATABASE_QUOTA_HARD_STOP_PERCENT": "80",
-    "CONSUMPTION_HOT_RETENTION_DAYS": "120",
+    "DATA_GOVERNANCE_ENABLED": "true",
+    "CONSUMPTION_HOT_RETENTION_DAYS": "90",
+    "RAW_HOT_WINDOW_DAYS": "90",
+    "CACHE_RETENTION_DAYS": "1",
+    "SNAPSHOT_RETENTION_DAYS": "14",
+    "EXPORT_RETENTION_DAYS": "180",
+    "PRINT_RETENTION_DAYS": "365",
+    "IMPORT_RETENTION_DAYS": "365",
+    "WRITE_CONFIRMATION_RETENTION_DAYS": "730",
+    "AUTOMATION_DELIVERY_RETENTION_DAYS": "90",
     "CONSUMPTION_SYNC_PAGE_SIZE": "500",
     "CONSUMPTION_SYNC_INCREMENTAL_MAX_PAGES": "50"
   },
@@ -43,6 +52,7 @@
     }
   },
   "crons": [
+    { "path": "/api/cron/governance-daily", "schedule": "0 0 * * *" },
     { "path": "/api/cron/refresh-hot", "schedule": "0 6 * * *" },
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
