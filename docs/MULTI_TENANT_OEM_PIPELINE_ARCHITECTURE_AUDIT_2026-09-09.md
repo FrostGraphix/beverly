@@ -1402,82 +1402,80 @@ Before activating any OEM:
 
 ## 17. Recommended Implementation Phases
 
-### Phase 0: safety checkpoint
+This order supersedes the earlier gateway-before-identity sequence. A gateway cannot safely route by installation before installation identity exists. Likewise, wallet writes cannot switch before durable commands and reconciliation exist. Each phase uses one public-seam test at a time: red, minimal green, then review. Commit each passing, reversible slice. Update this audit after every phase.
 
-- Finish, commit, or separately preserve current KYC work.
-- Confirm `main` is clean and pushed.
-- Tag the last-known-good release.
-- Capture database schema and data backup.
-- Record current environment and feature-flag values securely.
-- Create a fresh OEM worktree from updated `main`.
+### Phase 0: safety checkpoint and baseline
 
-### Phase 1: canonical contracts
+- Use only `Beverly-multi-oem-v2` at starting commit `ff54438d`; preserve the stale OEM worktree untouched.
+- Confirm the clean worktree, remote baseline, last-known-good tag, database backup and restore procedure, deployment artifact, and secure feature-flag inventory.
+- Record current Calinmeter request/response fixtures, vending outcomes, telemetry counts, ledger totals, and regression results without storing secrets.
+- Gate: baseline tests and builds pass; backup restore is proven before any database migration. External backup and remote results remain blockers until evidenced.
 
-- Define canonical domain types.
-- Define adapter interface.
-- Define capability manifest.
-- Define normalized error and outcome model.
-- Define adapter conformance tests.
+### Phase 1: canonical contracts and conformance harness
+
+- Define fully typed tenant, installation, mapping, capability, operation, error, vend-outcome, command, and reading contracts.
+- Define the adapter interface and public gateway API. Keep CRM, wallet, and telemetry as consumers of Beverly contracts only.
+- Add schema validation and a reusable conformance suite at the confirmed adapter and gateway seams.
+- Gate: invalid, ambiguous, unsupported, or disabled installation requests have failing tests first and then fail closed. Existing tests and builds remain green.
 
 ### Phase 2: Calinmeter adapter extraction
 
-- Move current Calinmeter request building and parsing behind the adapter.
-- Preserve all current production behavior.
-- Run existing regression tests.
-- Add captured Calinmeter fixtures.
+- Move existing Calinmeter authentication, methods, payloads, parsing, pagination, token generation, remote-send, and reading normalization behind one versioned adapter.
+- Preserve captured Calinmeter outputs, error classes, financial outcomes, and current feature-flag behavior. Do not silently change upstream requests.
+- Gate: adapter conformance and all Calinmeter CRM, wallet, and consumption regressions pass against captured fixtures.
 
-### Phase 3: unified gateway
+### Phase 3: expand-only tenant and installation schema
 
-- Create one shared gateway boundary.
-- Route CRM and wallet through it.
-- Consolidate authentication and credential handling.
-- Add fail-closed explicit OEM resolution.
-- Add health, correlation IDs, and redacted audit.
+- Add tenants, installations, installation credentials, immutable adapter/config revisions, and external resource mappings with service-role-only mutation and tenant-safe RLS.
+- Add nullable installation IDs to every operational table, link, policy, cursor, archive, command-related record, and report source. Keep old columns and constraints during transition.
+- Backfill the seeded Calinmeter installation in resumable batches. Detect duplicate external IDs and unresolved ownership; quarantine uncertainty rather than guessing.
+- Gate: counts, uniqueness candidates, links, readings, deltas, valuation, rollups, orders, receipts, and ledger totals reconcile. Old code works against the expanded schema. No destructive constraint switch occurs yet.
 
-### Phase 4: data namespacing
+### Phase 4: read-only unified gateway and security
 
-- Introduce `oem_installations`.
-- Add internal resource mappings.
-- Add `oem_installation_id` to operational tables.
-- Backfill Calinmeter installation identity.
-- Replace collision-prone constraints and refresh functions.
-- Verify counts and aggregates before tightening constraints.
+- Implement one server-authoritative installation resolver and one adapter gateway. Route CRM reads, wallet meter lookup, and shadow telemetry reads through it behind independent flags.
+- Execute validated endpoint methods and mappings. Enforce installation status, tenant/station authorization, capability, HTTPS allowlists, DNS/private-network checks, production key requirements, revision freshness, and credential strategy parity.
+- Add installation/operation correlation, redacted evidence, distributed quotas, bounded concurrency, safe-read retries, and circuit state. Reject missing mappings without legacy fallback for explicit selections.
+- Gate: Calinmeter read parity and cross-tenant denial pass; a different offline fake OEM proves distinct auth, methods, pagination, envelopes, units, and error handling. No money writes switch here.
 
-### Phase 5: async command and outbox pipeline
+### Phase 5: durable command, outbox, and reconciliation foundation
 
-- Add OEM commands and attempts.
-- Add transactional outbox.
-- Move ambiguous vend and meter commands into recoverable states.
-- Add reconciliation workers.
+- Add append-only OEM commands, attempts, raw evidence references, and transactional outbox records. Define leases, idempotency scoped by installation and operation, and pending/unknown/manual-review states.
+- Build status-query reconciliation before any OEM vend dispatch switch. Never retry an ambiguous write blindly.
+- Gate: crash, timeout-after-success, duplicate request, worker restart, and stale lease tests preserve exactly-once financial capture and recoverable commands.
 
-### Phase 6: telemetry pipeline
+### Phase 6: wallet and operational write cutover
 
-- Make polling installation-aware.
-- Add webhook ingestion.
-- Store raw evidence.
-- Normalize readings.
-- Rebuild aggregates with installation-scoped keys.
+- Resolve approved internal meter and installation before purchase creation or hold. Persist installation on customer/vendor orders, links, policies, receipts, and provider evidence.
+- Move Calinmeter vend, remote-send, station/meter updates, and other supported commands through durable gateway dispatch behind per-operation flags. Unsupported direct credit remains rejected.
+- Gate: vendor/customer PIN, authority, idempotency, hold/capture/release, receipt, notification, and reconciliation tests pass. Calinmeter requests match baseline fixtures. Rollback disables new dispatch while retaining pending recovery.
 
-### Phase 7: Integration Studio
+### Phase 7: installation-safe telemetry and reports
 
-- Version configurations.
-- Add sample tester and certification results.
-- Add canary activation and rollback.
-- Add mapping and health views.
+- Switch polling claims, cursors, raw events, webhook replay keys, reading uniqueness, deltas, tariff snapshots, rollups, archives, and reports to installation-scoped identities.
+- Sign and verify webhooks per installation with timestamp, nonce, and event deduplication. Rebuild aggregates only after verified backfill.
+- Gate: colliding station/meter IDs remain isolated across two installations; polling/webhook duplicates converge; report and valuation totals reconcile before old keys are retired.
 
-### Phase 8: second real OEM
+### Phase 8: Integration Studio and rollback control
 
-- Intake real specification and sandbox.
-- Implement adapter.
-- Run conformance tests.
-- Shadow reads.
-- Reconcile data.
-- Canary one station and vend.
-- Gradually expand.
+- Version and audit configuration, credential rotation, mapping, certification, canary, and activation changes. Remove production fixture fallbacks and duplicate control-plane authority.
+- Provide one-action configuration rollback, health and mapping views, approval gates, and kill switches per installation and operation.
+- Gate: a rollback drill restores the last-known-good revision while preserving pending command reconciliation and expanded-schema compatibility.
 
-### Phase 9: remove legacy fallback
+### Phase 9: second OEM certification; no production activation
 
-- Remove Calinmeter environment fallback only after all production traffic uses the gateway and last-known-good rollback has been tested.
+- Intake a real specification, sandbox, representative samples, error catalogue, webhook rules, rate limits, idempotency semantics, and written test authorization. Missing material keeps the installation draft.
+- Run the shared conformance suite, shadow reads, mapping and financial reconciliation, then prepare a one-station canary plan.
+- Gate: a real second OEM passes sandbox certification. Stop before production activation, live canary vending, or production promotion, as requested.
+
+### Phase 10: deferred legacy removal
+
+- Do not remove Calinmeter fallback, old constraints, or backward-compatible columns during this implementation. Schedule their removal only after separate production activation, measured stabilization, and an approved rollback drill.
+
+### Continuous verification
+
+- After every phase: run the relevant seam tests, existing Calinmeter regression tests, typecheck, migration hygiene, and all builds. Record commands and outcomes here.
+- Before handoff: run full regression suites, security checks, static migration checks, fake-OEM conformance, and local end-to-end flows. Remote CI, preview smoke, staging guard, restore drill, and real-OEM sandbox results require external evidence; never mark them passed by inference.
 
 ---
 
@@ -1690,4 +1688,4 @@ Local `node tests/oem-registry.test.cjs` passed. Local `node tests/supabase-migr
 
 ### 23.4 Phase gate
 
-Phase 1 may begin against the confirmed public seams: adapter contract, gateway API, wallet vending API, and telemetry ingestion API. Phase 2 must preserve captured Calinmeter behavior. Phases 4–6 require expand-and-contract migrations and measured backfill verification. Phase 8 and production activation remain blocked on real-OEM evidence and authorization.
+Phase 1 may begin against the confirmed public seams: adapter contract, gateway API, wallet vending API, and telemetry ingestion API. Phase 2 must preserve captured Calinmeter behavior. Phase 3 requires expand-only migrations and measured backfill verification before gateway routing. Phase 5 must precede wallet write cutover. Phase 9 and production activation remain blocked on real-OEM evidence and authorization.
