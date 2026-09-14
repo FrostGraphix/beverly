@@ -1,8 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import capturedCreditToken from '../../../../../contracts/samples/credit-token-generate.code-reason-result.json';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, parseCalinmeterCreditTokenResponse } from '../calinmeter-v1.js';
+import capturedAccounts from '../../../../../contracts/samples/api__account__read.json';
+import capturedNestedAccounts from '../../../../../contracts/samples/account-read.code-msg-data.json';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
+    it('normalizes a meter from the captured account response', () => {
+        expect(findCalinmeterMeter(capturedAccounts.body, '470005342689')).toEqual({
+            meterId: '470005342689',
+            customerId: '470005342689',
+            customerName: 'HARUNA ADAMU',
+            stationId: 'TUNGA',
+            tariffId: 'RESIDENTIAL',
+            protocolVersion: '2.2',
+            communicationWay: '1',
+            isThreePhase: null,
+            sgc: null,
+        });
+    });
+
+    it('accepts the captured nested account envelope', () => {
+        expect(findCalinmeterMeter(capturedNestedAccounts.body, '470005342689')).toEqual({
+            meterId: '470005342689',
+            customerId: '470005342689',
+            customerName: 'HARUNA ADAMU',
+            stationId: 'TUNGA',
+            tariffId: 'RESIDENTIAL',
+            protocolVersion: null,
+            communicationWay: 'LoraWan',
+            isThreePhase: null,
+            sgc: null,
+        });
+    });
+
     it('normalizes the captured credit-token response', () => {
         const result = parseCalinmeterCreditTokenResponse(capturedCreditToken.body, {
             reference: 'PO-1',

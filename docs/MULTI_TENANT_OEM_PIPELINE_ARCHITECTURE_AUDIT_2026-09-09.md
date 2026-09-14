@@ -1724,3 +1724,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The adapter test failed before implementation, then passed. Existing token-engine tests passed all 21 cases. Missing tokens still produce the wallet's `token_missing` error.
 - The parser preserves current amount, units, timestamp, record-ID, and token alias behavior. It does not yet validate monetary finiteness or certify upstream financial truth; those remain separate fail-closed gateway and reconciliation work.
 - Full wallet regression passed: 63 files, 437 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding.
+
+### 23.9 Calinmeter account checkpoint (2026-09-14)
+
+- Wallet account-envelope parsing, exact meter selection, field aliases, and boolean normalization now live in `calinmeter-v1.ts`. The wallet still owns local/historical fallback and station authority checks.
+- A red-green adapter test used the captured `api__account__read.json` response. A second parity test covered the captured nested `account-read.code-msg-data.json` envelope.
+- Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. No installation authority was inferred from a bare meter serial; the current default-first lookup remains a documented blocker.
+- Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.

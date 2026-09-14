@@ -21,7 +21,15 @@ import { adminClient } from '../db/supabase.js';
 import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, parseCalinmeterCreditTokenResponse } from '../adapters/calinmeter-v1.js';
+import {
+    buildCalinmeterCreditTokenPayload,
+    buildCalinmeterRemoteTokenPayload,
+    findCalinmeterMeter,
+    getCalinmeterAccountRows as accountRows,
+    normalizeCalinmeterBoolean as normalizeBoolean,
+    normalizeCalinmeterMeterRow as normalizeMeterRow,
+    parseCalinmeterCreditTokenResponse,
+} from '../adapters/calinmeter-v1.js';
 
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
@@ -318,9 +326,8 @@ export async function lookupMeter(
             body: JSON.stringify({ meterId: normalizedMeterId, pageNumber: 1, pageSize: 50 }),
         }, opts.oemId ?? undefined);
         if (!upstreamSucceeded(data)) throw upstreamFailure(data, 'energy_query_failed');
-        const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || '').trim() === normalizedMeterId);
-        if (row) {
-            const meter = normalizeMeterRow(row, normalizedMeterId);
+        const meter = findCalinmeterMeter(data, normalizedMeterId);
+        if (meter) {
             let isThreePhase = meter.isThreePhase ?? null;
             let sgc = meter.sgc ?? null;
             if (isThreePhase === null || !sgc) {
@@ -371,51 +378,6 @@ export async function lookupMeter(
         );
     }
     throw new TokenEngineError(`meter not found ${normalizedMeterId}`, 'meter_not_found');
-}
-
-function accountRows(payload: {
-    records?: Array<Record<string, unknown>>;
-    rows?: Array<Record<string, unknown>>;
-    data?: { data?: Array<Record<string, unknown>>; records?: Array<Record<string, unknown>>; list?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
-    result?: { data?: Array<Record<string, unknown>>; records?: Array<Record<string, unknown>>; list?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
-}): Array<Record<string, unknown>> {
-    if (Array.isArray(payload.records)) return payload.records;
-    if (Array.isArray(payload.rows)) return payload.rows;
-    if (Array.isArray(payload.data)) return payload.data;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.data)) return payload.data.data;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.records)) return payload.data.records;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.list)) return payload.data.list;
-    if (Array.isArray(payload.result)) return payload.result;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.data)) return payload.result.data;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.records)) return payload.result.records;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.list)) return payload.result.list;
-    return [];
-}
-
-function normalizeMeterRow(row: Record<string, unknown>, requestedMeterId: string): MeterInfo {
-    const meter = String(row.meterId || row.meter_id || requestedMeterId).trim();
-    const customerId = String(row.customerId || row.customer_id || row.id || meter).trim();
-    const station = String(row.stationId || row.station_id || row.SITE_ID || row.customerAddress || row.customer_address || '').trim();
-    return {
-        meterId: meter,
-        customerId,
-        customerName: String(row.customerName || row.customer_name || row.name || `Customer ${meter}`).trim(),
-        stationId: station || 'UNKNOWN',
-        tariffId: String(row.tariffId || row.tariff_id || '').trim() || 'RESIDENTIAL',
-        protocolVersion: String(row.protocolVersion || row.protocol_version || '').trim() || null,
-        communicationWay: String(row.communicationWay || row.communication_way || '').trim() || null,
-        isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
-        sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
-    };
-}
-
-function normalizeBoolean(value: unknown): boolean | null {
-    if (value === true || value === 1 || value === '1') return true;
-    if (value === false || value === 0 || value === '0') return false;
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (['true', 'yes', 'y'].includes(normalized)) return true;
-    if (['false', 'no', 'n'].includes(normalized)) return false;
-    return null;
 }
 
 async function lookupMeterMeta(meterId: string, oemId?: string | null): Promise<{ isThreePhase: boolean | null; sgc: string | null }> {
