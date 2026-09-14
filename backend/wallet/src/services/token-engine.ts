@@ -28,8 +28,12 @@ import {
     getCalinmeterAccountRows as accountRows,
     normalizeCalinmeterBoolean as normalizeBoolean,
     normalizeCalinmeterMeterRow as normalizeMeterRow,
+    normalizeCalinmeterRemoteRemark as normalizeRemoteRemark,
     parseCalinmeterCreditTokenResponse,
+    parseCalinmeterTaskRow as taskResultFromRow,
 } from '../adapters/calinmeter-v1.js';
+
+export { normalizeRemoteRemark };
 
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
@@ -841,35 +845,6 @@ function taskRowForRemoteSend(response: unknown, input: Pick<RemoteSendInput, 'm
         .find((row) => String(row.meterId || '').trim() === meterId && (!token || cleanToken(String(row.data || row.token || '')) === token)) ?? null;
 }
 
-export function normalizeRemoteRemark(rawRemark: unknown): string {
-    const text = String(rawRemark ?? '').trim();
-    const lower = text.toLowerCase();
-
-    if (!text) return 'Remote send completed.';
-    if (lower.includes('token used') || lower.includes('used token') || lower.includes('token already used') || lower.includes('old token') || lower.includes('duplicate token')) {
-        return 'Token has already been used or entered into the meter.';
-    }
-    if (lower.includes('already sent') || lower.includes('already exists') || lower.includes('task exists') || lower.includes('no data has been changed')) {
-        return 'Token was already sent over the air to this meter.';
-    }
-    if (lower.includes('keypad') || lower.includes('manual entry')) {
-        return 'Token was entered manually via meter keypad.';
-    }
-    if (lower.includes('offline') || lower.includes('unreachable') || lower.includes('timeout')) {
-        return 'Meter is currently offline or unconfirmed over the air. Token remains valid for manual keypad entry.';
-    }
-    return text;
-}
-
-function taskResultFromRow(row: Record<string, unknown>, fallbackTaskId: string): RemoteSendResult {
-    const rawRemark = row.remark == null ? null : String(row.remark);
-    return {
-        taskId: String(row.id ?? row.taskId ?? row.recordId ?? fallbackTaskId),
-        status: normalizeRemoteTaskStatus(row.status),
-        remark: rawRemark ? normalizeRemoteRemark(rawRemark) : null,
-    };
-}
-
 function tokenRejectError(task: RemoteSendResult) {
     const normalized = normalizeRemoteRemark(task.remark);
     if (normalized.includes('already been used') || normalized.includes('already used')) {
@@ -1024,12 +999,4 @@ export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_status_failed');
     const row = taskRowForRemoteSend(response, { meterId: context.meterId ?? '', token: context.token ?? '', taskId }) || collectTaskRows(response).find((item) => Number(item.id ?? item.taskId ?? item.recordId) === Number(taskId));
     return row ? taskResultFromRow(row, taskId) : { taskId, status: 'unknown', remark: null };
-}
-
-function normalizeRemoteTaskStatus(status: unknown): RemoteSendResult['status'] {
-    const value = String(status ?? '').trim().toLowerCase();
-    if (['1', 'success', 'successful', 'done', 'completed'].includes(value)) return 'success';
-    if (['2', 'failed', 'failure', 'error'].includes(value)) return 'failed';
-    if (['0', '3', 'pending', 'processing', 'standby', 'queued'].includes(value)) return 'pending';
-    return 'unknown';
 }

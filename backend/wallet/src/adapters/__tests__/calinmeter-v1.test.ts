@@ -2,9 +2,26 @@ import { describe, expect, it } from 'vitest';
 import capturedCreditToken from '../../../../../contracts/samples/credit-token-generate.code-reason-result.json';
 import capturedAccounts from '../../../../../contracts/samples/api__account__read.json';
 import capturedNestedAccounts from '../../../../../contracts/samples/account-read.code-msg-data.json';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse } from '../calinmeter-v1.js';
+import capturedRemoteTasks from '../../../../../contracts/samples/API__RemoteMeterTask__GetTokenTask.json';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
+    it('normalizes a captured failed remote task', () => {
+        expect(parseCalinmeterTaskRow(capturedRemoteTasks.body.result.data[0], 'fallback')).toEqual({
+            taskId: '5609',
+            status: 'failed',
+            remark: null,
+        });
+    });
+
+    it('normalizes a captured successful remote task', () => {
+        expect(parseCalinmeterTaskRow(capturedRemoteTasks.body.result.data[1], 'fallback')).toEqual({
+            taskId: '5552',
+            status: 'success',
+            remark: null,
+        });
+    });
+
     it('normalizes a meter from the captured account response', () => {
         expect(findCalinmeterMeter(capturedAccounts.body, '470005342689')).toEqual({
             meterId: '470005342689',

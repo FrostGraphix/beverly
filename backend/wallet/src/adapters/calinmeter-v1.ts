@@ -75,6 +75,53 @@ export interface CalinmeterMeterInfo {
     sgc: string | null;
 }
 
+/** Existing wallet-facing remote task result. */
+export interface CalinmeterRemoteTaskResult {
+    taskId: string;
+    status: 'pending' | 'success' | 'failed' | 'unknown';
+    remark: string | null;
+}
+
+/** Preserve Calinmeter task status codes and aliases. */
+export function normalizeCalinmeterTaskStatus(status: unknown): CalinmeterRemoteTaskResult['status'] {
+    const value = String(status ?? '').trim().toLowerCase();
+    if (['1', 'success', 'successful', 'done', 'completed'].includes(value)) return 'success';
+    if (['2', 'failed', 'failure', 'error'].includes(value)) return 'failed';
+    if (['0', '3', 'pending', 'processing', 'standby', 'queued'].includes(value)) return 'pending';
+    return 'unknown';
+}
+
+/** Preserve the wallet's current Calinmeter remote remarks. */
+export function normalizeCalinmeterRemoteRemark(rawRemark: unknown): string {
+    const text = String(rawRemark ?? '').trim();
+    const lower = text.toLowerCase();
+
+    if (!text) return 'Remote send completed.';
+    if (lower.includes('token used') || lower.includes('used token') || lower.includes('token already used') || lower.includes('old token') || lower.includes('duplicate token')) {
+        return 'Token has already been used or entered into the meter.';
+    }
+    if (lower.includes('already sent') || lower.includes('already exists') || lower.includes('task exists') || lower.includes('no data has been changed')) {
+        return 'Token was already sent over the air to this meter.';
+    }
+    if (lower.includes('keypad') || lower.includes('manual entry')) {
+        return 'Token was entered manually via meter keypad.';
+    }
+    if (lower.includes('offline') || lower.includes('unreachable') || lower.includes('timeout')) {
+        return 'Meter is currently offline or unconfirmed over the air. Token remains valid for manual keypad entry.';
+    }
+    return text;
+}
+
+/** Normalize one Calinmeter GetTokenTask row. */
+export function parseCalinmeterTaskRow(row: Record<string, unknown>, fallbackTaskId: string): CalinmeterRemoteTaskResult {
+    const rawRemark = row.remark == null ? null : String(row.remark);
+    return {
+        taskId: String(row.id ?? row.taskId ?? row.recordId ?? fallbackTaskId),
+        status: normalizeCalinmeterTaskStatus(row.status),
+        remark: rawRemark ? normalizeCalinmeterRemoteRemark(rawRemark) : null,
+    };
+}
+
 /** Preserve observed Calinmeter collection envelopes. */
 export function getCalinmeterAccountRows(payload: unknown): Array<Record<string, unknown>> {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];

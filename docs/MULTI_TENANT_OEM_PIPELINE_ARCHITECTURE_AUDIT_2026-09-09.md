@@ -1731,3 +1731,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A red-green adapter test used the captured `api__account__read.json` response. A second parity test covered the captured nested `account-read.code-msg-data.json` envelope.
 - Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. No installation authority was inferred from a bare meter serial; the current default-first lookup remains a documented blocker.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
+
+### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
+
+- Calinmeter task status codes, result-row normalization, and remark mapping now live in `calinmeter-v1.ts`. `token-engine.ts` retains a compatibility export for remarks.
+- A red-green adapter test used the captured `API__RemoteMeterTask__GetTokenTask.json` failure row. A second parity test covered its success row.
+- Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. Task search, create/update dispatch, polling, retries, and financial reconciliation still reside outside the adapter.
+- Full wallet regression passed: 63 files, 441 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No production routing changed.
