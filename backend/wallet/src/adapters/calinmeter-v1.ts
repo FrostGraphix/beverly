@@ -82,6 +82,54 @@ export interface CalinmeterRemoteTaskResult {
     remark: string | null;
 }
 
+/** Preserve Calinmeter's legacy static bearer authentication. */
+export function buildCalinmeterBearerHeader(token: string | null | undefined): { name: 'Authorization'; value: string } | null {
+    const value = String(token ?? '').trim();
+    return value ? { name: 'Authorization', value: `Bearer ${value}` } : null;
+}
+
+/** Existing wallet-facing station ownership fields. */
+export interface CalinmeterStationOwner {
+    oemId: string | null;
+    oemSlug: string | null;
+    oemName: string | null;
+}
+
+/** Existing wallet-facing normalized station. */
+export interface CalinmeterStationInfo extends CalinmeterStationOwner {
+    stationId: string;
+    name: string;
+    remark: string | null;
+    status: 'active' | 'disabled';
+}
+
+/** Preserve the legacy station envelope and status aliases. */
+export function normalizeCalinmeterStations(payload: unknown, owner: CalinmeterStationOwner): CalinmeterStationInfo[] {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+    const result = (payload as Record<string, unknown>).result;
+    if (!result || typeof result !== 'object' || Array.isArray(result)) return [];
+    const data = (result as Record<string, unknown>).data;
+    if (!Array.isArray(data)) return [];
+    return data
+        .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object' && !Array.isArray(row))
+        .filter((row) => String(row.stationId ?? '').trim() !== '')
+        .filter((row) => String(row.stationId).toUpperCase() !== 'ADMIN')
+        .map((row) => {
+            const stationId = String(row.stationId);
+            const disabled = row.status === false
+                || row.status === 0
+                || /^(disabled|inactive|offline|deleted)$/i.test(String(row.status ?? ''));
+            return {
+                stationId,
+                name: row.name == null ? stationId : String(row.name),
+                remark: row.remark == null ? null : String(row.remark),
+                ...owner,
+                status: disabled ? 'disabled' as const : 'active' as const,
+            };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 /** Preserve Calinmeter GetTokenTask pagination. */
 export function buildCalinmeterTaskLookupPayload(meterId: string) {
     return {

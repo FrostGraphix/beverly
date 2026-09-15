@@ -22,6 +22,7 @@ import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
 import {
+    buildCalinmeterBearerHeader,
     buildCalinmeterCreditTokenPayload,
     buildCalinmeterRemoteTokenPayload,
     buildCalinmeterStandbyConfirmPayload,
@@ -33,6 +34,7 @@ import {
     normalizeCalinmeterBoolean as normalizeBoolean,
     normalizeCalinmeterMeterRow as normalizeMeterRow,
     normalizeCalinmeterRemoteRemark as normalizeRemoteRemark,
+    normalizeCalinmeterStations,
     parseCalinmeterCreditTokenResponse,
     parseCalinmeterTaskRow as taskResultFromRow,
 } from '../adapters/calinmeter-v1.js';
@@ -155,7 +157,7 @@ async function resolveEnergyTarget(oemId?: string, stationId?: string | null): P
     if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
-        authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
+        authHeader: buildCalinmeterBearerHeader(env.ENERGY_BEARER_TOKEN),
     };
 }
 
@@ -574,22 +576,11 @@ export async function listStations(opts: { force?: boolean; oemId?: string | nul
         method: 'POST',
         body: JSON.stringify({ pageNumber: 1, pageSize: 500 }),
     }, opts.oemId ?? undefined);
-    const raw = resp.result?.data ?? [];
-    // Exclude system noise rows (legacy "admin", "0001" placeholder)
-    const stations: StationInfo[] = raw
-        .filter((s) => s.stationId && s.stationId.toUpperCase() !== 'ADMIN')
-        .map((s) => ({
-            stationId: s.stationId,
-            name: s.name ?? s.stationId,
-            remark: s.remark ?? null,
-            oemId: owner?.oemId ?? null,
-            oemSlug: owner?.slug ?? null,
-            oemName: owner?.displayName ?? null,
-            status: s.status === false || s.status === 0 || /^(disabled|inactive|offline|deleted)$/i.test(String(s.status ?? ''))
-                ? 'disabled' as const
-                : 'active' as const,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    const stations: StationInfo[] = normalizeCalinmeterStations(resp, {
+        oemId: owner?.oemId ?? null,
+        oemSlug: owner?.slug ?? null,
+        oemName: owner?.displayName ?? null,
+    });
     stationsCache.set(cacheKey, { at: Date.now(), data: stations });
     return stations;
 }

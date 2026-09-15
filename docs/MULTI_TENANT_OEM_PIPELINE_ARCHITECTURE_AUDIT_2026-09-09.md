@@ -1792,6 +1792,15 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Explicit installation IDs and internal resource mappings share one fail-closed path. Missing, ambiguous, malformed, inactive, cross-tenant, and actor-forbidden selections never return an installation.
 - Focused resolver tests, wallet compilation, and OEM contracts passed locally.
 - Route integration remains pending. No existing Calinmeter caller was switched during this slice.
+
+### 23.18 Phase 2 completion checkpoint
+
+- Two red-green slices moved the remaining observed wallet station normalization and static bearer-header construction into the Calinmeter adapter.
+- Station aliases, disabled-state handling, ADMIN exclusion, ownership metadata, name sorting, and five-minute caller caching remain unchanged.
+- The bearer path trims its configured token, emits the existing Authorization header, and returns no header when the token is missing.
+- The synthetic station regression freezes existing code behavior only. No captured Calinmeter station response exists, so station conformance remains uncertified and explicitly blocked.
+- The full wallet suite passed locally: 64 files and 447 tests. Wallet compilation passed.
+- Phase 2 code extraction is locally complete. Final Phase 2 certification requires a captured, authorized Calinmeter station response.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)

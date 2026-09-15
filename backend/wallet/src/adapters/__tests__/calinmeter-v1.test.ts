@@ -3,9 +3,50 @@ import capturedCreditToken from '../../../../../contracts/samples/credit-token-g
 import capturedAccounts from '../../../../../contracts/samples/api__account__read.json';
 import capturedNestedAccounts from '../../../../../contracts/samples/account-read.code-msg-data.json';
 import capturedRemoteTasks from '../../../../../contracts/samples/API__RemoteMeterTask__GetTokenTask.json';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, buildCalinmeterStandbyConfirmPayload, buildCalinmeterTaskLookupPayload, buildCalinmeterTaskConfirmPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
+import { buildCalinmeterBearerHeader, buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, buildCalinmeterStandbyConfirmPayload, buildCalinmeterTaskLookupPayload, buildCalinmeterTaskConfirmPayload, findCalinmeterMeter, normalizeCalinmeterStations, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
+    it('preserves legacy bearer authentication', () => {
+        expect(buildCalinmeterBearerHeader(' captured-token ')).toEqual({
+            name: 'Authorization',
+            value: 'Bearer captured-token',
+        });
+        expect(buildCalinmeterBearerHeader('')).toBeNull();
+    });
+
+    it('preserves legacy station normalization', () => {
+        expect(normalizeCalinmeterStations({
+            result: { data: [
+                { stationId: 'TUNGA', name: 'Tunga', remark: 'North', status: true },
+                { stationId: 'MUSHA', name: 'Musha', status: 'offline' },
+                { stationId: 'ADMIN', name: 'Admin' },
+            ] },
+        }, {
+            oemId: '1494dc89-c52d-4757-9354-75bde004dc04',
+            oemSlug: 'calinmeter',
+            oemName: 'Calinmeter',
+        })).toEqual([
+            {
+                stationId: 'MUSHA',
+                name: 'Musha',
+                remark: null,
+                oemId: '1494dc89-c52d-4757-9354-75bde004dc04',
+                oemSlug: 'calinmeter',
+                oemName: 'Calinmeter',
+                status: 'disabled',
+            },
+            {
+                stationId: 'TUNGA',
+                name: 'Tunga',
+                remark: 'North',
+                oemId: '1494dc89-c52d-4757-9354-75bde004dc04',
+                oemSlug: 'calinmeter',
+                oemName: 'Calinmeter',
+                status: 'active',
+            },
+        ]);
+    });
+
     it('preserves task lookup and confirmation payloads', () => {
         expect(buildCalinmeterTaskLookupPayload('47300481810')).toEqual({
             lang: 'en',
