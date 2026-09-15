@@ -53,6 +53,7 @@ Keep write safety strict.
 
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
 - `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
+- `backend/wallet/src/services/oem-installations.ts` owns server-authoritative installation resolution for wallet callers. It requires tenant identity and explicit actor installation scope before returning an active installation.
 - `supabase/migrations/20260915120000_oem_installation_control_plane.sql` owns the expand-only tenant, installation, immutable configuration, external mapping, and sync-cursor control plane. Provisioning remains service-role-only and never infers tenant ownership.
 - `supabase/rollbacks/` contains reviewed emergency rollback scripts. Their execution guards require explicit operator validation.
 - `supabase/migrations/20260915140000_oem_command_foundation.sql` owns durable OEM commands, attempts, secured evidence references, webhook replay records, transactional outbox state, and health snapshots. Existing money paths do not consume it yet.

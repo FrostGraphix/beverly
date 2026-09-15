@@ -20,6 +20,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@beverly/oem-contracts": "workspace:*",
     "@beverly/tokens": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.0",

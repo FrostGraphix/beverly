@@ -1783,6 +1783,15 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The complete root test suite passed, including OEM, security, authentication, migration, wallet MFA, local production simulation, and reference parity checks.
 - Build output still reports Node 24.13.1 against the required Node 22.x engine. This run cannot certify the supported runtime.
 - Browser suites, remote CI, deployed preview smoke, staging write guard, database backup restore, migration application, fake-OEM conformance, real-OEM sandbox, and canary authorization remain unverified.
+
+### 23.17 Wallet installation resolver slice
+
+- The confirmed public seam is server-authoritative installation resolution before any wallet upstream access.
+- A red integration test first proved ambiguous resource mappings lacked a wallet resolver. The new resolver delegates canonical identity and tenant validation to `@beverly/oem-contracts`.
+- A second red test proved tenant membership alone was insufficient. Resolution now also requires an explicit server-owned list of installation IDs allowed for the actor.
+- Explicit installation IDs and internal resource mappings share one fail-closed path. Missing, ambiguous, malformed, inactive, cross-tenant, and actor-forbidden selections never return an installation.
+- Focused resolver tests, wallet compilation, and OEM contracts passed locally.
+- Route integration remains pending. No existing Calinmeter caller was switched during this slice.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
