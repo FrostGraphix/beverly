@@ -1757,6 +1757,14 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Token-engine routing retains its existing call surface but cannot imply station-scoped credentials. Explicit nondefault OEM failures still fail closed.
 - OEM contracts, all 21 token-engine tests, and wallet compilation passed locally.
 - Installation credential reads remain unimplemented. Production routing must not activate until that resolver, tenant authorization, revision checks, and endpoint validation pass.
+
+### 23.14 Credential-key fail-closed slice
+
+- A red contract proved the wallet accepted a deterministic development encryption key during production execution.
+- Wallet environment validation now requires `OEM_CREDENTIALS_ENCRYPTION_KEY` in production. Its crypto boundary also throws if invoked without that key.
+- The CRM credential crypto boundary now rejects the same missing production key. Development and test compatibility remains unchanged.
+- OEM contracts, CRM registry tests, and wallet compilation passed locally.
+- Key provisioning, rotation evidence, shared key-version inventory, and multi-instance cache invalidation remain external blockers.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)

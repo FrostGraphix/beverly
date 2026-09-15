@@ -178,6 +178,13 @@ const schema = z.object({
             message: 'Production deployments require a dedicated APP_ENCRYPTION_KEY.',
         });
     }
+    if (values.NODE_ENV === 'production' && !values.OEM_CREDENTIALS_ENCRYPTION_KEY) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['OEM_CREDENTIALS_ENCRYPTION_KEY'],
+            message: 'Production deployments require OEM_CREDENTIALS_ENCRYPTION_KEY.',
+        });
+    }
     if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {
         if (!values.PAYSTACK_SECRET_KEY) {
             context.addIssue({
