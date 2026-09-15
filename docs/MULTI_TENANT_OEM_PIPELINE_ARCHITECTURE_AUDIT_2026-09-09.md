@@ -1775,6 +1775,14 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A guarded rollback covers all six new tables and requires preserving unresolved evidence before execution.
 - OEM contracts, migration hygiene, and wallet compilation passed locally.
 - Dispatch workers, atomic claim functions, status reconciliation, crash testing, and wallet cutover remain incomplete. Production activation stays blocked.
+
+### 23.16 Full local regression checkpoint
+
+- The full wallet Vitest suite passed: 63 files and 443 tests.
+- The root production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications.
+- The complete root test suite passed, including OEM, security, authentication, migration, wallet MFA, local production simulation, and reference parity checks.
+- Build output still reports Node 24.13.1 against the required Node 22.x engine. This run cannot certify the supported runtime.
+- Browser suites, remote CI, deployed preview smoke, staging write guard, database backup restore, migration application, fake-OEM conformance, real-OEM sandbox, and canary authorization remain unverified.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
