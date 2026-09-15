@@ -1730,6 +1730,16 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Wallet account-envelope parsing, exact meter selection, field aliases, and boolean normalization now live in `calinmeter-v1.ts`. The wallet still owns local/historical fallback and station authority checks.
 - A red-green adapter test used the captured `api__account__read.json` response. A second parity test covered the captured nested `account-read.code-msg-data.json` envelope.
 - Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. No installation authority was inferred from a bare meter serial; the current default-first lookup remains a documented blocker.
+
+### 23.11 Phase 3 control-plane slice
+
+- A red migration contract first proved the tenant and installation control plane was absent.
+- The expand-only migration now adds tenants, immutable adapter versions, installations, installation credentials, versioned operation mappings, capability manifests, immutable configuration revisions, external resource mappings, and installation-scoped sync cursors.
+- Every new table has forced RLS, service-role-only access, and explicit lifecycle checks. No tenant or installation row is seeded because ownership evidence is unavailable.
+- External identifiers are unique only inside an OEM installation. Legacy manufacturer columns, rows, and constraints remain untouched.
+- A guarded rollback script covers every added table but deliberately refuses unattended execution. Operators must prove emptiness and review dependencies before removing the guard.
+- `npm run test:oem`, migration hygiene, and the wallet TypeScript build passed locally. Node remains 24.13.1 while the repository requires Node 22.x.
+- Phase 3 remains incomplete. Nullable installation links, measured Calinmeter backfill, duplicate quarantine, remote migration validation, database backup, and restore evidence remain blocked or pending.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
