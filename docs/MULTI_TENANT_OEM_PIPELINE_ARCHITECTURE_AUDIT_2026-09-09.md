@@ -1765,6 +1765,16 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The CRM credential crypto boundary now rejects the same missing production key. Development and test compatibility remains unchanged.
 - OEM contracts, CRM registry tests, and wallet compilation passed locally.
 - Key provisioning, rotation evidence, shared key-version inventory, and multi-instance cache invalidation remain external blockers.
+
+### 23.15 Phase 5 persistence slice
+
+- A red migration contract first proved durable command, attempt, evidence, webhook replay, outbox, and health tables were absent.
+- The new foundation scopes command idempotency by installation and operation. It retains pending, submitted, unknown, manual-review, and terminal outcomes.
+- Attempt rows retain request fingerprints, normalized failures, timings, and secured raw-response references. No secret or unredacted payload column was added.
+- Webhook event and nonce uniqueness is installation-scoped. Outbox publication has durable leases and deduplication.
+- A guarded rollback covers all six new tables and requires preserving unresolved evidence before execution.
+- OEM contracts, migration hygiene, and wallet compilation passed locally.
+- Dispatch workers, atomic claim functions, status reconciliation, crash testing, and wallet cutover remain incomplete. Production activation stays blocked.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)

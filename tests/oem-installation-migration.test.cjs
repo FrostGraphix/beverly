@@ -9,16 +9,22 @@ const migrationPath = path.join(root, "supabase", "migrations", "20260915120000_
 const rollbackPath = path.join(root, "supabase", "rollbacks", "20260915120000_oem_installation_control_plane.rollback.sql");
 const linksPath = path.join(root, "supabase", "migrations", "20260915130000_oem_installation_operational_links.sql");
 const linksRollbackPath = path.join(root, "supabase", "rollbacks", "20260915130000_oem_installation_operational_links.rollback.sql");
+const commandsPath = path.join(root, "supabase", "migrations", "20260915140000_oem_command_foundation.sql");
+const commandsRollbackPath = path.join(root, "supabase", "rollbacks", "20260915140000_oem_command_foundation.rollback.sql");
 
 assert(fs.existsSync(migrationPath), "missing installation migration");
 assert(fs.existsSync(rollbackPath), "missing reviewed rollback script");
 assert(fs.existsSync(linksPath), "missing operational link migration");
 assert(fs.existsSync(linksRollbackPath), "missing operational link rollback");
+assert(fs.existsSync(commandsPath), "missing command foundation migration");
+assert(fs.existsSync(commandsRollbackPath), "missing command foundation rollback");
 
 const migration = fs.readFileSync(migrationPath, "utf8").toLowerCase();
 const rollback = fs.readFileSync(rollbackPath, "utf8").toLowerCase();
 const links = fs.readFileSync(linksPath, "utf8").toLowerCase();
 const linksRollback = fs.readFileSync(linksRollbackPath, "utf8").toLowerCase();
+const commands = fs.readFileSync(commandsPath, "utf8").toLowerCase();
+const commandsRollback = fs.readFileSync(commandsRollbackPath, "utf8").toLowerCase();
 
 for (const table of [
   "tenants",
@@ -76,5 +82,26 @@ assert(!/oem_installation_id uuid\s+not null/.test(links), "operational links mu
 assert(!/update\s+public\./.test(links), "ownership backfill must remain separate");
 assert(!/drop\s+(constraint|column|table)/.test(links), "expand migration must remain additive");
 assert(linksRollback.includes("refuses automatic execution"), "link rollback must require operator review");
+
+for (const table of [
+  "oem_commands",
+  "oem_command_attempts",
+  "oem_raw_events",
+  "oem_webhook_events",
+  "outbox_events",
+  "oem_health_snapshots"
+]) {
+  assert(commands.includes(`create table if not exists public.${table}`), `missing ${table}`);
+  assert(commands.includes(`alter table public.${table} force row level security`), `missing forced RLS: ${table}`);
+  assert(commandsRollback.includes(`drop table if exists public.${table}`), `missing command rollback: ${table}`);
+}
+
+assert(commands.includes("unique (oem_installation_id, operation_key, idempotency_key)"), "command idempotency must be installation-scoped");
+assert(commands.includes("'pending', 'leased', 'submitted', 'succeeded', 'failed', 'unknown', 'manual_review', 'cancelled'"), "recoverable command states missing");
+assert(commands.includes("request_fingerprint text not null"), "request fingerprint missing");
+assert(commands.includes("raw_response_reference text"), "secured evidence reference missing");
+assert(commands.includes("unique (oem_installation_id, event_id)"), "webhook replay protection missing");
+assert(commands.includes("unique (aggregate_type, aggregate_id, event_type, idempotency_key)"), "outbox deduplication missing");
+assert(commandsRollback.includes("refuses automatic execution"), "command rollback must require operator review");
 
 console.log(JSON.stringify({ status: "OEM installation migration contract passed" }, null, 2));

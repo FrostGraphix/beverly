@@ -55,6 +55,7 @@ Keep write safety strict.
 - `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
 - `supabase/migrations/20260915120000_oem_installation_control_plane.sql` owns the expand-only tenant, installation, immutable configuration, external mapping, and sync-cursor control plane. Provisioning remains service-role-only and never infers tenant ownership.
 - `supabase/rollbacks/` contains reviewed emergency rollback scripts. Their execution guards require explicit operator validation.
+- `supabase/migrations/20260915140000_oem_command_foundation.sql` owns durable OEM commands, attempts, secured evidence references, webhook replay records, transactional outbox state, and health snapshots. Existing money paths do not consume it yet.
 - OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.
