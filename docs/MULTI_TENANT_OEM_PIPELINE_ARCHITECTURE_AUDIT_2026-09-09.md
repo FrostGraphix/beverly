@@ -1740,6 +1740,15 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A guarded rollback script covers every added table but deliberately refuses unattended execution. Operators must prove emptiness and review dependencies before removing the guard.
 - `npm run test:oem`, migration hygiene, and the wallet TypeScript build passed locally. Node remains 24.13.1 while the repository requires Node 22.x.
 - Phase 3 remains incomplete. Nullable installation links, measured Calinmeter backfill, duplicate quarantine, remote migration validation, database backup, and restore evidence remain blocked or pending.
+
+### 23.12 Phase 3 operational-link slice
+
+- A red migration test first proved installation links were absent from wallet, telemetry, policy, archive, and reporting records.
+- A second expand-only migration adds nullable installation foreign keys and lookup indexes across thirteen existing operational tables.
+- The migration performs no ownership backfill, constraint replacement, row update, or legacy deletion. Existing Calinmeter behavior therefore remains unchanged.
+- A guarded rollback removes only the new columns and their dependent indexes. It refuses unattended execution.
+- OEM contracts, migration hygiene, legacy migration contracts, and wallet compilation passed locally.
+- Verified backfill planning remains blocked until deployed data can be inventoried, duplicated external identities can be quarantined, and tenant ownership can be proven.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
