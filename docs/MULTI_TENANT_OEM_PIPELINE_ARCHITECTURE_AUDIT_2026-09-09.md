@@ -1749,6 +1749,14 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A guarded rollback removes only the new columns and their dependent indexes. It refuses unattended execution.
 - OEM contracts, migration hygiene, legacy migration contracts, and wallet compilation passed locally.
 - Verified backfill planning remains blocked until deployed data can be inventoried, duplicated external identities can be quarantined, and tenant ownership can be proven.
+
+### 23.13 Wallet registry correction
+
+- A red source contract reproduced the invalid wallet query against `oem_credentials.station_id`, which the deployed foundation schema never defines.
+- The wallet registry no longer accepts station identity or queries imaginary station credentials. Its legacy compatibility path remains manufacturer-scoped until the installation resolver replaces it.
+- Token-engine routing retains its existing call surface but cannot imply station-scoped credentials. Explicit nondefault OEM failures still fail closed.
+- OEM contracts, all 21 token-engine tests, and wallet compilation passed locally.
+- Installation credential reads remain unimplemented. Production routing must not activate until that resolver, tenant authorization, revision checks, and endpoint validation pass.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
