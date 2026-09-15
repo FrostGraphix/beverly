@@ -82,6 +82,65 @@ export interface CalinmeterRemoteTaskResult {
     remark: string | null;
 }
 
+/** Preserve Calinmeter GetTokenTask pagination. */
+export function buildCalinmeterTaskLookupPayload(meterId: string) {
+    return {
+        lang: 'en',
+        meterId,
+        pageNumber: 1,
+        pageSize: 10,
+        orderBy: 'createDate desc',
+    };
+}
+
+/** Collect positive Calinmeter task identifiers. */
+export function collectCalinmeterTaskIds(value: unknown, target: number[] = []): number[] {
+    if (!value) return target;
+    if (Array.isArray(value)) {
+        for (const item of value) collectCalinmeterTaskIds(item, target);
+        return target;
+    }
+    if (typeof value !== 'object') return target;
+    const record = value as Record<string, unknown>;
+    const id = Number(record.id ?? record.taskId ?? record.taskID ?? record.recordId);
+    if (Number.isFinite(id) && id > 0) target.push(id);
+    collectCalinmeterTaskIds(record.result, target);
+    collectCalinmeterTaskIds(record.data, target);
+    return target;
+}
+
+/** Preserve Calinmeter UpdateTokenTask payloads. */
+export function buildCalinmeterTaskConfirmPayload(response: unknown): Array<{ id: number }> {
+    return [...new Set(collectCalinmeterTaskIds(response))].map((id) => ({ id }));
+}
+
+/** Collect Calinmeter task rows across known envelopes. */
+export function collectCalinmeterTaskRows(value: unknown, target: Array<Record<string, unknown>> = []): Array<Record<string, unknown>> {
+    if (!value) return target;
+    if (Array.isArray(value)) {
+        for (const item of value) collectCalinmeterTaskRows(item, target);
+        return target;
+    }
+    if (typeof value !== 'object') return target;
+    const record = value as Record<string, unknown>;
+    if (record.id || record.taskId || record.recordId) target.push(record);
+    collectCalinmeterTaskRows(record.result, target);
+    collectCalinmeterTaskRows(record.data, target);
+    return target;
+}
+
+/** Confirm only the exact meter/token standby task. */
+export function buildCalinmeterStandbyConfirmPayload(response: unknown, meterId: string, rawToken: string): Array<{ id: number }> {
+    const token = String(rawToken || '').replace(/\s+/g, '');
+    const ids = collectCalinmeterTaskRows(response)
+        .filter((row) => String(row.meterId || '').trim() === String(meterId || '').trim())
+        .filter((row) => String(row.data || row.token || '').replace(/\s+/g, '') === token)
+        .filter((row) => row.status === 0 || row.status === '0' || String(row.status || '').toLowerCase() === 'standby')
+        .map((row) => Number(row.id ?? row.taskId ?? row.recordId))
+        .filter((id) => Number.isFinite(id) && id > 0);
+    return [...new Set(ids)].map((id) => ({ id }));
+}
+
 /** Preserve Calinmeter task status codes and aliases. */
 export function normalizeCalinmeterTaskStatus(status: unknown): CalinmeterRemoteTaskResult['status'] {
     const value = String(status ?? '').trim().toLowerCase();

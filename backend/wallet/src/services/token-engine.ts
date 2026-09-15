@@ -24,6 +24,10 @@ import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-
 import {
     buildCalinmeterCreditTokenPayload,
     buildCalinmeterRemoteTokenPayload,
+    buildCalinmeterStandbyConfirmPayload,
+    buildCalinmeterTaskConfirmPayload,
+    buildCalinmeterTaskLookupPayload,
+    collectCalinmeterTaskRows as collectTaskRows,
     findCalinmeterMeter,
     getCalinmeterAccountRows as accountRows,
     normalizeCalinmeterBoolean as normalizeBoolean,
@@ -773,62 +777,15 @@ export function buildRemoteTokenTaskPayload(input: RemoteSendInput) {
 }
 
 export function buildRemoteTaskConfirmPayload(response: unknown) {
-    return [...new Set(collectTaskIds(response))].map((id) => ({ id }));
+    return buildCalinmeterTaskConfirmPayload(response);
 }
 
 export function buildRemoteTokenTaskLookupPayload(input: Pick<RemoteSendInput, 'meterId'>) {
-    return {
-        lang: 'en',
-        meterId: input.meterId,
-        pageNumber: 1,
-        pageSize: 10,
-        orderBy: 'createDate desc',
-    };
+    return buildCalinmeterTaskLookupPayload(input.meterId);
 }
 
 export function buildRemoteTokenStandbyConfirmPayload(response: unknown, input: Pick<RemoteSendInput, 'meterId' | 'token'>) {
-    const meterId = String(input.meterId || '').trim();
-    const token = cleanToken(input.token);
-    const ids = collectTaskRows(response)
-        .filter((row) => String(row.meterId || '').trim() === meterId)
-        .filter((row) => cleanToken(String(row.data || row.token || '')) === token)
-        .filter((row) => isStandbyStatus(row.status))
-        .map((row) => Number(row.id ?? row.taskId ?? row.recordId))
-        .filter((id) => Number.isFinite(id) && id > 0);
-    return [...new Set(ids)].map((id) => ({ id }));
-}
-
-function collectTaskIds(value: unknown, target: number[] = []): number[] {
-    if (!value) return target;
-    if (Array.isArray(value)) {
-        for (const item of value) collectTaskIds(item, target);
-        return target;
-    }
-    if (typeof value !== 'object') return target;
-    const record = value as Record<string, unknown>;
-    const id = Number(record.id ?? record.taskId ?? record.taskID ?? record.recordId);
-    if (Number.isFinite(id) && id > 0) target.push(id);
-    collectTaskIds(record.result, target);
-    collectTaskIds(record.data, target);
-    return target;
-}
-
-function collectTaskRows(value: unknown, target: Array<Record<string, unknown>> = []): Array<Record<string, unknown>> {
-    if (!value) return target;
-    if (Array.isArray(value)) {
-        for (const item of value) collectTaskRows(item, target);
-        return target;
-    }
-    if (typeof value !== 'object') return target;
-    const record = value as Record<string, unknown>;
-    if (record.id || record.taskId || record.recordId) target.push(record);
-    collectTaskRows(record.result, target);
-    collectTaskRows(record.data, target);
-    return target;
-}
-
-function isStandbyStatus(value: unknown) {
-    return value === 0 || value === '0' || String(value || '').toLowerCase() === 'standby';
+    return buildCalinmeterStandbyConfirmPayload(response, input.meterId, input.token);
 }
 
 function isAcceptedRemoteConfirm(response: { code?: number; msg?: string; reason?: string }) {

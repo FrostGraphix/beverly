@@ -3,9 +3,31 @@ import capturedCreditToken from '../../../../../contracts/samples/credit-token-g
 import capturedAccounts from '../../../../../contracts/samples/api__account__read.json';
 import capturedNestedAccounts from '../../../../../contracts/samples/account-read.code-msg-data.json';
 import capturedRemoteTasks from '../../../../../contracts/samples/API__RemoteMeterTask__GetTokenTask.json';
-import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
+import { buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, buildCalinmeterStandbyConfirmPayload, buildCalinmeterTaskLookupPayload, buildCalinmeterTaskConfirmPayload, findCalinmeterMeter, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
+    it('preserves task lookup and confirmation payloads', () => {
+        expect(buildCalinmeterTaskLookupPayload('47300481810')).toEqual({
+            lang: 'en',
+            meterId: '47300481810',
+            pageNumber: 1,
+            pageSize: 10,
+            orderBy: 'createDate desc',
+        });
+        expect(buildCalinmeterTaskConfirmPayload({
+            result: { data: [{ id: 8361 }, { id: 8361 }, { taskId: 8362 }] },
+        })).toEqual([{ id: 8361 }, { id: 8362 }]);
+    });
+
+    it('confirms only the matching standby task', () => {
+        expect(buildCalinmeterStandbyConfirmPayload({
+            result: { data: [
+                { id: 8364, meterId: '47300481810', data: '61688642353365376881', status: 0 },
+                { id: 8291, meterId: '47300481810', data: '48811717073300952793', status: 0 },
+            ] },
+        }, '47300481810', '6168 8642 3533 6537 6881')).toEqual([{ id: 8364 }]);
+    });
+
     it('normalizes a captured failed remote task', () => {
         expect(parseCalinmeterTaskRow(capturedRemoteTasks.body.result.data[0], 'fallback')).toEqual({
             taskId: '5609',
