@@ -4,6 +4,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
     vendorUpdate: vi.fn(),
     signOut: vi.fn(),
+    verifyVendorMfaChallenge: vi.fn(),
+    lookupMeter: vi.fn(),
+    assertOemVendAvailable: vi.fn(),
+    VendorMfaError: class VendorMfaError extends Error {
+        constructor(message: string, public code: string) {
+            super(message);
+            this.name = 'VendorMfaError';
+        }
+    },
+    OemQuotaCircuitError: class OemQuotaCircuitError extends Error {
+        constructor(
+            message: string,
+            public code = 'oem_insufficient_quota',
+            public retryAfterSeconds: number,
+        ) {
+            super(message);
+            this.name = 'OemQuotaCircuitError';
+        }
+    },
 }));
 
 const vendor = {
@@ -52,9 +71,17 @@ vi.mock('../../services/vendor-mfa.js', () => ({
     disableVendorMfa: vi.fn(),
     regenerateVendorRecoveryCodes: vi.fn(),
     vendorMfaStatus: vi.fn(),
-    verifyVendorMfaChallenge: vi.fn(),
+    verifyVendorMfaChallenge: mocks.verifyVendorMfaChallenge,
     verifyVendorMfaEnrollment: vi.fn(),
-    VendorMfaError: class VendorMfaError extends Error {},
+    VendorMfaError: mocks.VendorMfaError,
+}));
+vi.mock('../../services/token-engine.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../services/token-engine.js')>()),
+    lookupMeter: mocks.lookupMeter,
+}));
+vi.mock('../../services/oem-quota-circuit.js', () => ({
+    assertOemVendAvailable: mocks.assertOemVendAvailable,
+    OemQuotaCircuitError: mocks.OemQuotaCircuitError,
 }));
 
 import vendorRoutes from '../vendor.js';
@@ -67,6 +94,21 @@ async function createApp() {
     app.decorate('requireAuth', () => async () => undefined);
     app.decorate('requireVendor', () => async () => undefined);
     await app.register(vendorRoutes);
+    return app;
+}
+
+async function createAuthenticatedApp() {
+    const app = await createApp();
+    app.addHook('onRequest', async (request) => {
+        (request as any).actor = {
+            actorId: 'vendor-user-1',
+            userId: 'auth-user-1',
+            type: 'vendor_user',
+            role: 'vendor',
+            email: 'owner@example.test',
+            stationId: 'station-1',
+        };
+    });
     return app;
 }
 
@@ -136,5 +178,75 @@ describe('vendor password login HTTP seam', () => {
         expect(response.statusCode).toBe(503);
         expect(response.json()).toMatchObject({ error: 'session_binding_failed' });
         expect(mocks.signOut).toHaveBeenCalledWith('auth-user-1', 'global');
+    });
+});
+
+describe('vendor MFA challenge HTTP seam', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('returns recovery guidance when the authenticator secret is unreadable', async () => {
+        mocks.verifyVendorMfaChallenge.mockRejectedValue(new mocks.VendorMfaError(
+            'Use a recovery code. Contact Beverly support if none remain.',
+            'mfa_secret_invalid',
+        ));
+        const app = await createAuthenticatedApp();
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/mfa/challenge/verify',
+            headers: { authorization: 'Bearer access-token' },
+            payload: { code: '519980' },
+        });
+        await app.close();
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toEqual({
+            error: 'mfa_secret_invalid',
+            message: 'Use a recovery code. Contact Beverly support if none remain.',
+        });
+    });
+});
+
+describe('vendor quota circuit HTTP seam', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mocks.lookupMeter.mockResolvedValue({
+            meterId: '47005375572',
+            customerId: 'customer-1',
+            customerName: 'Aisha Atairu',
+            stationId: 'station-1',
+            tariffId: 'commercial',
+            oemId: 'calinmeter',
+            liveVerified: true,
+        });
+    });
+
+    it('blocks preview before wallet activity', async () => {
+        mocks.assertOemVendAvailable.mockRejectedValue(new mocks.OemQuotaCircuitError(
+            'OEM vending is paused while quota is restored. No wallet debit occurred.',
+            'oem_insufficient_quota',
+            240,
+        ));
+        const app = await createAuthenticatedApp();
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/vend/preview',
+            payload: { meterId: '47005375572', amountMinor: 100000 },
+        });
+        await app.close();
+
+        expect(response.statusCode).toBe(422);
+        expect(response.json()).toEqual({
+            error: 'oem_insufficient_quota',
+            message: 'OEM vending is paused while quota is restored. No wallet debit occurred.',
+            details: {
+                retryAfterSeconds: 240,
+                noVendAttempted: true,
+                noWalletHoldCreated: true,
+            },
+        });
     });
 });

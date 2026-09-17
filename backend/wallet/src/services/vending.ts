@@ -37,9 +37,20 @@ import {
     ledgerKey,
 } from './idempotency.js';
 import { assertStationVendAllowed, StationVendScopeError } from './station-vend-scope.js';
+import {
+    claimOemVendProbe,
+    clearOemQuotaCircuit,
+    OemQuotaCircuitError,
+    recordOemQuotaFailure,
+} from './oem-quota-circuit.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 
 export class VendingError extends Error {
-    constructor(message: string, public code: string) { super(message); this.name = 'VendingError'; }
+    constructor(
+        message: string,
+        public code: string,
+        public details?: Record<string, unknown>,
+    ) { super(message); this.name = 'VendingError'; }
 }
 
 export interface PurchaseOrder {
@@ -195,6 +206,19 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         throw error;
     }
 
+    try {
+        await claimOemVendProbe(meter.oemId);
+    } catch (error) {
+        if (error instanceof OemQuotaCircuitError) {
+            throw new VendingError(error.message, error.code, {
+                retryAfterSeconds: error.retryAfterSeconds,
+                noVendAttempted: true,
+                noWalletHoldCreated: true,
+            });
+        }
+        throw error;
+    }
+
     const preview = await previewPurchaseWithPolicy(input.amountMinor, meter.tariffId);
     const meterType = meterTypeFromInfo(meter);
 
@@ -268,6 +292,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
                 vendorName: input.vendorOrganizationId,
             });
             token = tokenRes.token;
+            await clearOemQuotaCircuit(meter.oemId);
 
             const ledgerEntry = await captureHold({
                 holdId: hold.id,
@@ -366,6 +391,32 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
             } else {
                 try { await releaseHold(hold.id); } catch { /* noop */ }
                 await markFailed(po.id, e.code ?? 'token_engine_failed', e.message);
+                if (e.code === 'oem_insufficient_quota') {
+                    const publicMessage = 'OEM vending is paused while quota is restored. No wallet debit occurred.';
+                    await recordOemQuotaFailure(meter.oemId, publicMessage);
+                    const oemKey = String(meter.oemId || 'calinmeter').trim().toLowerCase();
+                    const notificationBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+                    const operationsNotified = await notifyOperationalStaff({
+                        permission: 'wallet.vending.monitor',
+                        type: 'oem_quota_low',
+                        title: 'OEM vending quota depleted',
+                        body: `${oemKey} vending is paused. Restore the upstream quota before retrying.`,
+                        path: '/vending',
+                        dedupeKey: `oem.quota.${oemKey}.${notificationBucket}`,
+                        stationId: meter.stationId,
+                        metadata: {
+                            oemId: meter.oemId ?? null,
+                            meterId: meter.meterId,
+                            purchaseOrderId: po.id,
+                            reasonCode: 'oem_insufficient_quota',
+                        },
+                    }).then((count) => count > 0).catch(() => false);
+                    throw new VendingError(publicMessage, e.code, {
+                        retryAfterSeconds: 300,
+                        noWalletDebitOccurred: true,
+                        operationsNotified,
+                    });
+                }
             }
             throw new VendingError(e.message, e.code ?? 'token_engine_failed');
         }
