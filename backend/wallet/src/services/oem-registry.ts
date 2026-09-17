@@ -127,7 +127,7 @@ function buildOemLiveConfig(manufacturer: any, credentials: any): OemLiveConfig 
     };
 }
 
-async function loadOemConfig(oemIdOrSlug: string, stationId?: string | null): Promise<OemLiveConfig | null> {
+async function loadOemConfig(oemIdOrSlug: string): Promise<OemLiveConfig | null> {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(oemIdOrSlug);
     const { data: manufacturer } = await adminClient
         .from('oem_manufacturers')
@@ -135,16 +135,6 @@ async function loadOemConfig(oemIdOrSlug: string, stationId?: string | null): Pr
         .eq(isUuid ? 'id' : 'slug', oemIdOrSlug)
         .maybeSingle();
     if (!manufacturer) return null;
-
-    if (stationId) {
-        const { data: stnCred } = await adminClient
-            .from('oem_credentials')
-            .select('auth_strategy, base_url, encrypted_bearer_token, encrypted_username, encrypted_password, token_endpoint_path, api_key_header_name')
-            .eq('oem_id', manufacturer.id)
-            .eq('station_id', stationId.toUpperCase().trim())
-            .maybeSingle();
-        if (stnCred) return buildOemLiveConfig(manufacturer, stnCred);
-    }
 
     const { data: credentials } = await adminClient
         .from('oem_credentials')
@@ -159,13 +149,13 @@ async function loadOemConfig(oemIdOrSlug: string, stationId?: string | null): Pr
  * Resolves an OEM's live config (base URL, decrypted token, strategy), with an
  * in-process TTL cache. Returns null on any failure — never throws.
  */
-export async function resolveOemConfig(oemIdOrSlug?: string, stationId?: string | null): Promise<OemLiveConfig | null> {
+export async function resolveOemConfig(oemIdOrSlug?: string): Promise<OemLiveConfig | null> {
     if (registryDisabled()) return null;
-    const key = `${cacheKeyFor(oemIdOrSlug)}:${String(stationId || '').trim().toUpperCase()}`;
+    const key = cacheKeyFor(oemIdOrSlug);
     const cached = configCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.config;
     try {
-        const config = await loadOemConfig(oemIdOrSlug || DEFAULT_OEM_SLUG, stationId);
+        const config = await loadOemConfig(oemIdOrSlug || DEFAULT_OEM_SLUG);
         configCache.set(key, { config, expiresAt: Date.now() + CACHE_TTL_MS });
         return config;
     } catch (error) {
