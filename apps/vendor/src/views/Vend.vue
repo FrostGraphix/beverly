@@ -8,6 +8,7 @@ import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api, ApiError, idempotencyHeaders, newIdempotencyKey } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
+import { presentVendorVendFailure } from '../lib/vend-errors';
 
 type Step = 'meter' | 'amount' | 'preview' | 'success';
 
@@ -197,7 +198,8 @@ const vendingConfigurationBlocked = computed(() => [
     'energy_authorization_missing',
     'energy_authorization_misconfigured',
     'energy_authorization_rejected',
-].includes(String(error.value?.code ?? '')));
+].includes(String(error.value?.code ?? ''))
+    || presentVendorVendFailure(error.value?.code).blockConfirmation);
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
 const tokenGroups = computed(() => String(result.value?.token ?? '').trim().split(/\s+/).filter(Boolean));
 const showReceiptNotice = computed(() => Boolean(notice.value && notice.value.title !== 'Token generated successfully'));
@@ -275,10 +277,20 @@ function describeApiError(e: unknown, fallback: string) {
             };
         }
         if (e.code === 'oem_insufficient_quota') {
+            const presentation = presentVendorVendFailure(e.code, e.details);
             return {
                 title: 'OEM Vending Quota Low',
                 message: e.message,
-                action: 'No wallet debit occurred on your Beverly account. Contact Beverly administrator to top up OEM station quota.',
+                action: presentation.action,
+                code: e.code,
+            };
+        }
+        if (e.code === 'oem_quota_circuit_unavailable') {
+            const presentation = presentVendorVendFailure(e.code, e.details);
+            return {
+                title: 'Vending safety check unavailable',
+                message: e.message,
+                action: presentation.action,
                 code: e.code,
             };
         }
@@ -531,11 +543,14 @@ async function submitAuthorization() {
         error.value = errDetails;
         authOpen.value = false;
         authorization.value = '';
-        showResultPopup(
-            'danger',
-            errDetails.title || 'Vend Failed',
-            `${errDetails.message}${errDetails.action ? ' ' + errDetails.action : ''}`,
-        );
+        const presentation = presentVendorVendFailure(errDetails.code, e instanceof ApiError ? e.details : undefined);
+        if (presentation.showPopup) {
+            showResultPopup(
+                'danger',
+                errDetails.title || 'Vend Failed',
+                `${errDetails.message}${errDetails.action ? ' ' + errDetails.action : ''}`,
+            );
+        }
     } finally {
         loading.value = false;
     }
