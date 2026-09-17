@@ -42,6 +42,7 @@ const {
   deleteMeterRecord
 } = require("../backend/src/services/storage-adapter");
 const oemRegistry = require("../backend/src/services/oem-registry-service");
+const meterRelocationService = require("../backend/src/services/meter-relocation-service");
 
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
@@ -3168,8 +3169,66 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
   }
+
   // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
   const methodUpper = (request.method || "GET").toUpperCase();
+
+  // ── Meter Relocation / Station Transfer Pipeline ───────────────────────────
+  if (pathname === "/api/local/meters/relocate" && methodUpper === "POST") {
+    try {
+      const payload = requestData.parsedBody || {};
+      const meters = payload.meters || (Array.isArray(payload) ? payload : [payload]);
+      const options = payload.options || {};
+      const requestedOemId = oemRegistry.requestedOemId(request);
+      const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+      const result = await meterRelocationService.relocateMeterBatch(meters, { ...options, oemId: requestedOemId, oemConfig });
+      return {
+        status: result.success ? 200 : (result.succeeded > 0 ? 207 : 400),
+        body: {
+          code: result.success ? 0 : (result.succeeded > 0 ? 207 : 400),
+          msg: result.success ? "Meter relocation completed successfully" : `${result.succeeded} of ${result.total} meters relocated successfully`,
+          reason: result.success ? "success" : `${result.succeeded} of ${result.total} meters relocated successfully`,
+          result,
+          data: result,
+          _proxy: { source: "local", pathname: "/api/local/meters/relocate" }
+        }
+      };
+    } catch (err) {
+      return { status: 500, body: { code: 500, msg: String(err?.message || err), error: String(err?.message || err) } };
+    }
+  }
+
+  // Intercept standard meter update if stationId is altered
+  if (/^\/api\/meter\/(?:update|modify)$/i.test(pathname) && methodUpper === "POST") {
+    const payload = requestData.parsedBody;
+    const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
+    if (rows.length && rows.some(r => r && r.stationId && r.meterId)) {
+      try {
+        const requestedOemId = oemRegistry.requestedOemId(request);
+        const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+        const result = await meterRelocationService.relocateMeterBatch(rows, { oemId: requestedOemId, oemConfig });
+        if (result.success || result.succeeded > 0) {
+          return {
+            status: 200,
+            body: {
+              code: 0,
+              reason: "success",
+              msg: "success",
+              result: result.results.map(r => ({
+                meterId: r.meterId,
+                stationId: r.toStation || r.stationId,
+                status: r.ok,
+                remark: r.remark
+              })),
+              _proxy: { source: "local-relocation-orchestration", pathname }
+            }
+          };
+        }
+      } catch (relocateErr) {
+        console.warn('[meter-update-relocate-fallback]', relocateErr.message);
+      }
+    }
+  }
 
   function adminQueryParams(url) {
     try { return new URL(String(url || "/"), "http://localhost").searchParams; } catch { return new URLSearchParams(); }

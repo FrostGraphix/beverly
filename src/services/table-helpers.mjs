@@ -3,7 +3,7 @@ export const pageSizeOptions = [10, 20, 50, 100];
 export function isBatchCheckableRoute(route = {}) {
   // Manifest override wins; legacy hash check is the fallback (zero regression).
   if (typeof route.batchCheckable === "boolean") return route.batchCheckable;
-  return String(route.hash || "").includes("remote-operation/remote-meter-reading");
+  return String(route.hash || "").includes("remote-operation/remote-meter-reading") || String(route.hash || "").includes("admin/meter");
 }
 
 export function columnKey(label) {
@@ -301,6 +301,8 @@ export function rowActionButtons(route) {
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("clear-tamper-token-record")) buttons.push("Cancel");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("set-maximum-power-limit-token-record")) buttons.push("Cancel");
   if (route.actions.includes("Edit")) buttons.push("Edit");
+  if (route.actions.includes("Move Station")) buttons.push("Move Station");
+  if (route.actions.includes("Relocate")) buttons.push("Relocate");
   if (route.actions.includes("Delete")) buttons.push("Delete");
   if (route.actions.includes("Add Task") && Array.isArray(route.columns) && route.columns.includes("Actions")) buttons.push("Add Task");
   if (!buttons.length && route.actions.includes("Close")) buttons.push("Close");
