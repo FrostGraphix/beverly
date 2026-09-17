@@ -49,6 +49,14 @@
       @close="$emit('close')"
       @done="$emit('done', $event)"
     />
+    <MeterRelocateWizard
+      v-else-if="isMeterRelocateFlow"
+      :route="route"
+      :row="row"
+      :rows="rows"
+      @close="$emit('close')"
+      @done="$emit('done', $event)"
+    />
     <ActionModalGeneric
       v-else
       :action="action"
@@ -68,12 +76,14 @@ import ActionModalSopFlow from "./ActionModalSopFlow.vue";
 import ActionModalRemoteTask from "./ActionModalRemoteTask.vue";
 import ActionModalPrint from "./ActionModalPrint.vue";
 import ActionModalGeneric from "./ActionModalGeneric.vue";
+import MeterRelocateWizard from "./MeterRelocateWizard.vue";
 import { isTokenGenerateAction } from "../services/token-flow.mjs";
 import { isRemoteTaskAction } from "../services/remote-task-flow.mjs";
+import { isMeterRelocateAction } from "../services/meter-relocation-flow.mjs";
 
 export default {
   name: "ActionModal",
-  components: { RechargeWizard, GenerateTokenWizard, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric },
+  components: { RechargeWizard, GenerateTokenWizard, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric, MeterRelocateWizard },
   props: {
     action: { type: String, required: true },
     route: { type: Object, required: true },
@@ -88,7 +98,8 @@ export default {
       const h = this.route?.hash || "";
       return (h.includes("admin/user") || h.includes("admin/role")) && (this.action === "Add" || this.action === "Edit");
     },
-    isRemoteTaskFlow() { return isRemoteTaskAction(this.route, this.action); }
+    isRemoteTaskFlow() { return isRemoteTaskAction(this.route, this.action); },
+    isMeterRelocateFlow() { return isMeterRelocateAction(this.route, this.action); }
   }
 };
 </script>
