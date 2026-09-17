@@ -1801,6 +1801,20 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The synthetic station regression freezes existing code behavior only. No captured Calinmeter station response exists, so station conformance remains uncertified and explicitly blocked.
 - The full wallet suite passed locally: 64 files and 447 tests. Wallet compilation passed.
 - Phase 2 code extraction is locally complete. Final Phase 2 certification requires a captured, authorized Calinmeter station response.
+
+### 23.19 Supabase restore-drill checkpoint (2026-09-17)
+
+- The dedicated restore target is Supabase project `ndyewlelxgwkamqiphga`. Production activation and production routing remain unchanged.
+- PostgreSQL 17 tooling created separate application-schema, public-data, managed-data, and storage-content backups outside the repository. The combined `public` and `private` schema archive SHA-256 is `98B51E30DBF24D3C0BDAD946FCFF2C67479E3FFB2E5B90EE35C4A2BD8A02E9A6`.
+- The restore rebuilt `public` through pre-data, data, and post-data sections. Large `operational_snapshots` rows were restored through byte-bounded COPY batches after the nano target exhausted long COPY sessions. The table contains all 2,827 rows recorded by the backup.
+- Auth restoration retains 35 users. The ordered auth-user identifier signature matches the source exactly. Storage retains 10 buckets and the 216 objects captured by the refreshed storage snapshot. The live source added one later object; that post-snapshot drift was not copied into the point-in-time restore.
+- Source and restore schema inventories match exactly: 152 public tables, 9 views, 3 materialized views, 88 functions, 503 indexes, 529 constraints, 59 non-internal triggers, 337 policies, and 4 sequences.
+- Constraint and security states match exactly: 3 intentionally unvalidated constraints, zero invalid indexes, row-level security on all 152 public tables, and forced row-level security on 133 tables.
+- All 152 public tables restored. Against the later live source, 129 row counts still match and 23 differ because writes, retention, aggregation, and snapshot cleanup continued after backup creation. Those differences are recorded as expected temporal drift, not silently treated as restore loss.
+- Restore-only TOAST storage changes used during the large snapshot load were reverted to the source `extended` setting. The temporary restore-role timeout override was returned to two minutes.
+- The three expand-only OEM migrations applied transactionally on the restored target. Remote validation found all 15 new tables, forced RLS on every new table, all 13 nullable operational links, zero seeded tenant, installation, command, or outbox rows, and zero `anon` or `authenticated` mutation grants on representative control and command tables.
+- A reverse-order rollback drill removed the command foundation, operational links, and control plane only after proving the new tables were empty. It preserved 2,827 operational snapshots, 35 auth users, and 216 snapshot-time storage objects. The three migrations were then reapplied; the final target again contains all 15 forced-RLS tables and all 13 nullable links.
+- The drill proves logical backup restoration on the dedicated target. It does not certify production activation, current-source zero-drift replication, Node 22, remote CI, preview smoke, staging write guards, Calinmeter station fixtures, or a real second-OEM sandbox.
 - Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
 
 ### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
