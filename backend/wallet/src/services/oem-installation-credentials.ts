@@ -110,6 +110,9 @@ export async function loadInstallationCredentials(
     if (row.oemInstallationId !== installation.id) {
         throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Credential installation mismatch');
     }
+    if (row.encryptionKeyVersion !== 1) {
+        throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Encryption key version is unsupported');
+    }
     if (row.authStrategy !== 'api_key_header') {
         throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Credential strategy is unsupported');
     }

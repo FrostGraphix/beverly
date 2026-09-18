@@ -4,6 +4,21 @@ import { resolveAuthorizedInstallation, type InstallationStore } from '../oem-in
 const tenantId = '21a935d4-1a02-4bb2-999a-02914f025f48';
 
 describe('OEM installation resolution', () => {
+    it('returns one active in-scope installation', async () => {
+        const candidate = { id: '1494dc89-c52d-4757-9354-75bde004dc04', tenantId, status: 'active' };
+        const store: InstallationStore = {
+            async findCandidates() {
+                return [candidate];
+            },
+        };
+
+        await expect(resolveAuthorizedInstallation({
+            tenantId,
+            allowedInstallationIds: [candidate.id],
+            installationId: candidate.id,
+        }, store)).resolves.toEqual(candidate);
+    });
+
     it('rejects an ambiguous external resource', async () => {
         const store: InstallationStore = {
             async findCandidates() {
@@ -37,5 +52,53 @@ describe('OEM installation resolution', () => {
             allowedInstallationIds: [],
             installationId: '1494dc89-c52d-4757-9354-75bde004dc04',
         }, store)).rejects.toMatchObject({ code: 'OEM_TENANT_FORBIDDEN' });
+    });
+
+    it('rejects an installation belonging to another tenant', async () => {
+        const installationId = '1494dc89-c52d-4757-9354-75bde004dc04';
+        const store: InstallationStore = {
+            async findCandidates() {
+                return [{
+                    id: installationId,
+                    tenantId: '11111111-1111-4111-8111-111111111111',
+                    status: 'active',
+                }];
+            },
+        };
+
+        await expect(resolveAuthorizedInstallation({
+            tenantId,
+            allowedInstallationIds: [installationId],
+            installationId,
+        }, store)).rejects.toMatchObject({ code: 'OEM_TENANT_FORBIDDEN' });
+    });
+
+    it('rejects inactive installations', async () => {
+        const installationId = '1494dc89-c52d-4757-9354-75bde004dc04';
+        const store: InstallationStore = {
+            async findCandidates() {
+                return [{ id: installationId, tenantId, status: 'draft' }];
+            },
+        };
+
+        await expect(resolveAuthorizedInstallation({
+            tenantId,
+            allowedInstallationIds: [installationId],
+            installationId,
+        }, store)).rejects.toMatchObject({ code: 'OEM_INSTALLATION_INACTIVE' });
+    });
+
+    it('rejects missing installations', async () => {
+        const store: InstallationStore = {
+            async findCandidates() {
+                return [];
+            },
+        };
+
+        await expect(resolveAuthorizedInstallation({
+            tenantId,
+            allowedInstallationIds: ['1494dc89-c52d-4757-9354-75bde004dc04'],
+            installationId: '1494dc89-c52d-4757-9354-75bde004dc04',
+        }, store)).rejects.toMatchObject({ code: 'OEM_INSTALLATION_MISSING' });
     });
 });

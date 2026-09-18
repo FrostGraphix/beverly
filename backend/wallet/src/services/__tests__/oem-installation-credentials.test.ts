@@ -114,4 +114,25 @@ describe('OEM installation credential loading', () => {
         await expect(loadInstallationCredentials(installation, store))
             .rejects.toThrow(`${missingField} is required`);
     });
+
+    it('rejects unsupported encryption key versions', async () => {
+        const store: InstallationCredentialStore = {
+            async findByInstallationId() {
+                return {
+                    oemInstallationId: installation.id,
+                    authStrategy: 'api_key_header',
+                    encryptedSecretBundle: encryptSecret(JSON.stringify({
+                        apiKey: 'sandbox-api-key',
+                        headerName: 'X-API-Key',
+                    })),
+                    encryptionKeyVersion: 2,
+                    tokenEndpoint: null,
+                    tokenExpiryPolicy: {},
+                };
+            },
+        };
+
+        await expect(loadInstallationCredentials(installation, store))
+            .rejects.toMatchObject({ code: 'OEM_CREDENTIALS_UNSUPPORTED' });
+    });
 });
