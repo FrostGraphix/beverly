@@ -1830,3 +1830,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Two red-green slices first failed, then passed. Existing token-engine tests passed all 21 cases. Wallet TypeScript compilation passed.
 - Network execution, polling cadence, error classification, accepted no-change response, and durable command reconciliation remain outside the adapter. No live request behavior changed.
 - Full wallet regression passed: 63 files, 443 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, preview, staging, restore, and OEM sandbox gates remain outstanding.
+
+### 23.20 SparkMeter credential and inventory checkpoint (2026-09-18)
+
+- The local ignored environment now owns the SparkMeter API base URL, API key, confirmed portfolio identifier, and sandbox environment selection. The unresolved API organization identifier remains blank rather than inferred.
+- A red contract exposed three tracked plaintext credential copies. The admin console, wallet development route, and SparkMeter knowledge base no longer contain that credential. The server reports only whether configuration exists.
+- The focused credential contract passed. The wallet build and complete root build passed. No package was installed and no production activation changed.
+- The confirmed portfolio identifier is `64bfd8cd-d361-4368-98c9-c0ea3730559d`. Existing evidence also contains `c4c3e809-5487-43cf-be64-2826dbbb4f6d`, but conflicts over whether it identifies an API organization. It is not accepted as authority.
+- SparkMeter's current application exposes authenticated service-area and site routes. The API-key-only probes did not authorize them. The visible SparkMeter session currently requires interactive account login.
+- Complete service-area and meter-ownership listings remain blocked on that authenticated session. No service area, site, meter, customer, installation, or ownership relationship will be invented.

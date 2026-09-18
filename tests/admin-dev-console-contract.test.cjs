@@ -16,6 +16,8 @@ const bootstrap = read("tools/ensure-dev-console-user.mjs");
 const serviceHealthView = read("apps/admin/src/views/DevServiceHealth.vue");
 const queueMonitorView = read("apps/admin/src/views/DevQueueMonitor.vue");
 const schemaExplorerView = read("apps/admin/src/views/DevSchemaExplorer.vue");
+const oemConsoleView = read("apps/admin/src/views/DevOemConsole.vue");
+const adminDevRoutes = read("backend/wallet/src/routes/admin-dev.ts");
 const pkg = JSON.parse(read("package.json"));
 
 const routeContracts = [
@@ -126,5 +128,8 @@ assert.match(bootstrap, /DEV_CONSOLE_PASSWORD/);
 assert.match(bootstrap, /route_hash', 'dev\.console'/);
 assert.match(pkg.scripts["dev-console:user"], /ensure-dev-console-user\.mjs/);
 assert.match(pkg.scripts["test:wallet"], /admin-dev-console-contract\.test\.cjs/);
+assert.match(oemConsoleView, /oem\.slug === 'sparkmeter'[\s\S]*?bearerToken: ''/);
+assert.doesNotMatch(adminDevRoutes, /apiKey:\s*['"][^'"]+['"]/);
+assert.match(adminDevRoutes, /credentialsConfigured:\s*Boolean\(process\.env\.SPARKMETER_API_KEY\)/);
 
 console.log("admin dev console contract passed");

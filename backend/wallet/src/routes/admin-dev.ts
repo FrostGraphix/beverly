@@ -292,7 +292,7 @@ const adminDevRoutes: FastifyPluginAsync = async (fastify) => {
                     baseUrl: 'https://www.sparkmeter.cloud',
                     authStrategy: 'api_key_header',
                     apiKeyHeaderName: 'X-Sparkmeter-Key',
-                    apiKey: 'FrsRkX0kFJlClx30TuY7P6iUkrRr4m34oHG55cdG1QE',
+                    credentialsConfigured: Boolean(process.env.SPARKMETER_API_KEY),
                     userLoginEmail: 'Acobminigrid@gmail.com',
                 },
             },

@@ -16,7 +16,7 @@ The following credentials, IDs, and endpoints represent the authoritative infras
 | **Project Remote ID** | `655ace31-6683-4521-b8ed-fcb7b32b287c` | SparkMeter Koios Project Remote ID |
 | **Portfolio URL** | `https://www.sparkmeter.cloud/portfolio/64bfd8cd-d361-4368-98c9-c0ea3730559d/` | Primary Operator Web Console |
 | **Active Service Area ID** | `a6230885-e9d5-4882-9b31-58d889cf3f51` | Target Service Area Container |
-| **API Key** | `FrsRkX0kFJlClx30TuY7P6iUkrRr4m34oHG55cdG1QE` | SparkMeter Koios API v1 / v2 Key |
+| **API Key** | `[REDACTED: SPARKMETER_API_KEY]` | SparkMeter Koios API v1 / v2 Key |
 | **API Secret** | `b72c9d25c96cb338f3e7657f36a31f0d6ae10ebb8e14...` | HMAC / Basic Auth API Secret |
 | **User Login Email** | `Acobminigrid@gmail.com` | Operator Administrative User |
 | **Supabase Database** | `qpoipyqgrjsjdvfqmxok.supabase.co` | Production Beverly PostgreSQL DB |
