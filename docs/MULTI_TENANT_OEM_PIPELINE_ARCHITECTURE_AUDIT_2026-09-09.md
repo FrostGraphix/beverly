@@ -1850,3 +1850,11 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The V1 document declares `https://cloud.sparkmeter.io/api/v1/`. That host did not resolve during verification. The authenticated ACOB deployment uses `https://www.sparkmeter.cloud` and different `/sm/organizations/...` routes.
 - EarthSpark's current Thundercloud repository is explicitly a developer preview that forbids live production metering or billing. It cannot certify the managed legacy platform's production write contract.
 - These are genuine official documents, but they do not establish current managed-platform idempotency, payment settlement, reversal, retry, webhook, compatibility, or support guarantees. Current production-write certification still requires EarthSpark support confirmation.
+
+### 23.22 Immediate evidence resolution checkpoint (2026-09-18)
+
+- The owner approved explicit configured-customer mappings as authoritative over SparkMeter's available-meter classification. The two OTU-COSTAIN overlaps are excluded from the unassigned set, leaving 3,072 configured owners, 1,365 corrected unassigned meters, and zero remaining assigned/unassigned overlaps.
+- The 39-row aggregate customer difference remains a counter reconciliation issue because SparkMeter returns no corresponding customer records. It is not imported, converted into invented identities, or treated as ownership evidence.
+- Existing server-held Calinmeter credentials produced an authorized, read-only `POST /api/station/read` response with HTTP 200 and 11 rows. The exact private response SHA-256 is `E9A5BEAC6FA5C930FFD149B84DEAB3D9931EDD1E6759F22508104C91CBBD10ED`.
+- A red-green adapter test now consumes a structurally faithful redacted capture. It confirms the live envelope, excludes the ADMIN pseudo-station, normalizes 10 operational stations, and preserves stable name sorting. All 12 focused adapter tests pass.
+- Phase 2 station-response evidence is now complete locally. Current managed SparkMeter write specifications remain the immediate external documentation blocker.

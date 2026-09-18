@@ -3,6 +3,7 @@ import capturedCreditToken from '../../../../../contracts/samples/credit-token-g
 import capturedAccounts from '../../../../../contracts/samples/api__account__read.json';
 import capturedNestedAccounts from '../../../../../contracts/samples/account-read.code-msg-data.json';
 import capturedRemoteTasks from '../../../../../contracts/samples/API__RemoteMeterTask__GetTokenTask.json';
+import capturedStations from '../../../../../contracts/samples/station-read.captured-redacted.json';
 import { buildCalinmeterBearerHeader, buildCalinmeterCreditTokenPayload, buildCalinmeterRemoteTokenPayload, buildCalinmeterStandbyConfirmPayload, buildCalinmeterTaskLookupPayload, buildCalinmeterTaskConfirmPayload, findCalinmeterMeter, normalizeCalinmeterStations, parseCalinmeterCreditTokenResponse, parseCalinmeterTaskRow } from '../calinmeter-v1.js';
 
 describe('Calinmeter v1 adapter wire contract', () => {
@@ -45,6 +46,21 @@ describe('Calinmeter v1 adapter wire contract', () => {
                 status: 'active',
             },
         ]);
+    });
+
+    it('normalizes the authorized station capture', () => {
+        const stations = normalizeCalinmeterStations(capturedStations, {
+            oemId: '1494dc89-c52d-4757-9354-75bde004dc04',
+            oemSlug: 'calinmeter',
+            oemName: 'Calinmeter',
+        });
+
+        expect(capturedStations.result.total).toBe(11);
+        expect(stations).toHaveLength(10);
+        expect(stations.every((station) => station.stationId !== 'ADMIN')).toBe(true);
+        expect(stations.map((station) => station.name)).toEqual(
+            [...stations.map((station) => station.name)].sort((left, right) => left.localeCompare(right)),
+        );
     });
 
     it('preserves task lookup and confirmation payloads', () => {
