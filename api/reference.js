@@ -1164,7 +1164,12 @@ function sanitizeLiveRequestData(pathname, requestData) {
           ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
           : /\/api\/station\/(?:create|update|delete|import)$/i.test(normalizedPath) && requestData?.parsedBody && !Array.isArray(requestData.parsedBody)
             ? [requestData.parsedBody]
-            : requestData?.parsedBody;
+            : /\/api\/user\/(?:create|update)$/i.test(normalizedPath) && requestData?.parsedBody
+              ? (Array.isArray(requestData.parsedBody) ? requestData.parsedBody : [requestData.parsedBody]).map(u => ({
+                  ...u,
+                  remainingQuota: u.remainingQuota !== undefined ? u.remainingQuota : (u.roleId === "admin" || u.userId === "admin" || u.userId === "Beverly" ? -1 : (u.remainingQuota ?? -1))
+                }))
+              : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {

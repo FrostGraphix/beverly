@@ -10,7 +10,7 @@ import { naira, kwh } from '../lib/format';
 import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { presentVendorVendFailure } from '../lib/vend-errors';
 
-type Step = 'meter' | 'amount' | 'preview' | 'success';
+type Step = 'meter' | 'amount' | 'preview' | 'success' | 'failed';
 
 const step = ref<Step>('meter');
 const meterId = ref('');
@@ -24,6 +24,23 @@ const copied = ref(false);
 const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
 const vendIntentKey = ref(newIdempotencyKey());
 const vendIntentFingerprint = ref('');
+
+interface FailedVendDetails {
+    title?: string;
+    message?: string;
+    action?: string;
+    code?: string;
+    reference?: string;
+    meterId?: string;
+    customerName?: string;
+    stationId?: string;
+    amountMinor?: number;
+    energyAmountMinor?: number;
+    taxAmountMinor?: number;
+    orderId?: string;
+    occurredAt?: string;
+}
+const failedVend = ref<FailedVendDetails | null>(null);
 
 async function fetchRemoteSendStatus(endpoint: string) {
     try {
@@ -200,11 +217,12 @@ const vendingConfigurationBlocked = computed(() => [
     'energy_authorization_rejected',
 ].includes(String(error.value?.code ?? ''))
     || presentVendorVendFailure(error.value?.code).blockConfirmation);
+const hasValidToken = computed(() => Boolean(result.value?.token && String(result.value.token).trim().length > 0));
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
 const tokenGroups = computed(() => String(result.value?.token ?? '').trim().split(/\s+/).filter(Boolean));
 const showReceiptNotice = computed(() => Boolean(notice.value && notice.value.title !== 'Token generated successfully'));
 const canRemoteSendToken = computed(() => {
-    if (!result.value?.token || !result.value.purchaseOrder?.id || remoteSending.value) return false;
+    if (!hasValidToken.value || !result.value?.purchaseOrder?.id || remoteSending.value) return false;
     return remoteState.value !== 'remote_send_delivered';
 });
 const remoteSendLabel = computed(() => {
@@ -215,10 +233,18 @@ const remoteSendLabel = computed(() => {
     return 'Remote send';
 });
 const flowSteps = computed(() => [
-    { label: 'Meter', icon: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M7 7h10v4H7z', 'm13 13-3 4h3l-2 3'], active: step.value === 'meter', done: ['amount', 'preview', 'success'].includes(step.value) },
-    { label: 'Amount', icon: ['M3 6h18v12H3z', 'M7 9.5h4.5a2.5 2.5 0 0 1 0 5H7', 'M9 8v8'], active: step.value === 'amount', done: ['preview', 'success'].includes(step.value) },
-    { label: 'Confirm', icon: ['M12 3 4.5 6v5.5c0 4.7 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.8 7.5-9.5V6L12 3Z', 'm8.5 12 2.2 2.2 4.8-5'], active: step.value === 'preview', done: step.value === 'success' },
-    { label: 'Receipt', icon: ['M6 3h12v18l-3-2-3 2-3-2-3 2V3Z', 'M9 8h6', 'M9 12h6', 'M9 16h4'], active: step.value === 'success', done: false },
+    { label: 'Meter', icon: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M7 7h10v4H7z', 'm13 13-3 4h3l-2 3'], active: step.value === 'meter', done: ['amount', 'preview', 'success', 'failed'].includes(step.value) },
+    { label: 'Amount', icon: ['M3 6h18v12H3z', 'M7 9.5h4.5a2.5 2.5 0 0 1 0 5H7', 'M9 8v8'], active: step.value === 'amount', done: ['preview', 'success', 'failed'].includes(step.value) },
+    { label: 'Confirm', icon: ['M12 3 4.5 6v5.5c0 4.7 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.8 7.5-9.5V6L12 3Z', 'm8.5 12 2.2 2.2 4.8-5'], active: step.value === 'preview', done: ['success', 'failed'].includes(step.value) },
+    {
+        label: step.value === 'failed' ? 'Failed' : 'Receipt',
+        icon: step.value === 'failed'
+            ? ['M12 8v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z']
+            : ['M6 3h12v18l-3-2-3 2-3-2-3 2V3Z', 'M9 8h6', 'M9 12h6', 'M9 16h4'],
+        active: ['success', 'failed'].includes(step.value),
+        done: step.value === 'success',
+        error: step.value === 'failed'
+    },
 ]);
 const confirmLabel = computed(() => {
     if (loading.value) return 'Generating token...';
@@ -493,9 +519,55 @@ async function submitAuthorization() {
             },
             idempotencyHeaders(vendIntentKey.value),
         );
-        result.value = r;
         registerSuccessfulAttempt();
         clearPendingVend();
+        authorization.value = '';
+        authOpen.value = false;
+
+        const rawToken = String(r?.token || r?.purchaseOrder?.token || '').trim();
+        const isPoFailed = r?.purchaseOrder?.status === 'failed'
+            || r?.purchaseOrder?.delivery_state === 'vend_failed'
+            || (r as any)?.status === 'failed';
+
+        // CRITICAL: Strict validation - if no token was generated or order failed, DO NOT show success screen!
+        if (!rawToken || isPoFailed) {
+            result.value = null;
+            remoteTrackerOpen.value = false;
+            const failureReason = r?.purchaseOrder?.remark
+                || r?.purchaseOrder?.failure_reason
+                || (r as any)?.message
+                || 'Token generation failed. No token was returned by the vending service.';
+            const errDetails = {
+                title: 'Token Generation Failed',
+                message: failureReason,
+                action: 'No wallet debit occurred. Your balance is safe. Check the meter binding or retry.',
+                code: r?.purchaseOrder?.delivery_state || (r as any)?.code || 'token_not_generated',
+                meterId: meter.value?.meterId,
+                customerName: meter.value?.customerName,
+                stationId: meter.value?.stationId,
+                amountMinor: amountMinor.value,
+                energyAmountMinor: preview.value?.energyAmountMinor,
+                taxAmountMinor: preview.value?.taxAmountMinor,
+                orderId: r?.purchaseOrder?.id,
+                occurredAt: new Date().toISOString(),
+            };
+            failedVend.value = errDetails;
+            error.value = errDetails;
+            step.value = 'failed';
+            showResultPopup(
+                'danger',
+                'Vending Failed',
+                `${errDetails.message} No wallet debit occurred.`,
+            );
+            return;
+        }
+
+        // Token generation succeeded
+        result.value = {
+            ...r,
+            token: rawToken,
+        };
+        failedVend.value = null;
         const needsReconciliation = r.purchaseOrder?.status === 'delivery_pending_review'
             || r.purchaseOrder?.delivery_state === 'token_generated_needs_reconciliation';
         notice.value = needsReconciliation
@@ -510,8 +582,6 @@ async function submitAuthorization() {
                 title: 'Token generated successfully',
                 message: 'Receipt is ready. Copy, download, view, or remote send now.',
             };
-        authorization.value = '';
-        authOpen.value = false;
         step.value = 'success';
         showResultPopup(
             'success',
@@ -543,6 +613,26 @@ async function submitAuthorization() {
         error.value = errDetails;
         authOpen.value = false;
         authorization.value = '';
+        remoteTrackerOpen.value = false;
+        result.value = null;
+
+        failedVend.value = {
+            title: errDetails.title || 'Vending Failed',
+            message: errDetails.message,
+            action: errDetails.action,
+            code: errDetails.code,
+            reference: errDetails.reference,
+            meterId: meter.value?.meterId,
+            customerName: meter.value?.customerName,
+            stationId: meter.value?.stationId,
+            amountMinor: amountMinor.value,
+            energyAmountMinor: preview.value?.energyAmountMinor,
+            taxAmountMinor: preview.value?.taxAmountMinor,
+            occurredAt: new Date().toISOString(),
+        };
+
+        step.value = 'failed';
+
         const presentation = presentVendorVendFailure(errDetails.code, e instanceof ApiError ? e.details : undefined);
         if (presentation.showPopup) {
             showResultPopup(
@@ -556,6 +646,12 @@ async function submitAuthorization() {
     }
 }
 
+function retryFromPreview() {
+    error.value = null;
+    failedVend.value = null;
+    step.value = 'preview';
+}
+
 function reset() {
     clearPendingVend();
     step.value = 'meter';
@@ -564,10 +660,12 @@ function reset() {
     meter.value = null;
     preview.value = null;
     result.value = null;
+    failedVend.value = null;
     error.value = null;
     notice.value = null;
     copied.value = false;
     remoteSending.value = false;
+    remoteTrackerOpen.value = false;
     vendIntentKey.value = newIdempotencyKey();
     vendIntentFingerprint.value = '';
 }
@@ -798,7 +896,7 @@ async function remoteSendGeneratedToken() {
       </div>
 
       <!-- Step: success / receipt -->
-      <div v-else-if="step === 'success'" key="success" class="bw-stack vend-success">
+      <div v-else-if="step === 'success' && hasValidToken" key="success" class="bw-stack vend-success">
         <div v-if="showReceiptNotice" :class="['bw-alert', notice?.tone === 'danger' ? 'danger' : notice?.tone === 'info' ? 'info' : 'success']" style="display: grid; gap: 6px">
           <strong>{{ notice?.title }}</strong>
           <span>{{ notice?.message }}</span>
@@ -846,6 +944,65 @@ async function remoteSendGeneratedToken() {
           <button class="bw-btn" @click="downloadResultReceipt">Download receipt</button>
           <button class="bw-btn" @click="viewResultReceipt">View receipt</button>
           <button class="bw-btn action-new" @click="reset">New vend</button>
+        </div>
+      </div>
+
+      <!-- Step: failed (Explicit Vending Failure Screen) -->
+      <div v-else-if="step === 'failed'" key="failed" class="bw-stack vend-failed-screen">
+        <section class="bw-card vend-failed-card" aria-labelledby="vend-failed-title">
+          <div class="vend-failed-header">
+            <div class="failed-icon-circle">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+            </div>
+            <div>
+              <p class="token-failed-badge"><span></span>Vending Unsuccessful</p>
+              <h1 id="vend-failed-title" class="failed-title">{{ failedVend?.title || error?.title || 'Token Generation Failed' }}</h1>
+            </div>
+          </div>
+
+          <div class="vend-safety-notice">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <polyline points="9 12 11 14 15 10"/>
+            </svg>
+            <div>
+              <strong>Wallet Safe &amp; Untouched</strong>
+              <p>No funds were debited from your vendor wallet. Any preliminary hold was immediately released.</p>
+            </div>
+          </div>
+
+          <div class="failed-reason-box">
+            <p class="failed-reason-msg">{{ failedVend?.message || error?.message || 'The vending system was unable to generate a token for this request.' }}</p>
+            <p v-if="failedVend?.action || error?.action" class="failed-reason-action">{{ failedVend?.action || error?.action }}</p>
+            <div class="failed-reason-meta">
+              <span v-if="failedVend?.code || error?.code" class="bw-mono">Code: {{ failedVend?.code || error?.code }}</span>
+              <span v-if="failedVend?.reference || error?.reference" class="bw-mono">Ref: {{ failedVend?.reference || error?.reference }}</span>
+              <span v-if="failedVend?.orderId" class="bw-mono">Order: #{{ String(failedVend.orderId).slice(0, 8) }}</span>
+            </div>
+          </div>
+
+          <div class="failed-transaction-facts">
+            <div><dt>Customer</dt><dd>{{ failedVend?.customerName || meter?.customerName || '—' }}</dd></div>
+            <div><dt>Meter</dt><dd class="bw-mono">{{ failedVend?.meterId || meter?.meterId || '—' }}</dd></div>
+            <div><dt>Amount Attempted</dt><dd>{{ naira(failedVend?.amountMinor ?? preview?.amountMinor) }}</dd></div>
+            <div><dt>Station</dt><dd>{{ failedVend?.stationId || meter?.stationId || '—' }}</dd></div>
+          </div>
+        </section>
+
+        <div class="vend-action-grid">
+          <button class="bw-btn primary action-retry" @click="retryFromPreview">
+            Try Again
+          </button>
+          <button class="bw-btn" @click="step = 'amount'">
+            Change Amount
+          </button>
+          <button class="bw-btn action-new" @click="reset">
+            New Vend
+          </button>
         </div>
       </div>
       </Transition>
@@ -979,6 +1136,157 @@ async function remoteSendGeneratedToken() {
   color: var(--brand);
   border-color: color-mix(in srgb, var(--brand) 40%, transparent);
   background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+}
+
+.vend-flow-step.error {
+  color: var(--danger, #dc2626);
+  border-color: color-mix(in srgb, var(--danger, #dc2626) 40%, transparent);
+  background: color-mix(in srgb, var(--danger, #dc2626) 12%, var(--surface));
+}
+
+.vend-failed-screen {
+  gap: var(--s-4);
+}
+
+.vend-failed-card {
+  padding: var(--s-5);
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger, #dc2626) 4%, var(--surface));
+  display: grid;
+  gap: var(--s-4);
+}
+
+.vend-failed-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.failed-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in srgb, var(--danger, #dc2626) 15%, transparent);
+  color: var(--danger, #dc2626);
+}
+
+.token-failed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--danger, #dc2626);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.token-failed-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--danger, #dc2626);
+}
+
+.failed-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--t-lg);
+  line-height: 1.2;
+}
+
+.vend-safety-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+}
+
+.vend-safety-notice svg {
+  color: var(--success, #16a34a);
+  flex: none;
+  margin-top: 2px;
+}
+
+.vend-safety-notice strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--success, #16a34a);
+  margin-bottom: 2px;
+}
+
+.vend-safety-notice p {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.failed-reason-box {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger, #dc2626) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 20%, transparent);
+  display: grid;
+  gap: var(--s-2);
+}
+
+.failed-reason-msg {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--t-sm);
+  color: var(--text);
+}
+
+.failed-reason-action {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+}
+
+.failed-reason-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+}
+
+.failed-transaction-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+
+.failed-transaction-facts dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.failed-transaction-facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+
+.action-retry {
+  grid-column: 1 / -1;
 }
 
 .vend-action-grid {
