@@ -9,19 +9,33 @@ import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
-type Step = 'meter' | 'amount' | 'preview' | 'success';
+type Step = 'meter' | 'amount' | 'preview' | 'success' | 'failed';
 
 const step = ref<Step>('meter');
 const meterId = ref('');
 const amountNaira = ref(2000);
 const loading = ref(false);
-const error = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
+const error = ref<{ title: string; message: string; action?: string; code?: string; reference?: string } | null>(null);
 const authOpen = ref(false);
 const authorization = ref('');
 const authError = ref('');
 const copied = ref(false);
 const remoteTrackerOpen = ref(false);
 const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
+
+interface FailedSendDetails {
+    title?: string;
+    message?: string;
+    action?: string;
+    code?: string;
+    reference?: string;
+    meterId?: string;
+    customerName?: string;
+    stationId?: string;
+    amountMinor?: number;
+    orderId?: string;
+}
+const failedSend = ref<FailedSendDetails | null>(null);
 
 function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
     resultPopup.value = { tone, title, message };
@@ -331,10 +345,49 @@ async function submitAuthorization() {
                 authorization: authorization.value,
             },
         );
-        result.value = r;
         registerSuccessfulAttempt();
         authorization.value = '';
         authOpen.value = false;
+
+        const rawToken = String(r?.token || r?.purchaseOrder?.token || '').trim();
+        const isPoFailed = r?.purchaseOrder?.status === 'failed'
+            || r?.purchaseOrder?.delivery_state === 'vend_failed'
+            || (r as any)?.status === 'failed';
+
+        if (!rawToken || isPoFailed) {
+            result.value = null;
+            remoteTrackerOpen.value = false;
+            const failureReason = r?.purchaseOrder?.remark
+                || r?.purchaseOrder?.failure_reason
+                || (r as any)?.message
+                || 'Token generation failed. No token was returned by the vending service.';
+            const errDetails = {
+                title: 'Token Generation Failed',
+                message: failureReason,
+                action: 'No wallet debit occurred. Your balance is safe. Check the meter binding or retry.',
+                code: r?.purchaseOrder?.delivery_state || (r as any)?.code || 'token_not_generated',
+                meterId: meter.value?.meterId,
+                customerName: meter.value?.customerName,
+                stationId: meter.value?.stationId,
+                amountMinor: amountMinor.value,
+                orderId: r?.purchaseOrder?.id,
+            };
+            failedSend.value = errDetails;
+            error.value = errDetails;
+            step.value = 'failed';
+            showResultPopup(
+                'danger',
+                'Remote Send Failed',
+                `${errDetails.message} No wallet debit occurred.`,
+            );
+            return;
+        }
+
+        result.value = {
+            ...r,
+            token: rawToken,
+        };
+        failedSend.value = null;
         step.value = 'success';
         schedulePoll(0);
         showResultPopup(
@@ -363,6 +416,23 @@ async function submitAuthorization() {
         error.value = errDetails;
         authOpen.value = false;
         authorization.value = '';
+        remoteTrackerOpen.value = false;
+        result.value = null;
+
+        failedSend.value = {
+            title: errDetails.title || 'Remote Send Failed',
+            message: errDetails.message,
+            action: errDetails.action,
+            code: errDetails.code,
+            reference: (errDetails as any).reference,
+            meterId: meter.value?.meterId,
+            customerName: meter.value?.customerName,
+            stationId: meter.value?.stationId,
+            amountMinor: amountMinor.value,
+        };
+
+        step.value = 'failed';
+
         showResultPopup(
             'danger',
             errDetails.title || 'Vend Failed',
@@ -373,6 +443,12 @@ async function submitAuthorization() {
     }
 }
 
+function retryFromPreview() {
+    error.value = null;
+    failedSend.value = null;
+    step.value = 'preview';
+}
+
 function reset() {
     stopPolling();
     step.value = 'meter';
@@ -381,8 +457,10 @@ function reset() {
     meter.value = null;
     preview.value = null;
     result.value = null;
+    failedSend.value = null;
     error.value = null;
     copied.value = false;
+    remoteTrackerOpen.value = false;
 }
 
 onUnmounted(stopPolling);
@@ -528,7 +606,7 @@ function downloadResultReceipt() {
       </div>
 
       <!-- Step: success -->
-      <div v-else-if="step === 'success'" class="bw-stack">
+      <div v-else-if="step === 'success' && result?.token" class="bw-stack">
         <div class="bw-token-box">
           <p class="bw-label" style="color: var(--brand)">{{ result?.remoteSend?.status === 'success' ? 'Delivered' : 'Token generated' }}</p>
           <h1 class="bw-h1" style="margin: var(--s-2) 0">{{ result?.remoteSend?.status === 'success' ? 'Token sent to meter' : 'Token ready for entry' }}</h1>
@@ -559,6 +637,63 @@ function downloadResultReceipt() {
           <button class="bw-btn" @click="viewResultReceipt">View receipt</button>
         </div>
         <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New send</button>
+      </div>
+
+      <!-- Step: failed (Explicit Remote Send Failure Screen) -->
+      <div v-else-if="step === 'failed'" class="bw-stack">
+        <div class="bw-card vend-failed-card">
+          <div class="vend-failed-header">
+            <div class="failed-icon-circle">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+            </div>
+            <div>
+              <p class="token-failed-badge"><span></span>Dispatch Unsuccessful</p>
+              <h1 class="failed-title">{{ failedSend?.title || error?.title || 'Remote Send Failed' }}</h1>
+            </div>
+          </div>
+
+          <div class="vend-safety-notice">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <polyline points="9 12 11 14 15 10"/>
+            </svg>
+            <div>
+              <strong>Wallet Safe &amp; Untouched</strong>
+              <p>No funds were debited from your vendor wallet. Any preliminary hold was immediately released.</p>
+            </div>
+          </div>
+
+          <div class="failed-reason-box">
+            <p class="failed-reason-msg">{{ failedSend?.message || error?.message || 'Remote dispatch failed before a token could be generated.' }}</p>
+            <p v-if="failedSend?.action || error?.action" class="failed-reason-action">{{ failedSend?.action || error?.action }}</p>
+            <div class="failed-reason-meta">
+              <span v-if="failedSend?.code || error?.code" class="bw-mono">Code: {{ failedSend?.code || error?.code }}</span>
+              <span v-if="failedSend?.reference || error?.reference" class="bw-mono">Ref: {{ failedSend?.reference || error?.reference }}</span>
+              <span v-if="failedSend?.orderId" class="bw-mono">Order: #{{ String(failedSend.orderId).slice(0, 8) }}</span>
+            </div>
+          </div>
+
+          <div class="failed-transaction-facts">
+            <div><dt>Customer</dt><dd>{{ failedSend?.customerName || meter?.customerName || '—' }}</dd></div>
+            <div><dt>Meter</dt><dd class="bw-mono">{{ failedSend?.meterId || meter?.meterId || '—' }}</dd></div>
+            <div><dt>Amount Attempted</dt><dd>{{ naira(failedSend?.amountMinor ?? preview?.amountMinor) }}</dd></div>
+            <div><dt>Station</dt><dd>{{ failedSend?.stationId || meter?.stationId || '—' }}</dd></div>
+          </div>
+        </div>
+
+        <div class="bw-row" style="gap: var(--s-2); flex-wrap: wrap">
+          <button class="bw-btn primary" style="flex: 1; justify-content: center; height: 44px" @click="retryFromPreview">
+            Try Again
+          </button>
+          <button class="bw-btn" style="flex: 1; justify-content: center; height: 44px" @click="step = 'amount'">
+            Change Amount
+          </button>
+        </div>
+        <button class="bw-btn" style="justify-content: center; height: 44px" @click="reset">New Send</button>
       </div>
     </div>
 
@@ -619,3 +754,142 @@ function downloadResultReceipt() {
     />
   </AppShell>
 </template>
+
+<style scoped>
+.vend-failed-card {
+  padding: var(--s-5);
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger, #dc2626) 4%, var(--surface));
+  display: grid;
+  gap: var(--s-4);
+}
+
+.vend-failed-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.failed-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in srgb, var(--danger, #dc2626) 15%, transparent);
+  color: var(--danger, #dc2626);
+}
+
+.token-failed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--danger, #dc2626);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.token-failed-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--danger, #dc2626);
+}
+
+.failed-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--t-lg);
+  line-height: 1.2;
+}
+
+.vend-safety-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+}
+
+.vend-safety-notice svg {
+  color: var(--success, #16a34a);
+  flex: none;
+  margin-top: 2px;
+}
+
+.vend-safety-notice strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--success, #16a34a);
+  margin-bottom: 2px;
+}
+
+.vend-safety-notice p {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.failed-reason-box {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger, #dc2626) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 20%, transparent);
+  display: grid;
+  gap: var(--s-2);
+}
+
+.failed-reason-msg {
+  margin: 0;
+  font-weight: 600;
+  font-size: var(--t-sm);
+  color: var(--text);
+}
+
+.failed-reason-action {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+}
+
+.failed-reason-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+}
+
+.failed-transaction-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+
+.failed-transaction-facts dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.failed-transaction-facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+</style>

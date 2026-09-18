@@ -87,7 +87,15 @@ async function switchOperatorStation(stationId, baseUrl, superToken, username = 
   const res = await fetch(`${baseUrl}/api/user/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${superToken}` },
-    body: JSON.stringify([{ userId: username || 'Beverly', roleId: 'admin', stationId: String(stationId).trim(), status: true }])
+    body: JSON.stringify([{
+      userId: username || 'Beverly',
+      roleId: 'admin',
+      stationId: String(stationId).trim(),
+      status: true,
+      quota: 0,
+      remainingQuota: -1,
+      totalQuota: 0
+    }])
   });
   const data = await res.json();
   return { ok: data?.code === 0 || data?.code === 200 || data?.reason === 'success', data };
