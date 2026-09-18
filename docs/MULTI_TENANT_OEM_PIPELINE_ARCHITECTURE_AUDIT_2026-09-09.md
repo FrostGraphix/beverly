@@ -1886,3 +1886,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Application DNS checks reduce SSRF risk. Infrastructure egress enforcement and connection-level DNS pinning remain deployment blockers against rebinding or post-validation routing changes.
 - Post-change regression is green. Every production build passed, the complete root test gate passed, and the full wallet suite reported 66 files with 476 tests passing.
 - Validation ran on Node 24.13.1. The repository requires Node 22.x, so supported-runtime CI remains a release blocker.
+
+### 23.26 Node 22 validation checkpoint (2026-09-18)
+
+- An isolated Node 22.23.2 runtime executed every production build successfully.
+- The complete root pretest and test gates passed under Node 22.23.2.
+- The full wallet suite passed under Node 22.23.2: 66 files and 476 tests.
+- Node 22 local validation is complete. Remote CI and deployed-runtime verification remain separate deployment gates.
+- SparkMeter production activation remains blocked. Current managed write specifications, a certified adapter, installation credentials, ownership backfill, routing integration, command dispatch, reconciliation, telemetry cutover, canary evidence, and infrastructure egress enforcement remain incomplete.
+- Support access was explicitly deferred. No provider behavior was inferred, and no production state changed.
