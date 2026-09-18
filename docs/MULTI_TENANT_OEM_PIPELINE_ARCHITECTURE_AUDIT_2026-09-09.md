@@ -1875,3 +1875,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Focused installation and credential tests report thirteen passing cases. They cover success, absence, ambiguity, actor scope, tenant scope, inactive state, ciphertext integrity, bundle fields, and key versions. The wallet TypeScript build passes.
 - SparkMeter credentials were not provisioned. Its observed session authentication is not represented by the certified strategies, and managed write semantics remain undocumented.
 - Bearer-login, static-bearer, and OAuth2 bundle contracts remain pending. No production routing or activation changed.
+
+### 23.25 Endpoint security checkpoint (2026-09-18)
+
+- The installation schema now stores an exact approved-hostname allowlist. New active production rows require HTTPS and at least one approved hostname; the constraint is initially unvalidated to avoid an expand-only deployment scan.
+- Runtime validation rejects invalid URLs, credentials embedded in URLs, nonstandard ports, queries, fragments, unapproved hosts, DNS failures, mixed public/private answers, loopback, link-local, carrier-grade NAT, RFC1918, unique-local IPv6, and mapped private IPv4.
+- Seventeen focused endpoint tests, the OEM contract gate, migration hygiene, and wallet compilation pass.
+- The migration applied on the restore target. A reviewed rollback removed the constraint and column, validation confirmed removal, and reapplication restored them.
+- ACOB remains a draft sandbox with an empty allowlist. No routing or production activation changed.
+- Application DNS checks reduce SSRF risk. Infrastructure egress enforcement and connection-level DNS pinning remain deployment blockers against rebinding or post-validation routing changes.
