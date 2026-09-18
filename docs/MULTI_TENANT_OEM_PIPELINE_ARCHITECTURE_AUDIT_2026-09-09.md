@@ -1895,3 +1895,13 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Node 22 local validation is complete. Remote CI and deployed-runtime verification remain separate deployment gates.
 - SparkMeter production activation remains blocked. Current managed write specifications, a certified adapter, installation credentials, ownership backfill, routing integration, command dispatch, reconciliation, telemetry cutover, canary evidence, and infrastructure egress enforcement remain incomplete.
 - Support access was explicitly deferred. No provider behavior was inferred, and no production state changed.
+
+### 23.27 Official Koios write-contract checkpoint (2026-09-18)
+
+- The authenticated SparkMeter portal exposes official OAS3 documentation at `/docs/api/`. Koios v2 documents reads only. Koios v1 documents writes and explicitly applies only to sites using Nova Grid Edge Management Units.
+- Koios v1 requires `X-API-KEY` and `X-API-SECRET`. Payment writes require Full access scope and use `POST /api/v1/payments`.
+- The documented customer-ID request contains decimal-string `amount`, `memo`, and `customer_id`. A documented HTTP 201 response contains a processed payment and external identifier. Documented HTTP 400 errors confirm request rejection.
+- The new SparkMeter adapter builds only this documented payment shape. It rejects incomplete credentials, nonpositive minor-unit amounts, currency mismatches, and missing external-customer mappings. Undocumented or incomplete responses remain unknown.
+- Installation credentials now support a typed encrypted API-key pair. The reversible schema expansion, migration contract, migration hygiene, focused adapter tests, credential tests, and wallet compilation pass.
+- The schema migration and rollback drill passed on the restore target. It was reapplied after rollback. No credential row or production installation was created.
+- Live dispatch remains blocked. The API secret, API organization identifier, verified ACOB settlement currency, Nova applicability per production service area, customer backfill, and safe retry semantics remain unverified.

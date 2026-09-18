@@ -53,6 +53,7 @@ Keep write safety strict.
 
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
 - `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
+- `backend/wallet/src/adapters/sparkmeter-v1.ts` owns documented Koios v1 payment translation, dual-header authentication, and fail-closed response normalization. It requires an explicit customer mapping and verified settlement currency before building requests.
 - `backend/wallet/src/services/oem-installations.ts` owns server-authoritative installation resolution for wallet callers. It requires tenant identity and explicit actor installation scope before returning an active installation.
 - `backend/wallet/src/services/oem-installation-credentials.ts` owns installation-scoped credential loading after authorization. It decrypts typed secret bundles and rejects inactive, missing, mismatched, malformed, or unsupported records.
 - `backend/wallet/src/services/oem-endpoint-security.ts` owns pre-request upstream origin validation. It requires exact approved hostnames, HTTPS, standard ports, and entirely public DNS results.
@@ -61,6 +62,7 @@ Keep write safety strict.
 - `supabase/migrations/20260915140000_oem_command_foundation.sql` owns durable OEM commands, attempts, secured evidence references, webhook replay records, transactional outbox state, and health snapshots. Existing money paths do not consume it yet.
 - `supabase/migrations/20260918120000_acob_sparkmeter_sandbox_provisioning.sql` owns explicit draft-only provisioning for the ACOB Lighting SparkMeter sandbox. Its unsupported vending state blocks writes until a current provider contract and adapter are certified.
 - `supabase/migrations/20260918130000_oem_endpoint_security.sql` adds installation hostname allowlists. Active production installations require HTTPS and at least one approved hostname.
+- `supabase/migrations/20260918200000_oem_api_key_pair.sql` adds the dual-header installation credential strategy required by official Koios v1 authentication.
 - OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.
