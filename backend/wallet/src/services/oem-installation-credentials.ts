@@ -6,6 +6,7 @@ export type InstallationAuthStrategy =
     | 'bearer_static'
     | 'bearer_login'
     | 'api_key_header'
+    | 'api_key_pair'
     | 'oauth2_client_credentials';
 
 export interface InstallationCredentialRow {
@@ -31,7 +32,19 @@ export interface ApiKeyInstallationCredentials {
     tokenExpiryPolicy: Readonly<Record<string, unknown>>;
 }
 
-export type InstallationCredentials = ApiKeyInstallationCredentials;
+export interface ApiKeyPairInstallationCredentials {
+    oemInstallationId: string;
+    authStrategy: 'api_key_pair';
+    apiKey: string;
+    apiSecret: string;
+    keyHeaderName: 'X-API-KEY';
+    secretHeaderName: 'X-API-SECRET';
+    encryptionKeyVersion: number;
+    tokenEndpoint: string | null;
+    tokenExpiryPolicy: Readonly<Record<string, unknown>>;
+}
+
+export type InstallationCredentials = ApiKeyInstallationCredentials | ApiKeyPairInstallationCredentials;
 
 export class InstallationCredentialError extends Error {
     constructor(
@@ -113,10 +126,23 @@ export async function loadInstallationCredentials(
     if (row.encryptionKeyVersion !== 1) {
         throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Encryption key version is unsupported');
     }
+    const bundle = parseSecretBundle(row.encryptedSecretBundle);
+    if (row.authStrategy === 'api_key_pair') {
+        return {
+            oemInstallationId: row.oemInstallationId,
+            authStrategy: row.authStrategy,
+            apiKey: requireNonEmptyString(bundle.apiKey, 'apiKey'),
+            apiSecret: requireNonEmptyString(bundle.apiSecret, 'apiSecret'),
+            keyHeaderName: 'X-API-KEY',
+            secretHeaderName: 'X-API-SECRET',
+            encryptionKeyVersion: row.encryptionKeyVersion,
+            tokenEndpoint: row.tokenEndpoint,
+            tokenExpiryPolicy: row.tokenExpiryPolicy,
+        };
+    }
     if (row.authStrategy !== 'api_key_header') {
         throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Credential strategy is unsupported');
     }
-    const bundle = parseSecretBundle(row.encryptedSecretBundle);
     return {
         oemInstallationId: row.oemInstallationId,
         authStrategy: row.authStrategy,

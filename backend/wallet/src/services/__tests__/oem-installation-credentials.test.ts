@@ -41,6 +41,36 @@ describe('OEM installation credential loading', () => {
         });
     });
 
+    it('returns decrypted API-key pair credentials', async () => {
+        const store: InstallationCredentialStore = {
+            async findByInstallationId() {
+                return {
+                    oemInstallationId: installation.id,
+                    authStrategy: 'api_key_pair',
+                    encryptedSecretBundle: encryptSecret(JSON.stringify({
+                        apiKey: 'public-key',
+                        apiSecret: 'private-secret',
+                    })),
+                    encryptionKeyVersion: 1,
+                    tokenEndpoint: null,
+                    tokenExpiryPolicy: {},
+                };
+            },
+        };
+
+        await expect(loadInstallationCredentials(installation, store)).resolves.toEqual({
+            oemInstallationId: installation.id,
+            authStrategy: 'api_key_pair',
+            apiKey: 'public-key',
+            apiSecret: 'private-secret',
+            keyHeaderName: 'X-API-KEY',
+            secretHeaderName: 'X-API-SECRET',
+            encryptionKeyVersion: 1,
+            tokenEndpoint: null,
+            tokenExpiryPolicy: {},
+        });
+    });
+
     it('rejects inactive installations before reading credentials', async () => {
         let storeCalled = false;
         const store: InstallationCredentialStore = {
