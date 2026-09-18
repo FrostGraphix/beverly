@@ -57,7 +57,7 @@ function resolveKey(): Buffer {
     return cachedKey;
 }
 
-function decryptSecret(encoded: string | null | undefined): string {
+export function decryptSecret(encoded: string | null | undefined): string {
     const raw = String(encoded || '').trim();
     if (!raw) return '';
     let buffer: Buffer;

@@ -1867,3 +1867,11 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - No installation credential, operation mapping, external resource mapping, sync cursor, command, or production installation was created. Credentials remain only in ignored environment storage.
 - A reviewed restore-target rollback drill removed only the ACOB installation, tenant, SparkMeter manufacturer, manifest, and configuration revision. It preserved the Calinmeter manufacturer. Reapplication restored exactly one draft sandbox installation.
 - The provisioning contract, full OEM contract gate, migration hygiene, and remote validation pass. Current SparkMeter write specifications, encrypted credential provisioning, adapter implementation, and ownership backfill remain pending.
+
+### 23.24 Installation credential resolver checkpoint (2026-09-18)
+
+- The wallet now loads encrypted credentials by authorized installation identity instead of manufacturer or station inference.
+- The first typed strategy supports API-key headers. Inactive installations, missing rows, cross-installation rows, malformed ciphertext, malformed JSON, incomplete bundles, and unsupported strategies fail closed.
+- Focused credential tests report six passing cases. The wallet TypeScript build passes.
+- SparkMeter credentials were not provisioned. Its observed session authentication is not represented by the certified strategies, and managed write semantics remain undocumented.
+- Bearer-login, static-bearer, and OAuth2 bundle contracts remain pending. No production routing or activation changed.
