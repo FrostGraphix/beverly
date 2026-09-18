@@ -1884,3 +1884,5 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The migration applied on the restore target. A reviewed rollback removed the constraint and column, validation confirmed removal, and reapplication restored them.
 - ACOB remains a draft sandbox with an empty allowlist. No routing or production activation changed.
 - Application DNS checks reduce SSRF risk. Infrastructure egress enforcement and connection-level DNS pinning remain deployment blockers against rebinding or post-validation routing changes.
+- Post-change regression is green. Every production build passed, the complete root test gate passed, and the full wallet suite reported 66 files with 476 tests passing.
+- Validation ran on Node 24.13.1. The repository requires Node 22.x, so supported-runtime CI remains a release blocker.
