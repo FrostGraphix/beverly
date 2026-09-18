@@ -1841,3 +1841,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The available-meter endpoint returns 1,367 rows. Combined with configured ownership rows, the observed meter inventory contains 4,439 rows. Two meter identifiers appear in both configured ownership and available-meter responses; both are associated with OTU-COSTAIN customers.
 - Configured ownership has zero duplicate meter-ID groups, zero duplicate serial groups, and no missing meter IDs or serials. The two assigned/available overlaps and 39 unclassified-customer delta block automatic backfill.
 - Private CSV and JSON evidence is stored under the ignored `.private/` directory. Customer addresses, phone numbers, balances, and credentials are excluded. No database row is seeded from unresolved evidence.
+
+### 23.21 Official SparkMeter API documentation checkpoint (2026-09-18)
+
+- EarthSpark's official GitHub organization publishes `apiary_v1` and `apiary_v0` API Blueprint repositories. Exact source revisions and local snapshots are retained under ignored `.private/sparkmeter-official-docs/`.
+- API V1 documents `Authentication-Token` authentication, JSON:API resources, and one write operation: transaction creation. Its last commit is `04a6aff184a57e9036298af95a9dc2c546b2f5b5` from 2015-12-17.
+- API V0 documents meter operating-mode changes, transaction creation, incoming two-way SMS commands, and delivery acknowledgement. Its last commit is `5eee13a56025c5d73986139b58825cd79a3af713` from 2017-06-22.
+- The V1 document declares `https://cloud.sparkmeter.io/api/v1/`. That host did not resolve during verification. The authenticated ACOB deployment uses `https://www.sparkmeter.cloud` and different `/sm/organizations/...` routes.
+- EarthSpark's current Thundercloud repository is explicitly a developer preview that forbids live production metering or billing. It cannot certify the managed legacy platform's production write contract.
+- These are genuine official documents, but they do not establish current managed-platform idempotency, payment settlement, reversal, retry, webhook, compatibility, or support guarantees. Current production-write certification still requires EarthSpark support confirmation.
