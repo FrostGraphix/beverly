@@ -120,19 +120,19 @@ export function assertEnergyVendReady(now = Date.now()): void {
 
 // Phase 6 unification: resolves the target OEM's base URL + auth header from the
 // shared oem_manufacturers/oem_credentials registry (see oem-registry.ts) when
-// `oemId` is given or the default (Calinmeter) row is seeded there. Falls back to
-// the legacy env.ENERGY_BACKEND_URL/env.ENERGY_BEARER_TOKEN pair as a single unit
-// (never mixes one OEM's URL with another's token) whenever the registry has
-// nothing usable — this is what keeps the live Calinmeter vending flow
-// zero-regression whether or not the registry has been seeded in a given
-// environment. Set OEM_REGISTRY_DISABLED=true to force the legacy path instantly.
-async function resolveEnergyTarget(oemId?: string, stationId?: string | null): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
-    const oemConfig = await resolveOemConfig(oemId, stationId);
+// `oemId` is given or the default (Calinmeter) row is seeded there. Production
+// must use that registry identity. The legacy environment pair is available only
+// when the registry is explicitly disabled, preventing accidental 0001 vending.
+export async function resolveEnergyTarget(oemId?: string, stationId?: string | null): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
+    void stationId;
+    const oemConfig = await resolveOemConfig(oemId);
     const authHeaderFromOem = resolveOemAuthHeader(oemConfig);
     if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
         return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
     }
-    if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
+    if (oemId || (env.NODE_ENV === 'production' && !env.OEM_REGISTRY_DISABLED)) {
+        throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
+    }
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
         authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
