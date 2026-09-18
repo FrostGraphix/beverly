@@ -1858,3 +1858,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Existing server-held Calinmeter credentials produced an authorized, read-only `POST /api/station/read` response with HTTP 200 and 11 rows. The exact private response SHA-256 is `E9A5BEAC6FA5C930FFD149B84DEAB3D9931EDD1E6759F22508104C91CBBD10ED`.
 - A red-green adapter test now consumes a structurally faithful redacted capture. It confirms the live envelope, excludes the ADMIN pseudo-station, normalizes 10 operational stations, and preserves stable name sorting. All 12 focused adapter tests pass.
 - Phase 2 station-response evidence is now complete locally. Current managed SparkMeter write specifications remain the immediate external documentation blocker.
+
+### 23.23 ACOB SparkMeter sandbox provisioning checkpoint (2026-09-18)
+
+- A red migration contract required the confirmed `acob-lighting` tenant, ACOB Lighting Technology Limited sandbox installation, Alexander Obiechina authority evidence, observed organization identity, measured inventory counts, and explicit production/write denial.
+- The manufacturer vending constraint now represents `unsupported`. SparkMeter remains `draft`, has no adapter version, and cannot be misclassified as either STS vending or direct credit while current write semantics remain uncertified.
+- The restored Supabase target now contains one draft ACOB tenant and one draft SparkMeter sandbox installation. Its capability manifest records 3,072 configured owners, 1,365 corrected unassigned meters, the 39-row aggregate delta, uncertified writes, and unauthorized production activation.
+- No installation credential, operation mapping, external resource mapping, sync cursor, command, or production installation was created. Credentials remain only in ignored environment storage.
+- A reviewed restore-target rollback drill removed only the ACOB installation, tenant, SparkMeter manufacturer, manifest, and configuration revision. It preserved the Calinmeter manufacturer. Reapplication restored exactly one draft sandbox installation.
+- The provisioning contract, full OEM contract gate, migration hygiene, and remote validation pass. Current SparkMeter write specifications, encrypted credential provisioning, adapter implementation, and ownership backfill remain pending.
