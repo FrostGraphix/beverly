@@ -163,90 +163,83 @@ async function assertSandboxInstallation(client) {
   }
 }
 
-/** @param {Client} client @param {CustomerPlan} customer @returns {Promise<string>} */
-async function ensureCustomer(client, customer) {
-  const inserted = await client.query(
-    "INSERT INTO public.customers (upstream_id, upstream_customer_id, name, customer_name, phone, site_id, source, raw_payload, metadata, oem_id) " +
-      "VALUES ($1,$1,$2,$2,$3,$4,'sparkmeter',$5::jsonb,$6::jsonb,$7) " +
-      "ON CONFLICT (oem_id, upstream_id) DO NOTHING RETURNING id::text",
-    [
-      customer.externalId,
-      customer.name,
-      customer.phone,
-      customer.siteId,
-      JSON.stringify(customer.rawPayload),
-      JSON.stringify({ provider: "sparkmeter", service_area_id: customer.serviceAreaId, import_scope: "metered_only" }),
-      MANUFACTURER_ID
-    ]
-  );
-  if (inserted.rows[0]) return inserted.rows[0].id;
-  const existing = await client.query("SELECT id::text FROM public.customers WHERE oem_id = $1 AND upstream_id = $2", [MANUFACTURER_ID, customer.externalId]);
-  if (!existing.rows[0]) throw new Error(`Customer import did not resolve: ${customer.externalId}`);
-  return existing.rows[0].id;
-}
-
-/** @param {Client} client @param {MeterPlan} meter @param {string} customerId @returns {Promise<string>} */
-async function ensureMeter(client, meter, customerId) {
-  const inserted = await client.query(
-    "INSERT INTO public.meters (upstream_id, upstream_meter_id, meter_sn, customer_id, site_id, meter_type, tariff_id, raw_payload, metadata, oem_id) " +
-      "VALUES ($1,$1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9) " +
-      "ON CONFLICT (oem_id, upstream_id) DO NOTHING RETURNING id::text",
-    [
-      meter.externalId,
-      meter.serial,
-      customerId,
-      meter.siteId,
-      meter.meterPhase,
-      meter.tariffId,
-      JSON.stringify(meter.rawPayload),
-      JSON.stringify({ provider: "sparkmeter", import_scope: "metered_only" }),
-      MANUFACTURER_ID
-    ]
-  );
-  if (inserted.rows[0]) return inserted.rows[0].id;
-  const existing = await client.query("SELECT id::text, customer_id::text FROM public.meters WHERE oem_id = $1 AND upstream_id = $2", [MANUFACTURER_ID, meter.externalId]);
-  if (!existing.rows[0] || existing.rows[0].customer_id !== customerId) {
-    throw new Error(`Meter import ownership conflict: ${meter.externalId}`);
-  }
-  return existing.rows[0].id;
-}
-
-/** @param {Client} client @param {"customer" | "meter"} resourceType @param {string} externalId @param {string} internalId @returns {Promise<void>} */
-async function ensureMapping(client, resourceType, externalId, internalId) {
-  await client.query(
-    "INSERT INTO public.external_resource_mappings (oem_installation_id, resource_type, internal_id, external_id, metadata) " +
-      "VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (oem_installation_id, resource_type, external_id) DO NOTHING",
-    [INSTALLATION_ID, resourceType, internalId, externalId, JSON.stringify({ provider: "sparkmeter", import_scope: "metered_only" })]
-  );
-  const existing = await client.query(
-    "SELECT internal_id::text FROM public.external_resource_mappings WHERE oem_installation_id = $1 AND resource_type = $2 AND external_id = $3",
-    [INSTALLATION_ID, resourceType, externalId]
-  );
-  if (!existing.rows[0] || existing.rows[0].internal_id !== internalId) {
-    throw new Error(`External mapping conflict: ${resourceType}:${externalId}`);
-  }
-}
-
 /** @param {Client} client @param {ImportPlan} plan @returns {Promise<void>} */
 async function applyPlan(client, plan) {
-  const metersByCustomer = new Map();
-  for (const meter of plan.meters) {
-    const values = metersByCustomer.get(meter.customerExternalId) || [];
-    values.push(meter);
-    metersByCustomer.set(meter.customerExternalId, values);
-  }
   for (let start = 0; start < plan.customers.length; start += BATCH_SIZE) {
+    const customerBatch = plan.customers.slice(start, start + BATCH_SIZE);
+    const customerIds = new Set(customerBatch.map((customer) => customer.externalId));
+    const meterBatch = plan.meters.filter((meter) => customerIds.has(meter.customerExternalId));
+    const customerRows = customerBatch.map((customer) => ({
+      external_id: customer.externalId,
+      name: customer.name,
+      phone: customer.phone,
+      site_id: customer.siteId,
+      raw_payload: customer.rawPayload,
+      metadata: { provider: "sparkmeter", service_area_id: customer.serviceAreaId, import_scope: "metered_only" }
+    }));
+    const meterRows = meterBatch.map((meter) => ({
+      external_id: meter.externalId,
+      serial: meter.serial,
+      customer_external_id: meter.customerExternalId,
+      site_id: meter.siteId,
+      meter_phase: meter.meterPhase,
+      tariff_id: meter.tariffId,
+      raw_payload: meter.rawPayload,
+      metadata: { provider: "sparkmeter", import_scope: "metered_only" }
+    }));
+    const customerJson = JSON.stringify(customerRows);
+    const meterJson = JSON.stringify(meterRows);
     await client.query("BEGIN");
     try {
-      for (const customer of plan.customers.slice(start, start + BATCH_SIZE)) {
-        const customerId = await ensureCustomer(client, customer);
-        await ensureMapping(client, "customer", customer.externalId, customerId);
-        for (const meter of metersByCustomer.get(customer.externalId) || []) {
-          const meterId = await ensureMeter(client, meter, customerId);
-          await ensureMapping(client, "meter", meter.externalId, meterId);
-        }
+      await client.query(
+        "INSERT INTO public.customers (upstream_id, upstream_customer_id, name, customer_name, phone, site_id, source, raw_payload, metadata, oem_id) " +
+          "SELECT input.external_id, input.external_id, input.name, input.name, input.phone, input.site_id, 'sparkmeter', input.raw_payload, input.metadata, $2 " +
+          "FROM jsonb_to_recordset($1::jsonb) AS input(external_id text, name text, phone text, site_id text, raw_payload jsonb, metadata jsonb) " +
+          "ON CONFLICT (oem_id, upstream_id) DO NOTHING",
+        [customerJson, MANUFACTURER_ID]
+      );
+      const customerCheck = await client.query(
+        "SELECT count(*)::int AS expected, count(customer.id)::int AS linked FROM jsonb_to_recordset($1::jsonb) AS input(external_id text) " +
+          "LEFT JOIN public.customers customer ON customer.oem_id = $2 AND customer.upstream_id = input.external_id",
+        [customerJson, MANUFACTURER_ID]
+      );
+      if (customerCheck.rows[0].expected !== customerCheck.rows[0].linked) throw new Error("Customer batch verification failed");
+      await client.query(
+        "INSERT INTO public.meters (upstream_id, upstream_meter_id, meter_sn, customer_id, site_id, meter_type, tariff_id, raw_payload, metadata, oem_id) " +
+          "SELECT input.external_id, input.external_id, input.serial, customer.id, input.site_id, input.meter_phase, input.tariff_id, input.raw_payload, input.metadata, $2 " +
+          "FROM jsonb_to_recordset($1::jsonb) AS input(external_id text, serial text, customer_external_id text, site_id text, meter_phase text, tariff_id text, raw_payload jsonb, metadata jsonb) " +
+          "JOIN public.customers customer ON customer.oem_id = $2 AND customer.upstream_id = input.customer_external_id " +
+          "ON CONFLICT (oem_id, upstream_id) DO NOTHING",
+        [meterJson, MANUFACTURER_ID]
+      );
+      const meterCheck = await client.query(
+        "SELECT count(*)::int AS expected, count(meter.id) FILTER (WHERE meter.customer_id = customer.id AND meter.meter_sn = input.serial)::int AS linked " +
+          "FROM jsonb_to_recordset($1::jsonb) AS input(external_id text, serial text, customer_external_id text) " +
+          "JOIN public.customers customer ON customer.oem_id = $2 AND customer.upstream_id = input.customer_external_id " +
+          "LEFT JOIN public.meters meter ON meter.oem_id = $2 AND meter.upstream_id = input.external_id",
+        [meterJson, MANUFACTURER_ID]
+      );
+      if (meterCheck.rows[0].expected !== meterCheck.rows[0].linked) throw new Error("Meter batch verification failed");
+      for (const [resourceType, payload] of [["customer", customerJson], ["meter", meterJson]]) {
+        const inputColumns = resourceType === "customer" ? "external_id text" : "external_id text";
+        const table = resourceType === "customer" ? "customers" : "meters";
+        await client.query(
+          "INSERT INTO public.external_resource_mappings (oem_installation_id, resource_type, internal_id, external_id, metadata) " +
+            `SELECT $1, '${resourceType}', resource.id, input.external_id, '{\"provider\":\"sparkmeter\",\"import_scope\":\"metered_only\"}'::jsonb ` +
+            `FROM jsonb_to_recordset($2::jsonb) AS input(${inputColumns}) JOIN public.${table} resource ON resource.oem_id = $3 AND resource.upstream_id = input.external_id ` +
+            "ON CONFLICT (oem_installation_id, resource_type, external_id) DO NOTHING",
+          [INSTALLATION_ID, payload, MANUFACTURER_ID]
+        );
+        const mappingCheck = await client.query(
+          `SELECT count(*)::int AS expected, count(mapping.id) FILTER (WHERE mapping.internal_id = resource.id)::int AS linked FROM jsonb_to_recordset($1::jsonb) AS input(${inputColumns}) ` +
+            `JOIN public.${table} resource ON resource.oem_id = $2 AND resource.upstream_id = input.external_id ` +
+            `LEFT JOIN public.external_resource_mappings mapping ON mapping.oem_installation_id = $3 AND mapping.resource_type = '${resourceType}' AND mapping.external_id = input.external_id`,
+          [payload, MANUFACTURER_ID, INSTALLATION_ID]
+        );
+        if (mappingCheck.rows[0].expected !== mappingCheck.rows[0].linked) throw new Error(`${resourceType} mapping batch verification failed`);
       }
       await client.query("COMMIT");
+      console.log(JSON.stringify({ batch: start / BATCH_SIZE + 1, importedCustomers: start + customerBatch.length, importedMeters: start + meterBatch.length }));
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
