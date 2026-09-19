@@ -34,7 +34,7 @@ function optionalText(value) {
  *
  * @param {string} url
  * @param {Record<string, string>} headers
- * @param {(url: string, init: { headers: Record<string, string> }) => Promise<Response>} request
+ * @param {(url: string, init: { headers: Record<string, string>, signal: AbortSignal }) => Promise<Response>} request
  * @param {number} delayMs
  * @returns {Promise<Response>}
  */
@@ -42,12 +42,16 @@ async function fetchWithRetries(url, headers, request = fetch, delayMs = 1700) {
   /** @type {Error | null} */
   let lastError = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await request(url, { headers });
+      const response = await request(url, { headers, signal: controller.signal });
       if (response.ok || (response.status < 500 && response.status !== 429)) return response;
       lastError = new Error(`SparkMeter customer read failed: HTTP ${response.status}`);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("SparkMeter customer read failed");
+    } finally {
+      clearTimeout(timeout);
     }
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
   }

@@ -68,11 +68,13 @@ assert.throws(
 
 (async () => {
   let calls = 0;
+  let sawAbortSignal = false;
   const response = await fetchWithRetries(
     "https://example.invalid/customers",
     {},
-    async () => {
+    async (_url, init) => {
       calls += 1;
+      sawAbortSignal = Boolean(init.signal);
       if (calls === 1) throw new TypeError("network timeout");
       return new Response("{}", { status: 200 });
     },
@@ -80,6 +82,7 @@ assert.throws(
   );
   assert.strictEqual(response.status, 200, "safe reads must retry transient network failures");
   assert.strictEqual(calls, 2, "safe reads must stop after a successful retry");
+  assert.strictEqual(sawAbortSignal, true, "safe reads must have a bounded request signal");
   console.log(JSON.stringify({ status: "SparkMeter sandbox import contract passed" }, null, 2));
 })().catch((error) => {
   console.error(error);
