@@ -1913,3 +1913,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The user-supplied credential document instead claims HTTP Basic authentication and an `external_id` request field. Those claims conflict with the live portal and are not adopted as a write contract.
 - The supplied API secret and organization ID were placed only in the ignored local `.env`. A read-only `GET /api/v1/service_areas` using the documented dual headers returned HTTP 401. The credential pair is therefore not verified as active. No write request was made.
 - Production writes remain disabled. Activation requires valid Full access credentials, verified organization and service-area identity, settlement currency, Nova applicability, approved customer mappings, and documented reconciliation or safe retry behavior. Exposed credentials also require rotation.
+
+### 23.29 Production-gate rerun (2026-09-19)
+
+- A second read-only `GET /api/v1/service_areas` using the supplied dual-header credential pair returned HTTP 401 with `Authentication Error` and `Invalid credentials`. The pair cannot prove organization identity, token scope, service-area inventory, currency, or Nova eligibility.
+- The official Koios v1 portal documents `GET /payments?external_id=...` for a provider-issued external ID. Its `POST /payments` example does not accept caller-supplied `external_id`; the lookup alone does not prove idempotent POST retries after an ambiguous timeout.
+- Local `npm run test:oem`, the full wallet suite (67 files, 485 tests), `npm run build`, and `npm test` passed. This rerun used Node 24.13.1, while the required Node 22.23.2 validation was recorded separately in checkpoint 23.26. The latest local build does not replace a remote CI or deployed-runtime gate.
+- No remote credential rotation, production routing, payment, customer mutation, or destructive action occurred. Valid rotated Full access credentials and authoritative operational evidence remain required before any production-write activation.
