@@ -65,7 +65,7 @@ export function isDisposableEmail(email: string): boolean {
 export function isCorporateStaffEmail(email: string): boolean {
     try {
         const domain = extractEmailDomain(email);
-        return domain === 'acoblighting.com';
+        return domain === 'acoblighting.com' || domain === 'org.acoblighting.com';
     } catch {
         return false;
     }

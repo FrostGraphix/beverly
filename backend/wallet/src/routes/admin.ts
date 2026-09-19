@@ -1344,7 +1344,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!isCorporateStaffEmail(body.email)) {
             return reply.code(400).send({
                 error: 'invalid_staff_email_domain',
-                message: 'Staff accounts must use an @acoblighting.com email address.',
+                message: 'Staff accounts must use an @acoblighting.com or @org.acoblighting.com email address.',
             });
         }
         const stationIds = body.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(body.stationIds);
