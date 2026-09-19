@@ -1906,3 +1906,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The schema migration and rollback drill passed on the restore target. It was reapplied after rollback. No credential row or production installation was created.
 - The complete wallet regression rerun passed serially: 67 test files and 485 tests. The root production build also passed. An earlier parallel run produced one unrelated Acobot RBAC timeout under resource contention; the isolated full rerun cleared it without code changes.
 - Live dispatch remains blocked. The API secret, API organization identifier, verified ACOB settlement currency, Nova applicability per production service area, customer backfill, and safe retry semantics remain unverified.
+
+### 23.28 Live portal verification checkpoint (2026-09-19)
+
+- The live SparkMeter Koios v1 portal confirms `X-API-KEY` and `X-API-SECRET` authentication, Full access scope for `POST /payments`, and Nova Grid Edge Management Unit applicability. Its customer-ID payment example uses a decimal-string amount, memo, and customer ID. It does not show a caller-supplied external ID in that request.
+- The user-supplied credential document instead claims HTTP Basic authentication and an `external_id` request field. Those claims conflict with the live portal and are not adopted as a write contract.
+- The supplied API secret and organization ID were placed only in the ignored local `.env`. A read-only `GET /api/v1/service_areas` using the documented dual headers returned HTTP 401. The credential pair is therefore not verified as active. No write request was made.
+- Production writes remain disabled. Activation requires valid Full access credentials, verified organization and service-area identity, settlement currency, Nova applicability, approved customer mappings, and documented reconciliation or safe retry behavior. Exposed credentials also require rotation.
