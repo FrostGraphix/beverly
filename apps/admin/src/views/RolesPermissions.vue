@@ -623,8 +623,8 @@ onMounted(() => { void load(); });
                 </div>
                 <div class="ac-field">
                   <label class="bw-label">Work email</label>
-                  <input v-model="draft.email" class="bw-input" type="email" inputmode="email" pattern=".+@acoblighting\.com$" placeholder="ada@acoblighting.com" required />
-                  <p class="ac-field-help">Only @acoblighting.com work email addresses are accepted.</p>
+                  <input v-model="draft.email" class="bw-input" type="email" inputmode="email" pattern=".+@(acoblighting\.com|org\.acoblighting\.com)$" placeholder="ada@acoblighting.com" required />
+                  <p class="ac-field-help">Only @acoblighting.com or @org.acoblighting.com work email addresses are accepted.</p>
                 </div>
               </div>
 
@@ -689,7 +689,7 @@ onMounted(() => { void load(); });
 
               <div class="ac-invite-actions">
                 <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
-                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@acoblighting\.com$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
+                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@(acoblighting\.com|org\.acoblighting\.com)$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
                 <button v-else class="bw-btn primary" :disabled="saving">
                   {{ saving ? 'Creating…' : 'Create staff user' }}
                 </button>
