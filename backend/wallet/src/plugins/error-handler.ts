@@ -22,8 +22,13 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             });
         }
 
-        // Fastify-tagged HTTP errors
-        if (err.statusCode && err.statusCode < 500) {
+        // Fastify-tagged HTTP errors. Service errors may explicitly expose a
+        // reviewed message while their private cause remains server-side.
+        const expose = (err as FastifyError & { expose?: boolean }).expose === true;
+        if (err.statusCode && (err.statusCode < 500 || expose)) {
+            if (err.statusCode >= 500) {
+                req.log.error({ err, stack: err.stack, url: req.url, method: req.method, correlationId }, 'service error');
+            }
             return reply.code(err.statusCode).send({
                 error: err.code ?? 'bad_request',
                 message: err.message,

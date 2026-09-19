@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 type Row = Record<string, any>;
 const writes: Array<{ operation: string; table: string; payload?: any }> = [];
 let failInsertTable: string | null = null;
+let failInsertMessage = '';
 let existingProvision = false;
 
 class Query {
@@ -19,7 +20,7 @@ class Query {
     single() { return this.execute(true); }
     then(resolve: (value: any) => any, reject: (reason: any) => any) { return this.execute(false).then(resolve, reject); }
     private async execute(single: boolean) {
-        if (this.operation === 'insert' && failInsertTable === this.table) return { data: null, error: { message: `${this.table} failed` } };
+        if (this.operation === 'insert' && failInsertTable === this.table) return { data: null, error: { message: failInsertMessage || `${this.table} failed` } };
         if (this.operation === 'insert' && single) {
             const id = this.table === 'vendor_organizations' ? 'org-1' : this.table === 'vendor_users' ? 'vendor-user-1' : 'row-1';
             return { data: { id, ...this.payload }, error: null };
@@ -67,6 +68,7 @@ describe('vendor onboarding runtime workflow', () => {
     beforeEach(() => {
         writes.splice(0);
         failInsertTable = null;
+        failInsertMessage = '';
         existingProvision = false;
         vi.clearAllMocks();
         createUser.mockResolvedValue({ data: { user: { id: 'auth-user-1' } }, error: null });
@@ -102,6 +104,18 @@ describe('vendor onboarding runtime workflow', () => {
         expect(writes).toEqual(expect.arrayContaining([
             expect.objectContaining({ operation: 'delete', table: 'vendor_organizations' }),
         ]));
+    });
+
+    it('does not expose database details when organization creation fails', async () => {
+        failInsertTable = 'vendor_organizations';
+        failInsertMessage = 'new row violates check constraint vendor_organizations_status_check';
+        const { createVendorOrganization } = await import('../vendor-onboarding.js');
+
+        await expect(createVendorOrganization(input)).rejects.toMatchObject({
+            code: 'create_org_failed',
+            message: 'Vendor organization could not be created.',
+            statusCode: 503,
+        });
     });
 
     it('replays an already completed domain provisioning without creating or exposing another password', async () => {

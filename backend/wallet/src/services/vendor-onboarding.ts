@@ -16,7 +16,22 @@ import { env } from '../config/env.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
-    constructor(message: string, public code: string) { super(message); this.name = 'OnboardingError'; }
+    public statusCode: number;
+    public expose = true;
+
+    constructor(message: string, public code: string, cause?: unknown) {
+        super(message, cause === undefined ? undefined : { cause });
+        this.name = 'OnboardingError';
+        this.statusCode = code === 'vendor_not_found'
+            ? 404
+            : ['single_station_required'].includes(code)
+                ? 422
+                : ['vendor_closed_final', 'invitation_already_accepted'].includes(code)
+                    ? 409
+                    : code.endsWith('_failed') || code.includes('provisioning_') || code === 'password_recovery_required'
+                        ? 503
+                        : 400;
+    }
 }
 
 function genTempPassword(): string {
@@ -84,7 +99,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             .select('id, provisioning_status')
             .eq('provisioning_key', input.provisioningKey)
             .maybeSingle();
-        if (existingError) throw new OnboardingError(existingError.message, 'provisioning_recovery_failed');
+        if (existingError) throw new OnboardingError(
+            'Existing vendor provisioning could not be checked.',
+            'provisioning_recovery_failed',
+            existingError,
+        );
         if (existing && (existing as any).provisioning_status === 'active') {
             const { data: existingUser, error: userError } = await adminClient
                 .from('vendor_users')
@@ -125,7 +144,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             }
             await adminClient.from('vendor_users').delete().eq('vendor_organization_id', (existing as any).id);
             const { error: staleDeleteError } = await adminClient.from('vendor_organizations').delete().eq('id', (existing as any).id);
-            if (staleDeleteError) throw new OnboardingError(staleDeleteError.message, 'provisioning_recovery_failed');
+            if (staleDeleteError) throw new OnboardingError(
+                'Incomplete vendor provisioning could not be recovered.',
+                'provisioning_recovery_failed',
+                staleDeleteError,
+            );
         }
     }
     const tempPwd = genTempPassword();
@@ -160,7 +183,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             provisioning_status: 'pending',
             provisioning_key: input.provisioningKey ?? null,
         }).select('*').single();
-        if (orgErr || !org) throw new OnboardingError(orgErr?.message ?? 'Organization was not created.', 'create_org_failed');
+        if (orgErr || !org) throw new OnboardingError(
+            'Vendor organization could not be created.',
+            'create_org_failed',
+            orgErr,
+        );
         organizationId = (org as { id: string }).id;
 
         // Signup-link generation creates the unconfirmed Auth user and its
@@ -177,7 +204,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             },
         });
         if (authErr || !authUserData.user) {
-            throw new OnboardingError(`auth signup link failed: ${authErr?.message ?? 'unknown'}`, 'auth_create_failed');
+            throw new OnboardingError(
+                'Vendor login account could not be created.',
+                'auth_create_failed',
+                authErr,
+            );
         }
         authUserId = authUserData.user.id;
         const verificationUrl = authUserData.properties?.action_link;
@@ -198,7 +229,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             email_verified_at: null,
             invitation_status: 'pending',
         }).select('*').single();
-        if (vuErr || !vu) throw new OnboardingError(vuErr?.message ?? 'Vendor user was not created.', 'create_vendor_user_failed');
+        if (vuErr || !vu) throw new OnboardingError(
+            'Vendor user could not be created.',
+            'create_vendor_user_failed',
+            vuErr,
+        );
         vendorUserId = (vu as { id: string }).id;
 
         const wallet = await getOrCreateWallet('vendor', organizationId, {
@@ -223,7 +258,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         const { error: activateError } = await adminClient.from('vendor_organizations').update({
             provisioning_status: 'active',
         }).eq('id', organizationId);
-        if (activateError) throw new OnboardingError(activateError.message, 'provisioning_status_update_failed');
+        if (activateError) throw new OnboardingError(
+            'Vendor provisioning could not be completed.',
+            'provisioning_status_update_failed',
+            activateError,
+        );
 
         // This is the final compensatable database write. No later operation
         // may fail after the source application has been marked converted.
@@ -234,7 +273,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
                 reviewed_by: input.createdByStaffId,
                 reviewed_at: new Date().toISOString(),
             }).eq('id', input.sourceApplicationId);
-            if (applicationError) throw new OnboardingError(applicationError.message, 'source_application_update_failed');
+            if (applicationError) throw new OnboardingError(
+                'The source application could not be marked as converted.',
+                'source_application_update_failed',
+                applicationError,
+            );
         }
 
         // External delivery is intentionally last. A provider failure does not
@@ -261,7 +304,11 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
                 invitation_sent_at: new Date().toISOString(),
                 invitation_error: null,
             }).eq('id', vendorUserId);
-            if (deliveryError) throw new OnboardingError(deliveryError.message, 'invitation_status_update_failed');
+            if (deliveryError) throw new OnboardingError(
+                'Invitation delivery status could not be saved.',
+                'invitation_status_update_failed',
+                deliveryError,
+            );
         } catch (error) {
             const reason = error instanceof Error ? error.message : 'Invitation delivery failed.';
             invitationDelivery = { status: 'failed', reason };
