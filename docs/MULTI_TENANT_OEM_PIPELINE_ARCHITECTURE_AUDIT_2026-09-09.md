@@ -1981,3 +1981,9 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The reviewed production migration push applied six pending migrations: the control plane, nullable operational links, durable command foundation, draft ACOB sandbox provisioning, endpoint allowlist metadata, and API-key-pair credential strategy. The deployment used the linked Supabase project after a successful `--include-all --dry-run`.
 - Production lint reports no schema errors. A read-only service-role verification found one ACOB Lighting Technology Limited installation with `environment=sandbox` and `status=draft`, zero external mappings, and zero OEM commands. This installation cannot route reads or writes as active production traffic.
 - No SparkMeter customer, meter, credential, operation configuration, write, payment, or production activation was added to the production database. The previously completed 3,072-record import remains confined to the dedicated restore sandbox. The 39 meterless customers remain untouched.
+
+### 23.37 SparkMeter prompt hardening checkpoint (2026-09-20)
+
+- A red-green public prompt-builder test removed stale SparkMeter claims from Beverly AI's grounded knowledge. The prompt no longer asserts unsupported STS vending, relay control, customer dissociation, or obsolete provider identifiers.
+- SparkMeter is now explicitly described as a draft integration with no payment, vending, relay, or customer write available. It names certified provider write and reconciliation evidence as production prerequisites.
+- The focused prompt regression and wallet TypeScript check pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
