@@ -1967,3 +1967,17 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The 39 SparkMeter customers without meters were intentionally excluded. No corresponding Beverly customer, meter, or external-resource mapping was created for them. No Calinmeter record, production database record, provider record, credential, operation configuration, or installation status was changed.
 - The import is resumable and conflict-safe. Existing SparkMeter external IDs are never overwritten; each batch verifies its customer, meter, and mapping ownership before commit. No provider write, payment write, or production activation occurred.
 - A final read-only production HTTPS check found zero SparkMeter manufacturer records. The production database remains unchanged by this sandbox-only import.
+
+### 23.35 Production migration-history gate (2026-09-20)
+
+- The linked-production migration inventory and a dry-run push were executed without applying any database change. The dry-run failed closed because remote versions `20260917160000` and `20260918100000` do not exist in this local migration history, while local OEM migrations from `20260915120000` onward are not present remotely.
+- The repository migration runbook requires stopping on this condition. No migration-history repair, schema push, production installation, routing change, or production record creation was attempted.
+- A CLI fetch was evaluated to obtain remote history. It attempted broad local migration replacement, so its generated local artifacts were fully restored and removed. The worktree was returned to its prior committed migration state before this checkpoint was recorded.
+- Production control-plane deployment is blocked until the remote-only migrations are independently reviewed and reconciled with this branch. This is a migration-governance gate, not a SparkMeter data or credential failure.
+
+### 23.36 Production control-plane deployment (2026-09-20)
+
+- The two remote-only migrations were fetched into an isolated temporary project, reviewed, and added to local history without overwriting repository migrations. The local and remote migration inventories now agree through `20260918200000`.
+- The reviewed production migration push applied six pending migrations: the control plane, nullable operational links, durable command foundation, draft ACOB sandbox provisioning, endpoint allowlist metadata, and API-key-pair credential strategy. The deployment used the linked Supabase project after a successful `--include-all --dry-run`.
+- Production lint reports no schema errors. A read-only service-role verification found one ACOB Lighting Technology Limited installation with `environment=sandbox` and `status=draft`, zero external mappings, and zero OEM commands. This installation cannot route reads or writes as active production traffic.
+- No SparkMeter customer, meter, credential, operation configuration, write, payment, or production activation was added to the production database. The previously completed 3,072-record import remains confined to the dedicated restore sandbox. The 39 meterless customers remain untouched.
