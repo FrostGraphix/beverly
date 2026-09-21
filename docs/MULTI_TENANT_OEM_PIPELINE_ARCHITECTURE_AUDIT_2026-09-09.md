@@ -1994,3 +1994,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The console now returns SparkMeter only as a draft, unsupported-vending integration. Its manifest permits observed inventory reads only and denies payment, vending, relay, customer writes, and production activation.
 - The matching operator guide now directs readers to this audit and prohibits activation or live vending from its legacy onboarding checklist. The wallet's direct-credit guard comment also records SparkMeter's uncertified state.
 - Focused route and prompt regressions pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
+
+### 23.39 Official SparkMeter documentation and API recheck (2026-09-21)
+
+- The official SparkMeter Koios documentation page remains available at `https://www.sparkmeter.cloud/docs/api/`. Its current page title is `API Documentation | SparkMeter Koios`.
+- Certificate-verified, authenticated, read-only API calls returned HTTP 200 from `GET /api/v1/service_areas`. The response retained the documented `data`, `errors`, `cursor`, and `next_cursor` envelope.
+- A certificate-verified, read-only `GET /api/v1/payments?external_id=beverly-read-only-contract-probe` returned HTTP 404 with `Payment External ID Not Found`. This confirms the lookup route accepts a provider-issued external ID query, but does not prove caller-supplied payment idempotency or safe retry after an ambiguous `POST /payments` outcome.
+- No provider write, payment, customer mutation, credential change, routing change, or production activation occurred. SparkMeter remains draft and fail closed pending written provider retry semantics and a separate write sandbox.
