@@ -687,9 +687,9 @@ export async function resolveEffectiveIsS2(input: GenerateTokenInput): Promise<b
  * Guards against silently building an STS token payload for an OEM that doesn't
  * speak STS. `direct_credit` (an OEM that credits a meter in real time with no
  * physical token) is reserved in the schema (oem_manufacturers.vending_strategy)
- * but its actual code path has NOT been built — neither Calinmeter nor, per public
- * documentation, Sparkmeter needs it, so building it now would be speculative,
- * untestable code with no real spec to verify against. Fails loudly and
+ * but its actual code path has NOT been built. SparkMeter direct-credit behavior
+ * is uncertified, so building it now would be speculative, untestable code with
+ * no real spec to verify against. Fails loudly and
  * specifically instead of vending Calinmeter's STS shape at a non-STS OEM.
  */
 async function assertVendingStrategySupported(oemId?: string | null): Promise<void> {

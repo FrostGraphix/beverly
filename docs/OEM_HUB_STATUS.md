@@ -81,7 +81,14 @@ Ran every test file individually (not just the `&&`-chained `npm test`, which ab
 
 ## 3. What's Left
 
-### Phase 5 — Onboard a second real OEM (the acceptance test) — **blocked, not started**
+### Phase 5 — Onboard a second real OEM (the acceptance test) — **production blocked**
+
+> **Current SparkMeter certification state:** Follow
+> [`MULTI_TENANT_OEM_PIPELINE_ARCHITECTURE_AUDIT_2026-09-09.md`](./MULTI_TENANT_OEM_PIPELINE_ARCHITECTURE_AUDIT_2026-09-09.md)
+> as the canonical record. Authenticated read-only inventory and isolated
+> sandbox imports are complete. SparkMeter payment, vending, relay, and
+> customer writes remain uncertified and disabled. Do not activate an
+> installation or attempt a real vend from this checklist.
 This is the proof that the abstraction actually holds for a manufacturer with different naming conventions, not just a mock. **Blocked on the user providing real API access** (base URL, auth credentials, real endpoint paths) for Sparkmeter or Ihemeter — explicitly discussed and deferred until that's available.
 
 What's already de-risked ahead of this phase: the mechanism has been exercised end-to-end against a **mock** second OEM during Phase 3 testing — path translation correctly remapped a CRM-canonical path to a fake OEM's configured path, capability gating correctly hid/showed sidebar groups, and credential encrypt→store→decrypt→resolve round-tripped correctly through the registry. The only missing piece is a real upstream to point it at.
@@ -107,8 +114,8 @@ Since real credentials aren't available yet but are expected soon, the following
 2. Pick the real auth strategy, paste base URL + credentials.
 3. Click **Test Connection** — confirms auth resolves before touching anything else.
 4. Fill in real upstream paths for the 17 pre-seeded starter-checklist rows (the ones actually needed first), flip each to enabled, save.
-5. Flip the OEM's status from `draft` to `active` (Edit name/details).
-6. Verify at least one live read through the CRM UI, and if the flow allows, one real token vend end-to-end.
+5. Keep the OEM's status as `draft` until every certification gate closes.
+6. Verify only approved, read-only CRM access. Do not attempt a real vend.
 7. Confirm no station-ID collision against Calinmeter's live stations in the retrofit tables (`station_meter_read_rollups`, `consumption_aggregates`).
 8. Treat any config-schema gap this surfaces as expected discovery — feed it back into the generic schema, not a one-off code path for that OEM specifically. Likely candidates: the token-extraction field names (see above), or a genuinely novel entity type beyond the 17-key starter checklist.
 
@@ -118,7 +125,7 @@ The plan originally deferred this until after Phase 5 proved the registry stable
 - **`backend/wallet/src/services/oem-registry.ts`** (new) — a parallel, minimal port of the CRM's registry for this *separate deployable* (the wallet is a standalone Fastify service on Fly.io/Railway, not bundled with the CRM's Vercel functions — they share one Supabase project but can't share a Node module at runtime). Reads the SAME `oem_manufacturers`/`oem_credentials` tables via the wallet's own `adminClient`, decrypts with the SAME AES-256-GCM scheme and the SAME `OEM_CREDENTIALS_ENCRYPTION_KEY` env var (added to `config/env.ts`'s Zod schema, alongside `OEM_REGISTRY_DISABLED`/`OEM_CONFIG_CACHE_TTL_MS` for the same emergency-rollback/cache-tuning levers the CRM has), same in-process TTL cache. Fails closed to `null` on any error — never throws.
 - **`token-engine.ts`'s `energyCall`** now resolves `{baseUrl, authHeader}` as a single atomic unit — either fully from the registry-resolved OEM (never mixing one OEM's URL with another's token) or fully from the legacy `env.ENERGY_BACKEND_URL`/`env.ENERGY_BEARER_TOKEN` pair, whichever is usable. `OEM_REGISTRY_DISABLED=true` forces the legacy path instantly, mirroring the CRM's own kill-switch.
 - **`MeterInfo`/`GenerateTokenInput`/`RemoteSendInput` all carry an optional `oemId`**, threaded through every call site (`lookupMeter`, `lookupMeterMeta`, `lookupLocalAccountBinding` — now also selects+returns the `oem_id` column, `lookupHistoricalLowPurchaseReport`, `listStations` — cache now keyed per-OEM, `generateCreditToken`, `createRemoteSendTask`, `waitForRemoteTokenTerminal`, `pollRemoteSendStatus`). `vending.ts` tags every new `purchase_orders` row with `oem_id` and threads `meter.oemId`/`po.oem_id` through the generate/remote-send/poll/reconcile call chain.
-- **`direct_credit` guard**: `assertVendingStrategySupported()` checks the resolved OEM's `vendingStrategy` before building an STS payload — throws a clear, specific error (`vending_strategy_not_implemented`) if a future OEM is configured for direct-credit vending, rather than silently trying to force Calinmeter's STS shape onto an OEM that doesn't speak it. The actual `direct_credit` code path is still not built (still not needed by Calinmeter or, per public docs, Sparkmeter) — this guard is what makes that gap fail loudly instead of silently mis-vending.
+- **`direct_credit` guard**: `assertVendingStrategySupported()` checks the resolved OEM's `vendingStrategy` before building an STS payload — throws a clear, specific error (`vending_strategy_not_implemented`) if a future OEM is configured for direct-credit vending, rather than silently trying to force Calinmeter's STS shape onto an OEM that doesn't speak it. The actual `direct_credit` code path is still not built and remains uncertified for SparkMeter — this guard makes that gap fail loudly instead of silently mis-vending.
 - **Zero real-world behavior change today**: since no caller anywhere in the wallet passes a non-default `oemId` yet (there's no wallet-side OEM picker — vending still resolves to whichever OEM the meter's `account_bindings.oem_id` says, defaulting to Calinmeter for every existing meter, exactly as before), this phase is pure plumbing readiness. It becomes load-bearing the moment Phase 5 tags a real second OEM's meters via `account_bindings`.
 - Confirmed via the existing test suite that the "registry unreachable → safe fallback" path genuinely works, not just in theory: `vitest.setup.ts` points `SUPABASE_URL` at a fake, unreachable domain, and all 134 tests still pass — proving the try/catch-to-null design gracefully falls through to the legacy env-var path exactly as intended.
 

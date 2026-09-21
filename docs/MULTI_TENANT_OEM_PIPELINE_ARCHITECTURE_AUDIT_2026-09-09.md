@@ -1987,3 +1987,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A red-green public prompt-builder test removed stale SparkMeter claims from Beverly AI's grounded knowledge. The prompt no longer asserts unsupported STS vending, relay control, customer dissociation, or obsolete provider identifiers.
 - SparkMeter is now explicitly described as a draft integration with no payment, vending, relay, or customer write available. It names certified provider write and reconciliation evidence as production prerequisites.
 - The focused prompt regression and wallet TypeScript check pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
+
+### 23.38 Development-console capability hardening checkpoint (2026-09-21)
+
+- A red-green `GET /dev/oem` contract exposed a second stale SparkMeter surface: the development console advertised it as active STS vending with relay and customer-dissociation support, and returned obsolete provider identifiers and an operator email.
+- The console now returns SparkMeter only as a draft, unsupported-vending integration. Its manifest permits observed inventory reads only and denies payment, vending, relay, customer writes, and production activation.
+- The matching operator guide now directs readers to this audit and prohibits activation or live vending from its legacy onboarding checklist. The wallet's direct-credit guard comment also records SparkMeter's uncertified state.
+- Focused route and prompt regressions pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
