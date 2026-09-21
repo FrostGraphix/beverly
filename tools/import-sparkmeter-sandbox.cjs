@@ -48,6 +48,24 @@ function resolveImportTarget(argumentsList) {
   return production ? PRODUCTION_TARGET : SANDBOX_TARGET;
 }
 
+/**
+ * Resolves an explicit import connection string.
+ * The production fallback is the already-linked production database URL.
+ *
+ * @param {ImportTarget} target
+ * @param {NodeJS.ProcessEnv} environment
+ * @returns {string}
+ */
+function resolveImportConnectionString(target, environment) {
+  const configured = environment[target.connectionEnvironmentVariable];
+  if (typeof configured === "string" && configured.trim() !== "") return configured;
+  if (target.environment === "production") {
+    const linkedProductionUrl = environment.SUPABASE_DB_URL;
+    if (typeof linkedProductionUrl === "string" && linkedProductionUrl.trim() !== "") return linkedProductionUrl;
+  }
+  throw new Error(`Missing required ${target.connectionEnvironmentVariable}`);
+}
+
 /** @param {unknown} value @param {string} field @returns {string} */
 function requiredText(value, field) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -285,7 +303,7 @@ async function main() {
   const argumentsList = process.argv.slice(2);
   const apply = argumentsList.includes("--apply");
   const target = resolveImportTarget(argumentsList);
-  const connectionString = requiredText(process.env[target.connectionEnvironmentVariable], target.connectionEnvironmentVariable);
+  const connectionString = resolveImportConnectionString(target, process.env);
   const caResponse = await fetch(SUPABASE_CA_URL);
   if (!caResponse.ok) throw new Error(`Supabase CA download failed: HTTP ${caResponse.status}`);
   const ca = await caResponse.text();
@@ -304,7 +322,7 @@ async function main() {
   }
 }
 
-module.exports = { buildSparkMeterSandboxImportPlan, fetchWithRetries, resolveImportTarget };
+module.exports = { buildSparkMeterSandboxImportPlan, fetchWithRetries, resolveImportConnectionString, resolveImportTarget };
 
 if (require.main === module) {
   main().catch((error) => {

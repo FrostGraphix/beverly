@@ -2001,3 +2001,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Certificate-verified, authenticated, read-only API calls returned HTTP 200 from `GET /api/v1/service_areas`. The response retained the documented `data`, `errors`, `cursor`, and `next_cursor` envelope.
 - A certificate-verified, read-only `GET /api/v1/payments?external_id=beverly-read-only-contract-probe` returned HTTP 404 with `Payment External ID Not Found`. This confirms the lookup route accepts a provider-issued external ID query, but does not prove caller-supplied payment idempotency or safe retry after an ambiguous `POST /payments` outcome.
 - No provider write, payment, customer mutation, credential change, routing change, or production activation occurred. SparkMeter remains draft and fail closed pending written provider retry semantics and a separate write sandbox.
+
+### 23.40 Approved production mapping import (2026-09-21)
+
+- The owner approved production-database mapping import. A reversible migration created a separate `production` environment ACOB SparkMeter installation, but retained `draft` status, no adapter version, no credentials, no operation configuration, and explicit write and activation denial.
+- A red-green target contract requires both `--apply` and `--production`; the default target remains the restore sandbox. The importer certificate-verifies PostgreSQL, verifies the exact draft installation identity, and uses only the explicitly linked production database URL when the dedicated production URL is absent.
+- The completed import created 3,072 SparkMeter customer rows, 3,072 meter rows, 3,072 customer mappings, and 3,072 meter mappings. All mapping ownership checks passed with zero invalid customer mappings and zero invalid meter mappings.
+- The 39 customers without meters remain excluded. No provider write, payment, credential, operation configuration, routing change, adapter certification, installation activation, or production vend occurred.
