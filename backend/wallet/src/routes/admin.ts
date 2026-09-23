@@ -6,6 +6,7 @@
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { vendorPasswordError } from '@beverly/tokens/password-policy';
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { abandonWalletIdempotency, assertClientIdempotencyKey, claimWalletIdempotency, completeWalletIdempotency, hashIdempotency } from '../services/idempotency.js';
@@ -47,8 +48,9 @@ import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
+import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -440,6 +442,7 @@ const OPEN_ADMIN_ROUTES = new Set([
     'GET /me',
     'PATCH /me',
     'POST /logout',
+    'POST /password-change',
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
     'POST /profile-picture/activate',
@@ -643,15 +646,10 @@ function adminRouteKey(req: FastifyRequest): string {
 }
 
 async function permissionsForRole(role: string): Promise<Set<string>> {
-    try {
-        await ensureAccessDefaults().catch(() => undefined);
-        const { data, error } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
-        if (!error && data && data.length > 0) {
-            return new Set(data.map((p: any) => p.route_hash));
-        }
-    } catch { /* ignore and fallback */ }
-    const fallback = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS['super-admin'] || DEFAULT_ROLE_PERMISSIONS.account;
-    return new Set(fallback || []);
+    if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((item) => item.key));
+    const { data, error } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    if (error) throw new Error(`permission_resolution_failed: ${error.message}`);
+    return new Set((data ?? []).map((permission: any) => permission.route_hash));
 }
 
 async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
@@ -671,7 +669,17 @@ async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply):
         }
         return false;
     }
-    const grants = await permissionsForRole(req.actor.role);
+    let grants: Set<string>;
+    try {
+        grants = await permissionsForRole(req.actor.role);
+    } catch (error) {
+        req.log.error({ err: error, role: req.actor.role }, 'permission resolution failed');
+        if (!reply.sent) reply.code(503).send({
+            error: 'permission_service_unavailable',
+            message: 'Permissions could not be verified. Try again shortly.',
+        });
+        return false;
+    }
     if (!grants.has(permission)) {
         await logAction({
             actorUserId: req.actor.userId,
@@ -832,47 +840,6 @@ function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): b
     return true;
 }
 
-// Seed flag — runs once per server lifetime, not on every request.
-let _accessDefaultsSeeded = false;
-let _accessDefaultsPromise: Promise<void> | null = null;
-
-async function ensureAccessDefaults() {
-    if (_accessDefaultsSeeded) return;
-    // Deduplicate concurrent calls during startup (e.g. multiple requests arriving before the first finishes).
-    if (_accessDefaultsPromise) return _accessDefaultsPromise;
-    _accessDefaultsPromise = (async () => {
-        try {
-            for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
-                try {
-                    await adminClient.from('roles').upsert({
-                        name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
-                        role_key: roleKey,
-                        role_name: label,
-                        label,
-                        description: roleKey === 'super-admin'
-                            ? 'Full wallet administration and access control.'
-                            : 'Wallet administration role managed by Beverly access policy.',
-                    }, { onConflict: 'role_key' });
-                } catch { /* ignore */ }
-            }
-            for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-                for (const permission of permissions) {
-                    try {
-                        await adminClient.from('permissions').upsert({
-                            role_key: roleKey,
-                            route_hash: permission,
-                        }, { onConflict: 'role_key,route_hash' });
-                    } catch { /* ignore */ }
-                }
-            }
-            _accessDefaultsSeeded = true;
-        } catch {
-            _accessDefaultsPromise = null;
-        }
-    })();
-    return _accessDefaultsPromise;
-}
-
 function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
     return {
         id: actor!.userId,
@@ -883,6 +850,7 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
         station_ids: staff?.station_ids ?? actor!.stationIds ?? [],
         profile_picture_url: staff?.profile_picture_url ?? null,
         updated_at: staff?.updated_at ?? null,
+        password_reset_required: actor?.passwordResetRequired === true,
     };
 }
 
@@ -914,8 +882,6 @@ const route: FastifyPluginAsync = async (fastify) => {
                 metadata: { environment: env.NODE_ENV },
             });
         }
-        // ensureAccessDefaults() is called inside requireAdminPermission → permissionsForRole
-        // and is cached after the first run — no need to call it again here.
         if (!(await requireAdminPermission(req, reply))) return undefined;
         if (reply.sent || !(await enforceResourceStation(req, reply))) return undefined;
         return undefined;
@@ -927,13 +893,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         try {
             let staffResult = await adminClient
                 .from('users')
-                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at, password_reset_required')
                 .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
                 .maybeSingle();
             if (missingColumn(staffResult?.error, 'station_ids')) {
                 staffResult = await adminClient
                     .from('users')
-                    .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at')
+                    .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at, password_reset_required')
                     .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
                     .maybeSingle();
             }
@@ -946,6 +912,30 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions,
             catalog: PERMISSION_CATALOG,
         };
+    });
+
+    fastify.post('/password-change', async (req, reply) => {
+        const body = z.object({
+            current: z.string().min(1).max(200),
+            next: z.string().min(12).max(128),
+        }).parse(req.body);
+        const policyError = vendorPasswordError(body.next);
+        if (policyError) return reply.code(422).send({ error: 'weak_password', message: policyError });
+        if (body.current === body.next) return reply.code(400).send({ error: 'same_password', message: 'Choose a different password.' });
+        try {
+            return await replaceStaffPassword({
+                actor: req.actor!,
+                currentPassword: body.current,
+                nextPassword: body.next,
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+            });
+        } catch (error) {
+            if (error instanceof StaffPasswordChangeError) {
+                return reply.code(error.status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     fastify.get('/notifications', async (req) => {
@@ -1187,7 +1177,6 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.get('/access', async () => {
-        await ensureAccessDefaults();
         const [roleResult, permissionResult, initialStaffResult, authUsers] = await Promise.all([
             adminClient.from('roles').select('*').order('role_key', { ascending: true }),
             adminClient.from('permissions').select('*').order('role_key', { ascending: true }),
@@ -1232,15 +1221,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = schema.parse(req.body);
         const { data: role } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
         if (!role) return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
+        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System role permissions are managed through reviewed migrations.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
-        if (roleKey === 'super-admin' && next.length !== PERMISSION_CATALOG.length) {
-            return reply.code(400).send({
-                error: 'super_admin_locked',
-                message: 'Super Admin must keep the full permission set.',
-            });
-        }
-        await ensureAccessDefaults();
         await adminClient.from('permissions').delete().eq('role_key', roleKey);
         if (next.length) {
             const { error } = await adminClient.from('permissions').insert(
@@ -1378,6 +1361,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             role_key: body.roleKey,
             station_id: primaryStationId,
             station_ids: stationIds,
+            password_reset_required: true,
+            password_changed_at: null,
+            password_session_id: null,
         }, { onConflict: 'user_id' });
         if (rowErr) {
             await adminClient.auth.admin.deleteUser(authData.user.id);
@@ -1554,9 +1540,29 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const userId = (req.params as { userId: string }).userId;
         const password = `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
+        const { data: previousState, error: previousStateError } = await adminClient.from('users')
+            .select('password_reset_required, password_changed_at, password_session_id')
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
+        if (previousStateError || !previousState) return reply.code(404).send({ error: 'staff_not_found', message: 'Staff account was not found.' });
+        const changedAt = new Date().toISOString();
+        const { error: stateError } = await adminClient.from('users').update({
+            password_reset_required: true,
+            password_changed_at: changedAt,
+            password_session_id: `password-reset:${crypto.randomUUID()}`,
+            updated_at: changedAt,
+        }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+        if (stateError) return reply.code(503).send({ error: 'password_reset_state_failed', message: 'Password reset state could not be saved.' });
         const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
-        if (error) return reply.code(400).send({ error: 'password_reset_failed', message: error.message });
-        await adminClient.auth.admin.signOut(userId, 'global');
+        if (error) {
+            await adminClient.from('users').update({
+                password_reset_required: (previousState as any).password_reset_required,
+                password_changed_at: (previousState as any).password_changed_at,
+                password_session_id: (previousState as any).password_session_id,
+            }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+            return reply.code(400).send({ error: 'password_reset_failed', message: error.message });
+        }
+        const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
+        if (signOutError) req.log.error({ err: signOutError, userId }, 'Supabase session revocation failed; password boundary remains enforced');
         await logAction({
             actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
             action: 'access.user.password_reset', targetType: 'staff_user', targetId: userId,

@@ -11,6 +11,7 @@ export interface StaffProfile {
     station_ids?: string[];
     profile_picture_url: string | null;
     updated_at?: string | null;
+    password_reset_required: boolean;
 }
 
 interface State {
@@ -136,6 +137,10 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             localStorage.setItem('beverly.staff.access_token', token);
             localStorage.setItem('beverly.staff.user', JSON.stringify(user));
             localStorage.setItem('beverly.staff.permissions', JSON.stringify(permissions));
+        },
+        rotateSession(token: string) {
+            if (!this.user) return;
+            this.setSession(token, { ...this.user, password_reset_required: false }, this.permissions);
         },
         logout() {
             if (this.accessToken) void api.post('/api/v1/admin/logout', {}).catch(() => undefined);

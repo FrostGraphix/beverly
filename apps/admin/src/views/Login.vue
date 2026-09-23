@@ -123,6 +123,7 @@ async function signIn() {
             full_name: data.user.user_metadata?.full_name ?? null,
             role: data.user?.user_metadata?.role_key ?? data.user?.user_metadata?.role ?? 'staff',
             profile_picture_url: data.user?.user_metadata?.profile_picture_url ?? null,
+            password_reset_required: false,
         });
         try {
             await auth.refreshSession();
@@ -137,6 +138,12 @@ async function signIn() {
             }
             auth.logout();
             error.value = readableError(err, 'Access denied. Staff account required.');
+            return;
+        }
+        if (auth.user?.password_reset_required) {
+            if (rememberEmail.value) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
+            else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+            await router.push({ path: '/password-change', query: { redirect: redirectTarget.value } });
             return;
         }
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
