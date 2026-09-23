@@ -291,6 +291,9 @@ async function doSignOut() {
     <!-- Actions -->
     <div class="bw-card">
       <div class="bw-stack" style="gap: var(--s-2)">
+        <router-link v-if="auth.customer?.auth_provider === 'email_password' || auth.customer?.auth_provider === 'phone_password'" to="/password-change" class="bw-btn primary" style="text-decoration:none; justify-content:flex-start">
+          Change password
+        </router-link>
         <button v-if="canInstall" class="bw-btn" style="justify-content:flex-start" @click="installApp">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Install app

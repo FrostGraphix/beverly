@@ -30,6 +30,7 @@ export type ActorType = 'staff' | 'vendor_user' | 'customer';
 export interface Actor {
     userId: string;          // auth.users.id (UUID)
     email: string | null;
+    phone?: string | null;
     type: ActorType;
     role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor' | 'customer'
     actorId: string;         // public.customers.id | public.vendor_users.id | userId for staff
@@ -155,22 +156,24 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 2. Customer lookup
     let customerResult = await adminClient
         .from('customers')
-        .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
+        .select('id, kyc_tier, status, email, phone, auth_provider, email_verified_at, password_changed_at, password_session_id')
         .eq('auth_user_id', userId)
         .maybeSingle();
     if (customerResult.error && isMissingColumn(customerResult.error.message, 'auth_user_id')) {
         customerResult = await adminClient
             .from('customers')
-            .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
+            .select('id, kyc_tier, status, email, phone, auth_provider, email_verified_at, password_changed_at, password_session_id')
             .eq('user_id', userId)
             .maybeSingle();
     }
     const cu = customerResult.data;
 
     if (cu && (cu as any).status === 'active') {
+        if (!tokenAllowedAfterPasswordChange(token, (cu as any).password_changed_at, (cu as any).password_session_id)) return null;
         return {
             userId,
             email,
+            phone: (cu as any).phone ?? null,
             type: 'customer',
             role: 'customer',
             actorId: (cu as any).id,
