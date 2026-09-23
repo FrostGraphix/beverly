@@ -17,9 +17,20 @@ test('admin login exposes self-service recovery', () => {
 test('admin recovery uses public one-time endpoints', () => {
   const routes = read('backend/wallet/src/routes/admin-password-recovery.ts');
   assert.match(routes, /'\/reset-request'/);
+  assert.match(routes, /'\/reset-verify'/);
   assert.match(routes, /'\/reset-confirm'/);
   assert.match(routes, /requestPasswordReset\(.*'staff'/s);
+  assert.match(routes, /verifyPasswordResetOtp\(.*'staff'/s);
   assert.match(routes, /confirmPasswordReset\(.*'staff'/s);
+});
+
+test('admin recovery requires emailed OTP', () => {
+  const forgot = read('apps/admin/src/views/ForgotPassword.vue');
+  const reset = read('apps/admin/src/views/ResetPassword.vue');
+  assert.match(forgot, /autocomplete="one-time-code"/);
+  assert.match(forgot, /admin\/auth\/reset-verify/);
+  assert.match(reset, /sessionStorage\.getItem\('beverly\.admin\.password-reset-grant'\)/);
+  assert.doesNotMatch(reset, /route\.query\.token/);
 });
 
 test('staff recovery persists its security boundary', () => {

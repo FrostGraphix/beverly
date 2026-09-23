@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import VendorAuthShell from '../components/VendorAuthShell.vue';
 import { evaluateVendorPassword } from '@beverly/tokens/password-policy';
-
-const route  = useRoute();
-const router = useRouter();
 
 const token       = ref('');
 const password    = ref('');
@@ -29,12 +25,9 @@ const strengthColor = computed(() => (['', 'var(--danger)', 'var(--warn)', 'var(
 const validToken = computed(() => /^[a-f0-9]{64}$/i.test(token.value));
 
 onMounted(async () => {
-    const t = route.query.token as string | undefined;
-    const sanitizedQuery = { ...route.query };
-    delete sanitizedQuery.token;
-    if ('token' in route.query) await router.replace({ query: sanitizedQuery });
+    const t = sessionStorage.getItem('beverly.vendor.password-reset-grant') ?? '';
     if (t && /^[a-f0-9]{64}$/i.test(t)) { token.value = t; }
-    else { error.value = 'Invalid reset link. Please request a new one.'; }
+    else { error.value = 'Verify a recovery code first.'; }
 });
 
 async function submit() {
@@ -46,6 +39,7 @@ async function submit() {
             token:        token.value,
             new_password: password.value,
         });
+        sessionStorage.removeItem('beverly.vendor.password-reset-grant');
         success.value = true;
     } catch (e: any) {
         if (e instanceof ApiError) {

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import VendorAuthShell from '../components/VendorAuthShell.vue';
 
 const email   = ref('');
+const otp = ref('');
+const router = useRouter();
 const loading = ref(false);
 const error   = ref<string | null>(null);
 const sent    = ref(false);
@@ -32,12 +35,29 @@ async function submit() {
         loading.value = false;
     }
 }
+
+async function verifyOtp() {
+    if (!/^\d{6}$/.test(otp.value) || loading.value) return;
+    loading.value = true;
+    error.value = null;
+    try {
+        const result = await api.post<{ token: string }>('/api/v1/vendor/auth/reset-verify', {
+            email: requestedEmail.value, otp: otp.value,
+        });
+        sessionStorage.setItem('beverly.vendor.password-reset-grant', result.token);
+        await router.push('/reset-password');
+    } catch (e: any) {
+        error.value = e instanceof ApiError ? e.message : 'Code verification failed.';
+    } finally {
+        loading.value = false;
+    }
+}
 </script>
 
 <template>
   <VendorAuthShell
     title="Forgot password"
-    subtitle="Enter your account email and we'll send a reset link"
+    subtitle="Receive a one-time verification code"
     back="/login"
   >
     <!-- Success state -->
@@ -48,13 +68,16 @@ async function submit() {
           <polyline points="22,6 12,13 2,6"/>
         </svg>
       </div>
-      <p class="success-title">Check your inbox</p>
+      <p class="success-title">Enter verification code</p>
       <p class="success-sub">
-        If a vendor account exists for <strong>{{ requestedEmail }}</strong>, a reset link has been sent. It expires in 30 minutes.
+        If this account exists, a six-digit code was emailed.
       </p>
-      <router-link to="/login" class="bw-btn primary auth-btn">
-        Back to sign in
-      </router-link>
+      <form class="auth-form otp-form" @submit.prevent="verifyOtp">
+        <input v-model="otp" class="bw-input otp-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" aria-label="Verification code" required />
+        <div v-if="error" class="auth-error" role="alert">{{ error }}</div>
+        <button class="bw-btn primary auth-btn" type="submit" :disabled="loading || !/^\d{6}$/.test(otp)">{{ loading ? 'Verifying…' : 'Verify code' }}</button>
+        <button class="bw-btn ghost auth-btn" type="button" @click="sent = false; otp = ''; error = null">Request another code</button>
+      </form>
     </div>
 
     <!-- Form state -->
@@ -88,7 +111,7 @@ async function submit() {
 
       <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading || !email">
         <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-        {{ loading ? 'Sending…' : 'Send reset link' }}
+        {{ loading ? 'Sending…' : 'Send verification code' }}
       </button>
 
       <p class="back-row">
@@ -169,4 +192,6 @@ async function submit() {
 }
 .success-title { font-weight: 700; font-size: var(--t-lg); margin: 0; }
 .success-sub   { font-size: var(--t-sm); color: var(--text-2); margin: 0; line-height: 1.6; max-width: 320px; }
+.otp-form { width:100%; }
+.otp-input { text-align:center; letter-spacing:.5em; font-size:var(--t-xl); }
 </style>

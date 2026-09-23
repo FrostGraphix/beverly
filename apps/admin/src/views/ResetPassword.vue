@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { evaluateVendorPassword } from '@beverly/tokens/password-policy';
 import { api, ApiError } from '../lib/api';
 
-const route = useRoute();
-const router = useRouter();
 const token = ref('');
 const password = ref('');
 const confirmation = ref('');
@@ -16,10 +13,9 @@ const evaluation = computed(() => evaluateVendorPassword(password.value));
 const valid = computed(() => token.value.length === 64 && evaluation.value.valid && password.value === confirmation.value);
 
 onMounted(async () => {
-  const raw = typeof route.query.token === 'string' ? route.query.token : '';
+  const raw = sessionStorage.getItem('beverly.admin.password-reset-grant') ?? '';
   if (/^[a-f0-9]{64}$/i.test(raw)) token.value = raw;
-  else error.value = 'Invalid reset link. Request another.';
-  if ('token' in route.query) await router.replace({ query: {} });
+  else error.value = 'Verify a recovery code first.';
 });
 
 async function submit() {
@@ -28,6 +24,7 @@ async function submit() {
   error.value = null;
   try {
     await api.post('/api/v1/admin/auth/reset-confirm', { token: token.value, new_password: password.value });
+    sessionStorage.removeItem('beverly.admin.password-reset-grant');
     success.value = true;
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : 'Password reset failed.';
