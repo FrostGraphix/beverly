@@ -249,7 +249,7 @@ onMounted(async () => {
             <input v-model="rememberEmail" type="checkbox" />
             Remember email
           </label>
-          <button type="button" class="login-link" @click="error = 'Ask a Beverly super admin to reset your password.'">Forgot password?</button>
+          <router-link to="/forgot-password" class="login-link">Forgot password?</router-link>
         </div>
         <div v-if="error" class="bw-alert danger">{{ error }}</div>
         <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
