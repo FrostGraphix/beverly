@@ -51,6 +51,7 @@ import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
+import { generateTemporaryPassword } from '../services/temporary-password.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -1318,12 +1319,16 @@ const route: FastifyPluginAsync = async (fastify) => {
             roleKey: z.string().trim().min(2).max(80),
             stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
             allStations: z.boolean().default(false),
-            temporaryPassword: z.string().min(12).optional(),
+            temporaryPassword: z.string().min(12).max(128).optional(),
         }).refine((value) => value.allStations || value.stationIds.length > 0, {
             message: 'Choose at least one station or All stations.',
             path: ['stationIds'],
         });
         const body = schema.parse(req.body);
+        if (body.temporaryPassword) {
+            const policyError = vendorPasswordError(body.temporaryPassword);
+            if (policyError) return reply.code(422).send({ error: 'weak_temporary_password', message: policyError });
+        }
         if (!isCorporateStaffEmail(body.email)) {
             return reply.code(400).send({
                 error: 'invalid_staff_email_domain',
@@ -1343,7 +1348,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     : 'Staff invitations are temporarily disabled. Enable staff invitation emails before creating an account.',
             });
         }
-        const password = body.temporaryPassword ?? `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
+        const password = body.temporaryPassword ?? generateTemporaryPassword();
         const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
             email: body.email.toLowerCase(),
             password,
@@ -1539,7 +1544,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.post('/access/users/:userId/reset-password', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const userId = (req.params as { userId: string }).userId;
-        const password = `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
+        const password = generateTemporaryPassword();
         const { data: previousState, error: previousStateError } = await adminClient.from('users')
             .select('password_reset_required, password_changed_at, password_session_id')
             .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();

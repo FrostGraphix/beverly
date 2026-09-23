@@ -14,6 +14,7 @@ import { vendorOnboardingEmail } from '../emails/templates.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import crypto from 'node:crypto';
+import { generateTemporaryPassword } from './temporary-password.js';
 
 export class OnboardingError extends Error {
     public statusCode: number;
@@ -32,22 +33,6 @@ export class OnboardingError extends Error {
                         ? 503
                         : 400;
     }
-}
-
-function genTempPassword(): string {
-    // 14 chars, mixed case + number + symbol
-    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const lower = 'abcdefghijkmnpqrstuvwxyz';
-    const digit = '23456789';
-    const sym   = '!@#$%&*?';
-    const all   = upper + lower + digit + sym;
-    let p = '';
-    p += upper[crypto.randomInt(upper.length)];
-    p += lower[crypto.randomInt(lower.length)];
-    p += digit[crypto.randomInt(digit.length)];
-    p += sym[crypto.randomInt(sym.length)];
-    while (p.length < 14) p += all[crypto.randomInt(all.length)];
-    return p.split('').sort(() => crypto.randomInt(2) - 0.5).join('');
 }
 
 export interface CreateVendorInput {
@@ -151,7 +136,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             );
         }
     }
-    const tempPwd = genTempPassword();
+    const tempPwd = generateTemporaryPassword();
     let organizationId: string | null = null;
     let authUserId: string | null = null;
     let vendorUserId: string | null = null;
@@ -358,7 +343,7 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
     const verificationUrl = link?.properties?.action_link;
     if (linkError || !verificationUrl) throw new OnboardingError('Vendor verification link could not be regenerated.', 'verification_link_failed');
 
-    const temporaryPassword = genTempPassword();
+    const temporaryPassword = generateTemporaryPassword();
     const previousState = {
         password_reset_required: true,
         password_changed_at: (user as any).password_changed_at ?? null,
