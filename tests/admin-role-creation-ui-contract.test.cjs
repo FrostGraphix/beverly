@@ -15,7 +15,7 @@ assert.match(view, /Create custom role/);
 assert.match(view, /\/api\/v1\/admin\/access\/roles/);
 assert.match(view, /roleEditor\.value\.permissions/);
 assert.match(view, /\['Identity', 'Access', 'Review'\]/);
-assert.match(view, /StationMultiSelect v-model="draft\.stationIds"/);
+assert.match(view, /StationMultiSelect[^>]*v-model="draft\.stationIds"/);
 assert.match(view, /stationIds: draft\.value\.stationIds/);
 assert.match(view, /updateStaffStations/);
 assert.match(view, /station_ids\?\.length/);

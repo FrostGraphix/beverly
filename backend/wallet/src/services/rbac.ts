@@ -81,6 +81,13 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
 
 export const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
 
+export class PermissionResolutionError extends Error {
+    constructor(message = 'Permissions could not be verified.') {
+        super(message);
+        this.name = 'PermissionResolutionError';
+    }
+}
+
 // Seed flag — runs once per server lifetime, not on every request.
 let _accessDefaultsSeeded = false;
 let _accessDefaultsPromise: Promise<void> | null = null;
@@ -115,9 +122,9 @@ export async function ensureAccessDefaults(): Promise<void> {
 }
 
 export async function permissionsForRole(role: string): Promise<Set<string>> {
-    await ensureAccessDefaults();
     if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((p) => p.key));
-    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    const { data, error } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    if (error) throw new PermissionResolutionError(error.message);
     return new Set((data ?? []).map((p: any) => p.route_hash));
 }
 
