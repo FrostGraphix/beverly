@@ -79,19 +79,20 @@ describe('password-reset service', () => {
         expect(src).toContain('password_reset_required: false');
     });
 
-    it('sends reset email via postmark sendEmail', () => {
+    it('sends reset OTP email', () => {
         expect(src).toContain('sendEmail');
-        expect(src).toContain("tag: 'password-reset'");
-        expect(src).toContain('passwordResetLinkEmail');
+        expect(src).toContain("tag: 'password-reset-otp'");
+        expect(src).toContain('passwordRecoveryEmail');
     });
 
-    it('reset link includes raw token in query param', () => {
-        expect(src).toContain('reset-password?token=');
+    it('exchanges OTP for short-lived grant', () => {
+        expect(src).toMatch(/token_kind:\s+'otp'/);
+        expect(src).toMatch(/token_kind:\s+'reset_grant'/);
+        expect(src).toContain('verifyPasswordResetOtp');
     });
 
-    it('uses CUSTOMER_APP_URL and VENDOR_APP_URL from env for reset links', () => {
-        expect(src).toContain('env.CUSTOMER_APP_URL');
-        expect(src).toContain('env.VENDOR_APP_URL');
+    it('never exposes reset grants through URLs', () => {
+        expect(src).not.toContain('reset-password?token=');
     });
 });
 

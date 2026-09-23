@@ -48,7 +48,7 @@ vi.mock('../../config/env.js', () => ({
 }));
 vi.mock('../../adapters/resend.js', () => ({ sendEmail }));
 vi.mock('../../emails/templates.js', () => ({
-    passwordResetLinkEmail: vi.fn(() => ({ subject: 'Reset', html: '<p>Reset</p>', text: 'Reset' })),
+    passwordRecoveryEmail: vi.fn(() => ({ subject: 'Reset', html: '<p>Reset</p>', text: 'Reset' })),
 }));
 
 describe('password recovery requests', () => {

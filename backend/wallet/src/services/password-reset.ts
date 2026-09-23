@@ -1,10 +1,10 @@
 /**
- * Self-service password reset for email-authenticated users (customers + vendors).
+ * Self-service password reset for email-authenticated users.
  *
  * Flow:
- *   1. requestPasswordReset(email, userType) — generate 32-byte token, hash + store,
- *      email a reset link to the user.  Always returns ok=true to avoid user enumeration.
- *   2. confirmPasswordReset(token, newPassword, userType) — verify hash, check expiry,
+ *   1. requestPasswordReset(email, userType) — generate and email a six-digit OTP.
+ *   2. verifyPasswordResetOtp(email, otp, userType) — exchange it once for a reset grant.
+ *   3. confirmPasswordReset(token, newPassword, userType) — verify grant, check expiry,
  *      update Supabase auth password, mark token used.
  *
  * Token TTL: PASSWORD_RESET_TTL_MINUTES env var (default 30 min).
@@ -14,10 +14,10 @@ import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { sendEmail } from '../adapters/resend.js';
 import { env } from '../config/env.js';
-import { passwordResetLinkEmail } from '../emails/templates.js';
+import { passwordRecoveryEmail } from '../emails/templates.js';
 import { vendorPasswordError } from '@beverly/tokens/password-policy';
 
-export type ResetUserType = 'customer' | 'vendor_user';
+export type ResetUserType = 'customer' | 'vendor_user' | 'staff';
 
 export class PasswordResetError extends Error {
     constructor(message: string, public code: string, public status = 400) {
@@ -34,11 +34,12 @@ function generateRawToken(): string {
     return crypto.randomBytes(32).toString('hex');
 }
 
-function resetUrl(userType: ResetUserType, token: string): string {
-    const base = userType === 'customer'
-        ? env.CUSTOMER_APP_URL.replace(/\/+$/, '')
-        : env.VENDOR_APP_URL.replace(/\/+$/, '');
-    return `${base}/reset-password?token=${token}`;
+function generateOtp(): string {
+    return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+function hashOtp(otp: string, salt: string): string {
+    return crypto.scryptSync(otp, salt, 32).toString('hex');
 }
 
 async function lookupAuthUserId(email: string, userType: ResetUserType): Promise<string | null> {
@@ -56,6 +57,13 @@ async function lookupAuthUserId(email: string, userType: ResetUserType): Promise
             );
         }
         if (!data || (data as any).status !== 'active') return null;
+        return (data as any).auth_user_id ?? (data as any).user_id ?? null;
+    }
+    if (userType === 'staff') {
+        const { data, error } = await adminClient.from('users')
+            .select('auth_user_id, user_id, role_key').eq('email', email).maybeSingle();
+        if (error) throw new PasswordResetError('Account lookup is temporarily unavailable.', 'user_directory_unavailable', 503);
+        if (!data || !(data as any).role_key) return null;
         return (data as any).auth_user_id ?? (data as any).user_id ?? null;
     }
     // vendor_user — look up via vendor_users.email
@@ -76,8 +84,8 @@ async function lookupAuthUserId(email: string, userType: ResetUserType): Promise
 }
 
 async function lookupResetDisplayName(email: string, userType: ResetUserType): Promise<string> {
-    const table = userType === 'customer' ? 'customers' : 'vendor_users';
-    const nameColumn = userType === 'customer' ? 'full_name' : 'full_name';
+    const table = userType === 'customer' ? 'customers' : userType === 'staff' ? 'users' : 'vendor_users';
+    const nameColumn = userType === 'staff' ? 'user_name' : 'full_name';
     const { data } = await adminClient
         .from(table)
         .select(nameColumn)
@@ -134,15 +142,19 @@ export async function requestPasswordReset(
         );
     }
 
-    const raw = generateRawToken();
+    const otp = generateOtp();
+    const otpSalt = crypto.randomBytes(16).toString('hex');
     const ttlMs = env.PASSWORD_RESET_TTL_MINUTES * 60 * 1000;
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
     const { error } = await adminClient.from('password_reset_tokens').insert({
         auth_user_id: authUserId,
-        token_hash:   hashToken(raw),
+        token_hash:   hashOtp(otp, otpSalt),
+        otp_salt:     otpSalt,
         email:        normalizedEmail,
         user_type:    userType,
+        token_kind:   'otp',
+        attempts:     0,
         expires_at:   expiresAt,
     });
     if (error) {
@@ -153,13 +165,10 @@ export async function requestPasswordReset(
         );
     }
 
-    const link = resetUrl(userType, raw);
     const fullName = await lookupResetDisplayName(normalizedEmail, userType).catch(() => normalizedEmail);
-    const content = passwordResetLinkEmail({
+    const content = passwordRecoveryEmail({
         fullName,
-        resetUrl: link,
-        expiresMinutes: env.PASSWORD_RESET_TTL_MINUTES,
-        accountLabel: userType === 'vendor_user' ? 'vendor' : undefined,
+        code: otp,
     });
 
     try {
@@ -168,7 +177,7 @@ export async function requestPasswordReset(
             subject: content.subject,
             text: content.text,
             html: content.html,
-            tag: 'password-reset',
+            tag: 'password-reset-otp',
         });
     } catch {
         // Invalidate the undelivered token. A later retry must receive a fresh
@@ -177,7 +186,7 @@ export async function requestPasswordReset(
             await adminClient
                 .from('password_reset_tokens')
                 .update({ used_at: new Date().toISOString() })
-                .eq('token_hash', hashToken(raw))
+                .eq('token_hash', hashOtp(otp, otpSalt))
                 .is('used_at', null);
         } catch {
             // Preserve the original delivery failure.
@@ -188,6 +197,76 @@ export async function requestPasswordReset(
             503,
         );
     }
+}
+
+export async function verifyPasswordResetOtp(
+    email: string,
+    otp: string,
+    userType: ResetUserType,
+): Promise<{ token: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^\d{6}$/.test(otp)) {
+        throw new PasswordResetError('Enter the six-digit code.', 'otp_incorrect', 401);
+    }
+
+    const { data: row, error } = await adminClient
+        .from('password_reset_tokens')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .eq('user_type', userType)
+        .eq('token_kind', 'otp')
+        .is('used_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (error) throw new PasswordResetError('Code verification is unavailable.', 'otp_store_unavailable', 503);
+    if (!row) throw new PasswordResetError('No active code exists. Request another.', 'otp_not_found', 401);
+    if (!(row as any).otp_salt) throw new PasswordResetError('This code is invalid. Request another.', 'otp_not_found', 401);
+    if (new Date((row as any).expires_at).getTime() <= Date.now()) {
+        await adminClient.from('password_reset_tokens').update({ used_at: new Date().toISOString() }).eq('id', (row as any).id);
+        throw new PasswordResetError('This code expired. Request another.', 'otp_expired', 401);
+    }
+    const attempts = Number((row as any).attempts ?? 0);
+    if (attempts >= 5) throw new PasswordResetError('Too many attempts. Request another code.', 'otp_locked', 429);
+    if (!crypto.timingSafeEqual(
+        Buffer.from(String((row as any).token_hash), 'hex'),
+        Buffer.from(hashOtp(otp, String((row as any).otp_salt)), 'hex'),
+    )) {
+        const nextAttempts = attempts + 1;
+        await adminClient.from('password_reset_tokens').update({
+            attempts: nextAttempts,
+            ...(nextAttempts >= 5 ? { used_at: new Date().toISOString() } : {}),
+        }).eq('id', (row as any).id).is('used_at', null);
+        throw new PasswordResetError(
+            nextAttempts >= 5 ? 'Too many attempts. Request another code.' : 'Incorrect code.',
+            nextAttempts >= 5 ? 'otp_locked' : 'otp_incorrect',
+            nextAttempts >= 5 ? 429 : 401,
+        );
+    }
+
+    const consumedAt = new Date().toISOString();
+    const { data: consumed, error: consumeError } = await adminClient
+        .from('password_reset_tokens')
+        .update({ used_at: consumedAt })
+        .eq('id', (row as any).id)
+        .is('used_at', null)
+        .select('id')
+        .maybeSingle();
+    if (consumeError || !consumed) throw new PasswordResetError('This code was already used.', 'otp_not_found', 401);
+
+    const rawToken = generateRawToken();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const { error: grantError } = await adminClient.from('password_reset_tokens').insert({
+        auth_user_id: (row as any).auth_user_id,
+        token_hash: hashToken(rawToken),
+        email: normalizedEmail,
+        user_type: userType,
+        token_kind: 'reset_grant',
+        attempts: 0,
+        expires_at: expiresAt,
+    });
+    if (grantError) throw new PasswordResetError('Password reset is unavailable.', 'token_store_failed', 503);
+    return { token: rawToken };
 }
 
 export async function confirmPasswordReset(
@@ -201,7 +280,7 @@ export async function confirmPasswordReset(
     if (newPassword.length < 8) {
         throw new PasswordResetError('Password must be at least 8 characters.', 'weak_password');
     }
-    if (userType === 'vendor_user') {
+    if (userType === 'vendor_user' || userType === 'staff') {
         const policyError = vendorPasswordError(newPassword);
         if (policyError) throw new PasswordResetError(policyError, 'weak_password');
     }
@@ -213,6 +292,7 @@ export async function confirmPasswordReset(
         .select('*')
         .eq('token_hash', hash)
         .eq('user_type', userType)
+        .eq('token_kind', 'reset_grant')
         .is('used_at', null)
         .maybeSingle();
 
@@ -248,9 +328,10 @@ export async function confirmPasswordReset(
         password_session_id: string | null;
     } | null = null;
 
-    if (userType === 'vendor_user') {
+    if (userType === 'vendor_user' || userType === 'staff') {
+        const stateTable = userType === 'staff' ? 'users' : 'vendor_users';
         const { data: vendorState, error: vendorStateReadError } = await adminClient
-            .from('vendor_users')
+            .from(stateTable)
             .select('password_reset_required, password_changed_at, password_session_id')
             .eq('auth_user_id', (row as any).auth_user_id)
             .maybeSingle();
@@ -267,14 +348,16 @@ export async function confirmPasswordReset(
             password_changed_at: (vendorState as any).password_changed_at ?? null,
             password_session_id: (vendorState as any).password_session_id ?? null,
         };
-        const { error: vendorStateError } = await adminClient
-            .from('vendor_users')
+        const stateUpdate = adminClient
+            .from(stateTable)
             .update({
                 password_reset_required: true,
                 password_changed_at: new Date().toISOString(),
                 password_session_id: `password-reset:${crypto.randomUUID()}`,
-            })
-            .eq('auth_user_id', (row as any).auth_user_id);
+            });
+        const { error: vendorStateError } = userType === 'staff'
+            ? await stateUpdate.or(`auth_user_id.eq.${(row as any).auth_user_id},user_id.eq.${(row as any).auth_user_id}`)
+            : await stateUpdate.eq('auth_user_id', (row as any).auth_user_id);
         if (vendorStateError) {
             await releaseClaim();
             throw new PasswordResetError(
@@ -293,10 +376,13 @@ export async function confirmPasswordReset(
     if (authErr) {
         let stateRestored = true;
         if (previousVendorState) {
-            const { error: restoreError } = await adminClient
-                .from('vendor_users')
-                .update(previousVendorState)
-                .eq('auth_user_id', (row as any).auth_user_id);
+            const stateTable = userType === 'staff' ? 'users' : 'vendor_users';
+            const restoreUpdate = adminClient
+                .from(stateTable)
+                .update(previousVendorState);
+            const { error: restoreError } = userType === 'staff'
+                ? await restoreUpdate.or(`auth_user_id.eq.${(row as any).auth_user_id},user_id.eq.${(row as any).auth_user_id}`)
+                : await restoreUpdate.eq('auth_user_id', (row as any).auth_user_id);
             stateRestored = !restoreError;
         }
         const claimReleased = stateRestored && await releaseClaim();
@@ -317,6 +403,15 @@ export async function confirmPasswordReset(
             .from('vendor_users')
             .update({ password_reset_required: false })
             .eq('auth_user_id', (row as any).auth_user_id);
+    }
+    if (userType === 'staff') {
+        const { error: staffStateError } = await adminClient.from('users').update({
+            password_reset_required: false,
+            password_session_id: null,
+        }).or(`auth_user_id.eq.${(row as any).auth_user_id},user_id.eq.${(row as any).auth_user_id}`);
+        if (staffStateError) {
+            throw new PasswordResetError('Password was updated. Sign in again or contact support.', 'password_state_update_failed', 503);
+        }
     }
 
     // Revoke existing sessions after recovery.

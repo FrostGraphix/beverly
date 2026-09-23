@@ -12,8 +12,10 @@ const vendorRoutes = read('backend/wallet/src/routes/vendor.ts');
 const routePolicy = read('backend/wallet/src/contracts/route-policy.ts');
 const sessionGateMigration = read('supabase/migrations/20260912143000_vendor_password_rls_session_gate.sql');
 
-assert.match(resetView, /delete sanitizedQuery\.token/);
-assert.match(resetView, /router\.replace\(\{ query: sanitizedQuery \}\)/);
+assert.match(resetView, /sessionStorage\.getItem\('beverly\.vendor\.password-reset-grant'\)/);
+assert.match(resetView, /sessionStorage\.removeItem\('beverly\.vendor\.password-reset-grant'\)/);
+assert.doesNotMatch(resetView, /route\.query\.token/);
+assert.match(vendorRoutes, /fastify\.post\('\/auth\/reset-verify'/);
 assert.match(passwordView, /safeVendorRedirect/);
 assert.match(loginView, /safeVendorRedirect/);
 assert.doesNotMatch(loginView, /auth\/v1\/token\?grant_type=password/);

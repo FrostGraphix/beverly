@@ -35,7 +35,7 @@ import { logAction } from '../services/audit.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import {
-    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+    requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset, PasswordResetError,
 } from '../services/password-reset.js';
 import {
     createTicket, listTickets, getTicket, addTicketMessage,
@@ -863,6 +863,21 @@ const route: FastifyPluginAsync = async (fastify) => {
                 error: 'password_reset_unavailable',
                 message: 'Password reset is temporarily unavailable. Please try again shortly.',
             });
+        }
+    });
+
+    fastify.post('/auth/reset-verify', {
+        config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    }, async (req, reply) => {
+        const { email, otp } = z.object({
+            email: z.string().trim().email().max(320),
+            otp: z.string().regex(/^\d{6}$/),
+        }).parse(req.body);
+        try {
+            return await verifyPasswordResetOtp(email, otp, 'vendor_user');
+        } catch (error) {
+            if (error instanceof PasswordResetError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
         }
     });
 
