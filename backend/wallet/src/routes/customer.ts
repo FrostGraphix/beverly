@@ -97,6 +97,8 @@ import {
     verifyCustomerVendPin,
     CustomerVendPinError,
 } from '../services/customer-vend-pin.js';
+import { vendorPasswordError } from '@beverly/tokens/password-policy';
+import { replaceCustomerPassword, CustomerPasswordChangeError } from '../services/customer-password-change.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
@@ -476,6 +478,27 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return shapeCustomerProfile(data);
+    });
+
+    fastify.post('/password-change', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const body = z.object({
+            current: z.string().min(1).max(200),
+            next: z.string().min(12).max(128),
+        }).parse(req.body);
+        const policyError = vendorPasswordError(body.next);
+        if (policyError) return reply.code(422).send({ error: 'weak_password', message: policyError });
+        if (body.current === body.next) return reply.code(400).send({ error: 'same_password', message: 'Choose a different password.' });
+        try {
+            return await replaceCustomerPassword({
+                actor: req.actor!, currentPassword: body.current, nextPassword: body.next,
+                ip: req.ip, userAgent: req.headers['user-agent'],
+            });
+        } catch (error) {
+            if (error instanceof CustomerPasswordChangeError) {
+                return reply.code(error.status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {

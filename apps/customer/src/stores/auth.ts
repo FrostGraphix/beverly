@@ -85,6 +85,11 @@ export const useAuthStore = defineStore('auth', {
             const storage = remember ? localStorage : sessionStorage;
             storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customer));
         },
+        rotateSession(token: string, tokenOptions: CustomerTokenOptions = {}) {
+            const remember = localStorage.getItem(CUSTOMER_TOKEN_KEY) !== null;
+            this.accessToken = token;
+            storeCustomerToken(token, remember, tokenOptions);
+        },
         async logout() {
             try { await customerPushNotifications.disable(); } catch { /* device cleanup is best-effort */ }
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }

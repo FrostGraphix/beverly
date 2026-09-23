@@ -205,6 +205,12 @@ async function uploadProcessedProfilePicture(file: File) {
       @done="(f) => { cropOpen = false; uploadProcessedProfilePicture(f); }"
     />
     <div class="bw-stack">
+      <section class="bw-card">
+        <p class="profile-eyebrow">Security</p>
+        <h2>Account password</h2>
+        <p class="bw-muted">Update your password securely.</p>
+        <router-link class="bw-btn primary" to="/password-change">Change password</router-link>
+      </section>
       <section class="profile-hero bw-card">
         <div class="profile-hero-top">
           <div class="profile-avatar-wrap">
