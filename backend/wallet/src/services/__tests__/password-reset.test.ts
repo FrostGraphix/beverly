@@ -74,7 +74,7 @@ vi.mock('../../config/env.js', () => ({
     },
 }));
 vi.mock('../../adapters/resend.js', () => ({ sendEmail: vi.fn() }));
-vi.mock('../../emails/templates.js', () => ({ passwordResetLinkEmail: vi.fn() }));
+vi.mock('../../emails/templates.js', () => ({ passwordRecoveryEmail: vi.fn() }));
 
 describe('vendor password recovery', () => {
     beforeEach(() => {

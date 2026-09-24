@@ -52,6 +52,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
         'wallet.customers.view', 'wallet.meters.approve', 'wallet.kyc.view', 'wallet.kyc.review', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view', 'wallet.reports.view',
     ],
+    'operations-officer': [
+        'wallet.dashboard.view', 'wallet.vending.monitor', 'wallet.customers.view',
+        'wallet.meters.approve', 'wallet.disputes.manage', 'wallet.support.manage',
+        'wallet.consumption.view', 'wallet.reports.view',
+    ],
     'finance-checker': [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
         'wallet.customers.view', 'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
@@ -67,6 +72,7 @@ export const ROLE_LABELS: Record<string, string> = {
     'super-admin': 'Super Admin',
     developer: 'Developer',
     'operations-manager': 'Operations Manager',
+    'operations-officer': 'Operations Officer',
     'finance-checker': 'Finance Checker',
     account: 'Account Officer',
 };
@@ -75,11 +81,19 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
     'super-admin': 'admin',
     developer: 'developer',
     'operations-manager': 'ops',
+    'operations-officer': 'operations-officer',
     'finance-checker': 'analyst',
     account: 'finance',
 };
 
 export const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
+
+export class PermissionResolutionError extends Error {
+    constructor(message = 'Permissions could not be verified.') {
+        super(message);
+        this.name = 'PermissionResolutionError';
+    }
+}
 
 // Seed flag — runs once per server lifetime, not on every request.
 let _accessDefaultsSeeded = false;
@@ -101,23 +115,15 @@ export async function ensureAccessDefaults(): Promise<void> {
                     : 'Wallet administration role managed by Beverly access policy.',
             }, { onConflict: 'role_key' });
         }
-        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-            for (const permission of permissions) {
-                await adminClient.from('permissions').upsert({
-                    role_key: roleKey,
-                    route_hash: permission,
-                }, { onConflict: 'role_key,route_hash' });
-            }
-        }
         _accessDefaultsSeeded = true;
     })();
     return _accessDefaultsPromise;
 }
 
 export async function permissionsForRole(role: string): Promise<Set<string>> {
-    await ensureAccessDefaults();
     if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((p) => p.key));
-    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    const { data, error } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    if (error) throw new PermissionResolutionError(error.message);
     return new Set((data ?? []).map((p: any) => p.route_hash));
 }
 

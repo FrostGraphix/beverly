@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import Stepper from '../components/Stepper.vue';
 import StationMultiSelect from '../components/StationMultiSelect.vue';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 
 const route = useRoute();
 const router = useRouter();
@@ -42,6 +42,35 @@ const error = ref<string | null>(null);
 const result = ref<{ organizationId: string; temporaryPassword: string | null; replayed?: boolean; invitationDelivery: { status: 'sent' | 'failed'; reason?: string } } | null>(null);
 const copied = ref(false);
 const requestKey = ref(crypto.randomUUID());
+
+function vendorCreationErrorMessage(error: unknown): string {
+    if (!(error instanceof ApiError)) {
+        return 'Vendor creation could not be completed. Retry once. Contact support if it continues.';
+    }
+    if (error.code === 'vendor_provisioning_in_progress') {
+        return 'Vendor creation is already running. Wait briefly, then retry.';
+    }
+    if (error.code === 'request_timeout') {
+        return 'The request took too long. Check the vendor list before retrying.';
+    }
+    if (error.code === 'auth_create_failed') {
+        return 'The vendor login could not be created. Verify the email, then retry.';
+    }
+    if (error.code === 'single_station_required' || error.code === 'validation_failed') {
+        return 'Some vendor details are invalid. Review each form step.';
+    }
+    if (error.status >= 500 || [
+        'internal_error',
+        'create_org_failed',
+        'create_vendor_user_failed',
+        'provisioning_recovery_failed',
+        'provisioning_status_update_failed',
+        'source_application_update_failed',
+    ].includes(error.code)) {
+        return 'Vendor creation could not be completed. Retry once. Contact support if it continues.';
+    }
+    return error.message || 'Vendor creation could not be completed.';
+}
 
 onMounted(() => {
     if (route.query.legalName) form.value.legalName = String(route.query.legalName);
@@ -155,7 +184,7 @@ async function submit() {
         };
         result.value = await api.post('/api/v1/admin/vendors', payload, { headers: { 'Idempotency-Key': requestKey.value } });
     } catch (e: any) {
-        error.value = e?.message ?? 'Failed to create vendor';
+        error.value = vendorCreationErrorMessage(e);
     } finally { loading.value = false; }
 }
 

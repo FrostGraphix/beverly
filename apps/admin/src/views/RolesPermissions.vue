@@ -99,7 +99,7 @@ const staffByRole = computed(() => {
  * a second hardcoded list that can drift from SYSTEM_ROLE_KEYS on the backend.
  * The literal is only a pre-load fallback.
  */
-const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'finance-checker', 'account', 'developer']);
+const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'operations-officer', 'finance-checker', 'account', 'developer']);
 const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey);
 
 /* Permissions the backend refuses to grant to a custom role — mirrors
@@ -107,13 +107,14 @@ const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey)
 const RESTRICTED_TO_SYSTEM_ROLES = ['dev.console'];
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
-const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'finance-checker': 'fc', account: 'ac', developer: 'c1' };
+const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'operations-officer': 'om', 'finance-checker': 'fc', account: 'ac', developer: 'c1' };
 /* Custom roles get a stable colour derived from their key, so two custom roles
    are visually distinguishable instead of all inheriting the amber of Account. */
 const CUSTOM_ROLE_COLORS = ['c1', 'c2', 'c3', 'c4'];
 const ROLE_DESCS: Record<string, string> = {
     'super-admin':          'Full system access. Can change roles, permissions, and all financial controls.',
     'operations-manager':   'Monitors vending activity, resolves disputes, reviews vendors, and runs reconciliation.',
+    'operations-officer':   'Handles daily operations, remote tasks, records, and reports.',
     'finance-checker':      'Reviews and approves funding, manages refunds, and views settlement reports.',
     account:                'Day-to-day account officer — views funding queue, monitors vending, and reads settlements.',
     developer:              'Developer tooling access without operational or money movement controls.',
@@ -623,8 +624,8 @@ onMounted(() => { void load(); });
                 </div>
                 <div class="ac-field">
                   <label class="bw-label">Work email</label>
-                  <input v-model="draft.email" class="bw-input" type="email" inputmode="email" pattern=".+@acoblighting\.com$" placeholder="ada@acoblighting.com" required />
-                  <p class="ac-field-help">Only @acoblighting.com work email addresses are accepted.</p>
+                  <input v-model="draft.email" class="bw-input" type="email" inputmode="email" pattern=".+@(acoblighting\.com|org\.acoblighting\.com)$" placeholder="ada@acoblighting.com" required />
+                  <p class="ac-field-help">Only @acoblighting.com or @org.acoblighting.com work email addresses are accepted.</p>
                 </div>
               </div>
 
@@ -689,7 +690,7 @@ onMounted(() => { void load(); });
 
               <div class="ac-invite-actions">
                 <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
-                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@acoblighting\.com$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
+                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@(acoblighting\.com|org\.acoblighting\.com)$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
                 <button v-else class="bw-btn primary" :disabled="saving">
                   {{ saving ? 'Creating…' : 'Create staff user' }}
                 </button>

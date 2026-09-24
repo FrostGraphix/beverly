@@ -14,6 +14,7 @@ const tables: Record<string, Row[]> = {
 const auditEvents: Row[] = [];
 let nextId = 1;
 let failSessionUpsert = false;
+let failSelectTable: string | null = null;
 
 function clone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
@@ -181,6 +182,9 @@ class QueryBuilder {
         }
 
         const rows = this.matchingRows();
+        if (this.operation === 'select' && this.tableName === failSelectTable) {
+            return { data: null, count: null, error: { message: 'simulated lookup failure' } };
+        }
         if (this.wantsCount) return { data: null, count: rows.length, error: null };
         if (this.wantsSingle) return { data: clone(rows[0] ?? null), error: rows[0] ? null : { message: 'missing row' } };
         if (this.wantsMaybeSingle) return { data: clone(rows[0] ?? null), error: null };
@@ -241,6 +245,7 @@ describe('vendor MFA runtime flow', () => {
         auditEvents.splice(0);
         nextId = 1;
         failSessionUpsert = false;
+        failSelectTable = null;
     });
 
     it('runs setup, enforcement session, recovery, replacement, and disable end to end', async () => {
@@ -319,5 +324,59 @@ describe('vendor MFA runtime flow', () => {
             expect.objectContaining({ status: 'pending' }),
         ]));
         expect(tables.vendor_users[0].mfa_enrolled).toBe(false);
+    });
+
+    it('accepts a recovery code when the authenticator secret is unreadable', async () => {
+        const service = await import('../vendor-mfa.js');
+        const actor = { actorId: 'vendor-user-4', userId: 'auth-user-4', email: 'vendor4@example.test' };
+        tables.vendor_users.push({ id: actor.actorId, auth_user_id: actor.userId, mfa_enrolled: false });
+
+        const setup = await service.beginVendorMfaEnrollment(actor);
+        const enrollment = await service.verifyVendorMfaEnrollment(
+            actor,
+            accessToken('session-5', 'enrollment-token'),
+            totp(setup.secret),
+        );
+        const activeFactor = tables.vendor_mfa_factors.find((row) => row.status === 'active');
+        activeFactor!.secret_ciphertext = 'unreadable';
+
+        const challenge = await service.verifyVendorMfaChallenge(
+            actor,
+            accessToken('session-6', 'recovery-token'),
+            enrollment.recovery_codes[0],
+        );
+
+        expect(challenge.recovery_code_used).toBe(true);
+        expect(await service.vendorMfaSessionVerified(
+            actor.userId,
+            accessToken('session-6', 'refreshed-token'),
+        )).toBe(true);
+    });
+
+    it('fails closed when factor lookup fails', async () => {
+        const service = await import('../vendor-mfa.js');
+        const actor = { actorId: 'vendor-user-5', userId: 'auth-user-5', email: 'vendor5@example.test' };
+        failSelectTable = 'vendor_mfa_factors';
+
+        await expect(service.verifyVendorMfaChallenge(
+            actor,
+            accessToken('session-7', 'challenge-token'),
+            '519980',
+        )).rejects.toMatchObject({ code: 'mfa_factor_lookup_failed' });
+    });
+
+    it('fails closed when recovery lookup fails', async () => {
+        const service = await import('../vendor-mfa.js');
+        const actor = { actorId: 'vendor-user-6', userId: 'auth-user-6', email: 'vendor6@example.test' };
+        tables.vendor_users.push({ id: actor.actorId, auth_user_id: actor.userId, mfa_enrolled: false });
+        const setup = await service.beginVendorMfaEnrollment(actor);
+        await service.verifyVendorMfaEnrollment(actor, accessToken('session-8', 'setup-token'), totp(setup.secret));
+        failSelectTable = 'vendor_mfa_recovery_codes';
+
+        await expect(service.verifyVendorMfaChallenge(
+            actor,
+            accessToken('session-9', 'challenge-token'),
+            '000000',
+        )).rejects.toMatchObject({ code: 'mfa_recovery_lookup_failed' });
     });
 });

@@ -9,6 +9,7 @@ import publicRoutes from './public.js';
 import vendorRoutes from './vendor.js';
 import adminRoutes from './admin.js';
 import staffMfaRoutes from './staff-mfa.js';
+import adminPasswordRecoveryRoutes from './admin-password-recovery.js';
 import webhookRoutes from './webhooks.js';
 import customerRoutes from './customer.js';
 import acobotRoutes from './acobot.js';
@@ -23,6 +24,7 @@ const routes: FastifyPluginAsync = async (fastify) => {
     // Staff MFA is registered as a sibling (not under adminRoutes) so it skips
     // the admin plugin's global requireStaff() MFA enforcement.
     await fastify.register(staffMfaRoutes, { prefix: '/api/v1/admin/mfa' });
+    await fastify.register(adminPasswordRecoveryRoutes, { prefix: '/api/v1/admin/auth' });
     await fastify.register(adminRoutes,    { prefix: '/api/v1/admin'    });
     await fastify.register(webhookRoutes,  { prefix: '/api/v1/webhook'  });
     await fastify.register(customerRoutes, { prefix: '/api/v1/customer' });

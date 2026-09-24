@@ -42,14 +42,21 @@ function encryptSecret(plainText: string): string {
 }
 
 function decryptSecret(payload: string): string {
-    const [ivText, tagText, cipherText] = payload.split('.');
-    if (!ivText || !tagText || !cipherText) throw new VendorMfaError('Authenticator secret is unreadable.', 'mfa_secret_invalid');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivText, 'base64url'));
-    decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
-    return Buffer.concat([
-        decipher.update(Buffer.from(cipherText, 'base64url')),
-        decipher.final(),
-    ]).toString('utf8');
+    try {
+        const [ivText, tagText, cipherText] = payload.split('.');
+        if (!ivText || !tagText || !cipherText) throw new Error('invalid encrypted payload');
+        const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivText, 'base64url'));
+        decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+        return Buffer.concat([
+            decipher.update(Buffer.from(cipherText, 'base64url')),
+            decipher.final(),
+        ]).toString('utf8');
+    } catch {
+        throw new VendorMfaError(
+            'Use a recovery code. Contact Beverly support if none remain.',
+            'mfa_secret_invalid',
+        );
+    }
 }
 
 function base32Encode(bytes: Buffer): string {
@@ -158,17 +165,18 @@ function otpauthUri(secret: string, actor: VendorMfaActor): string {
 }
 
 async function activeFactor(vendorUserId: string) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_mfa_factors')
         .select('*')
         .eq('vendor_user_id', vendorUserId)
         .eq('status', 'active')
         .maybeSingle();
+    if (error) throw new VendorMfaError('Could not load two-factor settings.', 'mfa_factor_lookup_failed');
     return data as any | null;
 }
 
 async function pendingFactor(vendorUserId: string) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_mfa_factors')
         .select('*')
         .eq('vendor_user_id', vendorUserId)
@@ -176,6 +184,7 @@ async function pendingFactor(vendorUserId: string) {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+    if (error) throw new VendorMfaError('Could not load two-factor setup.', 'mfa_factor_lookup_failed');
     return data as any | null;
 }
 
@@ -202,6 +211,9 @@ export async function vendorMfaStatus(vendorUserId: string, userId: string, acce
             .eq('vendor_user_id', vendorUserId)
             .is('used_at', null)
         : { count: 0 };
+    if ('error' in recovery && recovery.error) {
+        throw new VendorMfaError('Could not load recovery-code status.', 'mfa_recovery_lookup_failed');
+    }
     return {
         enrolled: Boolean(factor),
         verified: accessToken ? await vendorMfaSessionVerified(userId, accessToken) : false,
@@ -247,10 +259,21 @@ async function createPendingEnrollment(actor: VendorMfaActor) {
 async function verifyActiveMfaCode(actor: VendorMfaActor, code: string, reason: string, meta: VendorMfaRequestMeta = {}) {
     const factor = await activeFactor(actor.actorId);
     if (!factor) throw new VendorMfaError('Two-factor authentication is not enabled.', 'mfa_not_enabled');
-    const secret = decryptSecret(factor.secret_ciphertext);
-    const isTotp = verifyTotp(secret, code);
+    let secretError: VendorMfaError | null = null;
+    let isTotp = false;
+    try {
+        isTotp = verifyTotp(decryptSecret(factor.secret_ciphertext), code);
+    } catch (error) {
+        secretError = error instanceof VendorMfaError
+            ? error
+            : new VendorMfaError(
+                'Use a recovery code. Contact Beverly support if none remain.',
+                'mfa_secret_invalid',
+            );
+    }
     const isRecovery = isTotp ? false : await consumeRecoveryCode(actor, code);
     if (!isTotp && !isRecovery) {
+        if (secretError) throw secretError;
         await logSecurityEvent('mfa_failure', {
             actorUserId: actor.userId,
             severity: 'high',
@@ -338,20 +361,22 @@ export async function verifyVendorMfaEnrollment(actor: VendorMfaActor, accessTok
 }
 
 async function consumeRecoveryCode(actor: VendorMfaActor, code: string): Promise<boolean> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_mfa_recovery_codes')
         .select('id, code_hash')
         .eq('vendor_user_id', actor.actorId)
         .is('used_at', null);
+    if (error) throw new VendorMfaError('Could not verify recovery codes.', 'mfa_recovery_lookup_failed');
     const match = (data || []).find((row: any) => row.code_hash === recoveryHash(code));
     if (!match) return false;
     // Guard against race: only update if still unused at the DB level.
-    const { data: updated } = await adminClient
+    const { data: updated, error: updateError } = await adminClient
         .from('vendor_mfa_recovery_codes')
         .update({ used_at: new Date().toISOString() })
         .eq('id', (match as any).id)
         .is('used_at', null)
         .select('id');
+    if (updateError) throw new VendorMfaError('Could not consume this recovery code.', 'mfa_recovery_save_failed');
     return Boolean(updated?.length);
 }
 

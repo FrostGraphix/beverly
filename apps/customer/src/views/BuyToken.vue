@@ -8,7 +8,7 @@ import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../
 import { useAuthStore } from '../stores/auth';
 
 const auth    = useAuthStore();
-const step    = ref<1 | 2 | 3 | 4>(1);
+const step    = ref<1 | 2 | 3 | 4 | 5>(1);
 
 // Step 1 — meter
 const meters    = ref<any[]>([]);
@@ -25,8 +25,9 @@ const preview  = ref<any>(null);
 const walletBal = ref(0);
 const loadingPreview = ref(false);
 
-// Step 4 — result
+// Step 4 & 5 — result / failure
 const result   = ref<any>(null);
+const failedPurchase = ref<any>(null);
 const loading  = ref(false);
 const error    = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
 const notice   = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
@@ -172,7 +173,36 @@ async function purchase() {
             return;
         }
 
-        result.value = r;
+        const rawToken = String(r?.token || r?.purchaseOrder?.token || '').trim();
+        const isFailed = !rawToken || r?.status === 'failed' || r?.purchaseOrder?.status === 'failed' || r?.purchaseOrder?.delivery_state === 'vend_failed';
+
+        if (isFailed) {
+            result.value = null;
+            remoteTrackerOpen.value = false;
+            const failureReason = r?.purchaseOrder?.remark
+                || r?.purchaseOrder?.failure_reason
+                || r?.message
+                || 'Token generation failed. No token was returned by the vending service.';
+            failedPurchase.value = {
+                title: 'Token Generation Failed',
+                message: failureReason,
+                action: 'No wallet funds were debited. Your balance is untouched.',
+                code: r?.purchaseOrder?.delivery_state || r?.code || 'token_not_generated',
+                meterId: selMeter.value?.meter_id,
+                amountMinor: amountMinor.value,
+                units: preview.value?.units,
+                orderId: r?.purchaseOrder?.id,
+            };
+            error.value = failedPurchase.value;
+            step.value = 5;
+            return;
+        }
+
+        result.value = {
+            ...r,
+            token: rawToken,
+        };
+        failedPurchase.value = null;
         notice.value = {
             tone: 'success',
             title: 'Token generated successfully',
@@ -183,7 +213,20 @@ async function purchase() {
             remoteTrackerOpen.value = true;
         }, 500);
     } catch (e: any) {
-        error.value = describeApiError(e, e?.message ?? 'Purchase failed. Try again.');
+        remoteTrackerOpen.value = false;
+        const errDetails = describeApiError(e, e?.message ?? 'Purchase failed. Try again.');
+        error.value = errDetails;
+        if (errDetails.code !== 'invalid_vend_pin' && errDetails.code !== 'vend_pin_required' && errDetails.code !== 'amount_too_low') {
+            failedPurchase.value = {
+                title: errDetails.title,
+                message: errDetails.message,
+                action: errDetails.action,
+                code: errDetails.code,
+                meterId: selMeter.value?.meter_id,
+                amountMinor: amountMinor.value,
+            };
+            step.value = 5;
+        }
     } finally { loading.value = false; }
 }
 
@@ -198,7 +241,33 @@ async function submitStepUp() {
         });
         stepUpRequired.value = false;
         pendingPurchaseParams = null;
-        result.value = r;
+
+        const rawToken = String(r?.token || r?.purchaseOrder?.token || '').trim();
+        const isFailed = !rawToken || r?.status === 'failed' || r?.purchaseOrder?.status === 'failed' || r?.purchaseOrder?.delivery_state === 'vend_failed';
+
+        if (isFailed) {
+            result.value = null;
+            remoteTrackerOpen.value = false;
+            const failureReason = r?.purchaseOrder?.remark || r?.message || 'Token generation failed after security check.';
+            failedPurchase.value = {
+                title: 'Token Generation Failed',
+                message: failureReason,
+                action: 'No wallet funds were debited. Your balance is untouched.',
+                code: r?.purchaseOrder?.delivery_state || r?.code || 'token_not_generated',
+                meterId: selMeter.value?.meter_id,
+                amountMinor: amountMinor.value,
+                orderId: r?.purchaseOrder?.id,
+            };
+            error.value = failedPurchase.value;
+            step.value = 5;
+            return;
+        }
+
+        result.value = {
+            ...r,
+            token: rawToken,
+        };
+        failedPurchase.value = null;
         notice.value = {
             tone: 'success',
             title: 'Token generated successfully',
@@ -236,8 +305,10 @@ async function copyToken() {
 
 function reset() {
     step.value = 1; result.value = null; preview.value = null;
+    failedPurchase.value = null;
     amountRaw.value = ''; error.value = null; notice.value = null;
     remoteSending.value = false; copied.value = false;
+    remoteTrackerOpen.value = false;
     vendPin.value = '';
 }
 
@@ -358,9 +429,9 @@ async function remoteSendGeneratedToken() {
     <!-- Step indicator -->
     <div class="bw-steps">
       <div v-for="n in 4" :key="n"
-           :class="['bw-step', step === n ? 'active' : step > n ? 'done' : '']">
-        <div class="bw-step-dot">{{ step > n ? '✓' : n }}</div>
-        <span v-if="step === n">{{ ['Meter','Amount','Preview','Done'][n-1] }}</span>
+           :class="['bw-step', step === n ? 'active' : step > n && step !== 5 ? 'done' : step === 5 && n === 4 ? 'error' : '']">
+        <div class="bw-step-dot">{{ step > n && step !== 5 ? '✓' : step === 5 && n === 4 ? '✗' : n }}</div>
+        <span v-if="step === n || (step === 5 && n === 4)">{{ step === 5 && n === 4 ? 'Failed' : ['Meter','Amount','Preview','Done'][n-1] }}</span>
       </div>
       <div v-if="false" class="bw-step-line"></div>
     </div>
@@ -551,7 +622,7 @@ async function remoteSendGeneratedToken() {
     </div>
 
     <!-- Step 4: Token reveal -->
-    <template v-if="step === 4 && result">
+    <template v-if="step === 4 && result?.token">
       <div class="bw-card" style="text-align:center">
         <div style="width:48px; height:48px; border-radius:50%; background: oklch(70% 0.19 145 / 0.15); display:grid; place-items:center; margin: 0 auto var(--s-4)">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -582,6 +653,50 @@ async function remoteSendGeneratedToken() {
       </div>
       <button class="bw-btn primary" style="width:100%; justify-content:center" @click="reset">
         Buy another
+      </button>
+    </template>
+
+    <!-- Step 5: Failed purchase screen -->
+    <template v-if="step === 5">
+      <div class="bw-card vend-failed-card" style="text-align:center">
+        <div class="failed-icon-circle" style="margin: 0 auto var(--s-3)">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+        </div>
+        <p class="token-failed-badge"><span></span>Purchase Unsuccessful</p>
+        <h1 class="bw-page-title" style="margin: 0 0 var(--s-2)">{{ failedPurchase?.title || error?.title || 'Token Generation Failed' }}</h1>
+        <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-4)">
+          {{ failedPurchase?.message || error?.message || 'We could not generate a token for your meter at this time.' }}
+        </p>
+
+        <div class="vend-safety-notice" style="text-align:left; margin-bottom: var(--s-4)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          <div>
+            <strong>Wallet Untouched</strong>
+            <p>No funds were debited from your wallet balance. You have not been charged.</p>
+          </div>
+        </div>
+
+        <div class="bw-card" style="text-align:left">
+          <div class="bw-row" style="justify-content:space-between"><span class="bw-muted">Meter</span><strong class="bw-mono">{{ failedPurchase?.meterId || selMeter?.meter_id }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Amount Attempted</span><strong>{{ naira(failedPurchase?.amountMinor ?? preview?.amountMinor) }}</strong></div>
+          <div v-if="failedPurchase?.code || error?.code" class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Error Code</span><span class="bw-mono">{{ failedPurchase?.code || error?.code }}</span></div>
+          <div v-if="failedPurchase?.orderId" class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Order ID</span><span class="bw-mono">#{{ String(failedPurchase.orderId).slice(0, 8) }}</span></div>
+        </div>
+
+        <div class="buy-token-actions" style="margin-top: var(--s-4)">
+          <button class="bw-btn primary" @click="step = 3; error = null;">Try Again</button>
+          <button class="bw-btn" @click="step = 2; error = null;">Change Amount</button>
+        </div>
+      </div>
+      <button class="bw-btn" style="width:100%; justify-content:center; margin-top: var(--s-3)" @click="reset">
+        Back to Meters
       </button>
     </template>
 
@@ -641,6 +756,80 @@ async function remoteSendGeneratedToken() {
   text-align: center;
   font-size: var(--t-xl);
   letter-spacing: 0.35em;
+}
+
+.bw-step.error .bw-step-dot {
+  background: color-mix(in srgb, var(--danger, #dc2626) 15%, transparent);
+  color: var(--danger, #dc2626);
+  border-color: var(--danger, #dc2626);
+}
+
+.vend-failed-card {
+  padding: var(--s-5);
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger, #dc2626) 4%, var(--surface-0));
+  display: grid;
+  gap: var(--s-3);
+}
+
+.failed-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--danger, #dc2626) 15%, transparent);
+  color: var(--danger, #dc2626);
+}
+
+.token-failed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--danger, #dc2626);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.token-failed-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--danger, #dc2626);
+}
+
+.vend-safety-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, var(--surface-0));
+  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 30%, transparent);
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+}
+
+.vend-safety-notice svg {
+  color: var(--success, #16a34a);
+  flex: none;
+  margin-top: 2px;
+}
+
+.vend-safety-notice strong {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--success, #16a34a);
+  margin-bottom: 2px;
+}
+
+.vend-safety-notice p {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 @media (max-width: 520px) {

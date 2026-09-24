@@ -35,7 +35,7 @@ import { logAction } from '../services/audit.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import {
-    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+    requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset, PasswordResetError,
 } from '../services/password-reset.js';
 import {
     createTicket, listTickets, getTicket, addTicketMessage,
@@ -74,6 +74,7 @@ import { revokePortalSession } from '../services/portal-session.js';
 import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import { assertOemVendAvailable, OemQuotaCircuitError } from '../services/oem-quota-circuit.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -120,7 +121,9 @@ function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string
 
 function sendMfaError(reply: FastifyReply, error: unknown) {
     if (error instanceof VendorMfaError) {
-        const status = ['invalid_otp', 'mfa_setup_not_started'].includes(error.code) ? 400 : 409;
+        const status = error.code === 'mfa_secret_invalid' || error.code.endsWith('_failed')
+            ? 503
+            : ['invalid_otp', 'mfa_setup_not_started'].includes(error.code) ? 400 : 409;
         return reply.code(status).send({ error: error.code, message: error.message });
     }
     throw error;
@@ -863,6 +866,21 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    fastify.post('/auth/reset-verify', {
+        config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    }, async (req, reply) => {
+        const { email, otp } = z.object({
+            email: z.string().trim().email().max(320),
+            otp: z.string().regex(/^\d{6}$/),
+        }).parse(req.body);
+        try {
+            return await verifyPasswordResetOtp(email, otp, 'vendor_user');
+        } catch (error) {
+            if (error instanceof PasswordResetError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
     fastify.post('/auth/reset-confirm', {
         config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
     }, async (req, reply) => {
@@ -1297,6 +1315,22 @@ const route: FastifyPluginAsync = async (fastify) => {
             return sendVendPreviewUnavailable(req, reply, 'meter_lookup', e);
         }
         try {
+            await assertOemVendAvailable(meter.oemId);
+        } catch (e) {
+            if (e instanceof OemQuotaCircuitError) {
+                return reply.code(422).send({
+                    error: e.code,
+                    message: e.message,
+                    details: {
+                        retryAfterSeconds: e.retryAfterSeconds,
+                        noVendAttempted: true,
+                        noWalletHoldCreated: true,
+                    },
+                });
+            }
+            return sendVendPreviewUnavailable(req, reply, 'meter_lookup', e);
+        }
+        try {
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             return { meter, preview };
         } catch (e: any) {
@@ -1451,11 +1485,16 @@ const route: FastifyPluginAsync = async (fastify) => {
             if (error instanceof VendingError) {
                 const status = error.code === 'insufficient_balance' ? 402
                     : error.code === 'oem_insufficient_quota' ? 422
+                    : error.code === 'oem_quota_circuit_unavailable' ? 503
                     : error.code === 'wallet_missing' ? 404
                     : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' ? 403
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
                     : 422;
-                return reply.code(status).send({ error: error.code, message: error.message });
+                return reply.code(status).send({
+                    error: error.code,
+                    message: error.message,
+                    ...(error.details ? { details: error.details } : {}),
+                });
             }
             throw error;
         }

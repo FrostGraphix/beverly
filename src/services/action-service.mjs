@@ -20,6 +20,7 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if (action === "Confirm" && route.hash.includes("remote-meter-control-task")) return "/api/RemoteMeterTask/UpdateControlTask";
   if (action === "Confirm" && route.hash.includes("remote-meter-token-task")) return "/api/RemoteMeterTask/UpdateTokenTask";
   if (action === "Add" && route.hash.includes("remote-support/firmware-update")) return "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask";
+  if ((action === "Move Station" || action === "Relocate") && route.hash.includes("admin/meter")) return "/api/local/meters/relocate";
 
   let moduleName = "";
   if (route.hash.includes("gateway")) moduleName = "gateway";

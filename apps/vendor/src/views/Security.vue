@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
+import { presentVendorMfaError } from '../lib/mfa-errors';
 import { useVendorAuthStore } from '../stores/auth';
 
 interface MfaStatus {
@@ -46,6 +47,8 @@ const loading = ref(false);
 const action = ref<'idle' | 'setup' | 'verify' | 'disable'>('idle');
 const notice = ref('');
 const error = ref('');
+const errorReference = ref<string | null>(null);
+const recoveryRequired = ref(false);
 
 const needsLoginChallenge = computed(() => route.query.mode === 'verify' || auth.requiresMfaVerification);
 const isEnabled = computed(() => status.value?.enrolled === true || auth.user?.mfa_enrolled === true);
@@ -89,9 +92,21 @@ function safeRedirectTarget(raw: unknown, fallback = '/') {
 }
 
 function readableError(err: unknown, fallback: string): string {
-    if (err instanceof ApiError) return err.message || fallback;
-    if (err instanceof Error) return err.message || fallback;
-    return fallback;
+    const presentation = presentVendorMfaError(err, fallback);
+    errorReference.value = presentation.reference;
+    recoveryRequired.value = presentation.recoveryRequired;
+    return presentation.message;
+}
+
+function clearError() {
+    error.value = '';
+    errorReference.value = null;
+    recoveryRequired.value = false;
+}
+
+function showLocalError(message: string) {
+    clearError();
+    error.value = message;
 }
 
 async function loadStatus() {
@@ -106,7 +121,7 @@ async function refreshIdentity() {
 async function startSetup() {
     loading.value = true;
     action.value = 'setup';
-    error.value = '';
+    clearError();
     notice.value = '';
     recoveryCodes.value = [];
     try {
@@ -121,12 +136,12 @@ async function startSetup() {
 
 async function verifySetup() {
     if (setupCode.value.replace(/\D/g, '').length < 6) {
-        error.value = 'Enter the six digit authenticator code.';
+        showLocalError('Enter the six digit authenticator code.');
         return;
     }
     loading.value = true;
     action.value = 'verify';
-    error.value = '';
+    clearError();
     try {
         const response = await api.post<MfaSetupVerify>('/api/v1/vendor/mfa/setup/verify', { code: setupCode.value });
         recoveryCodes.value = response.recovery_codes;
@@ -144,12 +159,12 @@ async function verifySetup() {
 
 async function verifyLoginChallenge() {
     if (challengeCode.value.trim().length < 6) {
-        error.value = 'Enter your authenticator or recovery code.';
+        showLocalError('Enter your authenticator or recovery code.');
         return;
     }
     loading.value = true;
     action.value = 'verify';
-    error.value = '';
+    clearError();
     try {
         await api.post('/api/v1/vendor/mfa/challenge/verify', { code: challengeCode.value });
         challengeCode.value = '';
@@ -165,12 +180,12 @@ async function verifyLoginChallenge() {
 
 async function disableMfa() {
     if (disableCode.value.trim().length < 6) {
-        error.value = 'Enter a current 2FA or recovery code.';
+        showLocalError('Enter a current 2FA or recovery code.');
         return;
     }
     loading.value = true;
     action.value = 'disable';
-    error.value = '';
+    clearError();
     try {
         await api.post('/api/v1/vendor/mfa/disable', { code: disableCode.value });
         disableCode.value = '';
@@ -187,12 +202,12 @@ async function disableMfa() {
 
 async function regenRecoveryCodes() {
     if (regenCode.value.trim().length < 6) {
-        error.value = 'Enter a current 2FA or recovery code to regenerate.';
+        showLocalError('Enter a current 2FA or recovery code to regenerate.');
         return;
     }
     loading.value = true;
     action.value = 'verify';
-    error.value = '';
+    clearError();
     try {
         const response = await api.post<{ recovery_codes: string[] }>('/api/v1/vendor/mfa/recovery/regenerate', { code: regenCode.value });
         recoveryCodes.value = response.recovery_codes;
@@ -208,12 +223,12 @@ async function regenRecoveryCodes() {
 
 async function resetMfa() {
     if (resetCode.value.trim().length < 6) {
-        error.value = 'Enter a current 2FA or recovery code to replace your authenticator.';
+        showLocalError('Enter a current 2FA or recovery code to replace your authenticator.');
         return;
     }
     loading.value = true;
     action.value = 'setup';
-    error.value = '';
+    clearError();
     recoveryCodes.value = [];
     try {
         setup.value = await api.post<MfaSetupStart>('/api/v1/vendor/mfa/setup/reset', { code: resetCode.value });
@@ -296,7 +311,11 @@ onMounted(async () => {
           </div>
         </div>
         <div v-if="notice" class="sop-alert sop-alert--ok">{{ notice }}</div>
-        <div v-if="error" class="sop-alert sop-alert--danger">{{ error }}</div>
+        <div v-if="error" class="sop-alert sop-alert--danger sop-alert--stacked">
+          <span>{{ error }}</span>
+          <span v-if="recoveryRequired" class="sop-alert-help">Enter one saved recovery code instead.</span>
+          <code v-if="errorReference" class="sop-alert-reference">Support reference: {{ errorReference }}</code>
+        </div>
         <div class="sop-input-row">
           <input v-model="challengeCode" class="bw-input sop-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="14" placeholder="123 456" @keyup.enter="verifyLoginChallenge" />
           <button class="bw-btn primary sop-btn" :disabled="loading && action === 'verify'" @click="verifyLoginChallenge">
@@ -761,6 +780,22 @@ onMounted(async () => {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.sop-alert--stacked {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.sop-alert-help {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sop-alert-reference {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
 }
 
 /* ── Secret card ── */

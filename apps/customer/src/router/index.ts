@@ -38,6 +38,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/receipts/:id',  name: 'receipt-detail', component: () => import('../views/ReceiptDetail.vue'),  meta: { auth: true } },
     { path: '/notifications', name: 'notifications',  component: () => import('../views/Notifications.vue'),  meta: { auth: true } },
     { path: '/profile',    name: 'profile',  component: () => import('../views/Profile.vue'),   meta: { auth: true } },
+    { path: '/password-change', name: 'password-change', component: () => import('../views/PasswordChange.vue'), meta: { auth: true } },
     { path: '/security',   name: 'security', component: () => import('../views/Security.vue'),  meta: { auth: true } },
     { path: '/verify-email', name: 'verify-email', component: () => import('../views/VerifyEmail.vue'), meta: { auth: true } },
     { path: '/disputes',   name: 'disputes', component: () => import('../views/Disputes.vue'),  meta: { auth: true } },

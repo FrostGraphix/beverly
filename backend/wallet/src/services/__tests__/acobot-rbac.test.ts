@@ -1,6 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { checkAcobotIntentPermission, getPermittedIntentsForActor } from '../acobot-rbac.js';
 import type { Actor } from '../../plugins/auth.js';
+
+vi.mock('../../db/supabase.js', () => ({
+    adminClient: {
+        from: vi.fn(() => ({
+            select: vi.fn(() => ({
+                eq: vi.fn(async (_column: string, role: string) => ({
+                    data: role === 'account'
+                        ? [
+                            { route_hash: 'wallet.dashboard.view' },
+                            { route_hash: 'wallet.funding.view' },
+                        ]
+                        : [],
+                    error: null,
+                })),
+            })),
+        })),
+    },
+}));
 
 describe('Beverly AI RBAC Intent Authorization', () => {
     const customerActor: Actor = {

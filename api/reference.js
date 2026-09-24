@@ -42,6 +42,7 @@ const {
   deleteMeterRecord
 } = require("../backend/src/services/storage-adapter");
 const oemRegistry = require("../backend/src/services/oem-registry-service");
+const meterRelocationService = require("../backend/src/services/meter-relocation-service");
 
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
@@ -599,10 +600,26 @@ function actorCanAccessStation(actor, payload) {
   return String(actorStation).toUpperCase() === String(requestedStation).toUpperCase();
 }
 
+const CRM_STAFF_ROLES = new Set([
+  "super-admin",
+  "super_admin",
+  "operations-manager",
+  "operations_manager",
+  "operations-officer",
+  "operations_officer",
+  "account",
+  "account-officer",
+  "account_officer"
+]);
+
+function isCrmStaffRole(roleId) {
+  return CRM_STAFF_ROLES.has(String(roleId || "").trim().toLowerCase());
+}
+
 function roleAllowsWalletPath(roleId, pathname) {
   const role = String(roleId || "").trim();
   const lowerPath = String(pathname || "").toLowerCase();
-  const staffRoles = new Set(["super-admin", "operations-manager", "account", "account-officer", "finance-checker"]);
+  const staffRoles = new Set(["super-admin", "operations-manager", "operations-officer", "account", "account-officer", "finance-checker"]);
   const vendorRoles = new Set(["vendor", "vendor_user"]);
   if (lowerPath.startsWith("/api/vendor/")) return vendorRoles.has(role) || staffRoles.has(role);
   if (lowerPath.startsWith("/api/wallet/funding/approve")) return role === "finance-checker" || role === "super-admin";
@@ -653,11 +670,21 @@ async function authorizeRequest(request, pathname, requestData) {
 
   const access = await getAccessControlModule();
   const normalizedRole = access.normalizeRoleId(resolvedActor.roleId);
+  const operationalGroups = access.operationalGroups;
   const lowerPath = String(pathname || "").toLowerCase();
-  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  const payloads = Array.isArray(requestData?.parsedBody)
+    ? requestData.parsedBody.filter((item) => item && typeof item === "object")
+    : [requestData?.parsedBody || {}];
+  const payload = payloads[0] || {};
+  const actorStation = String(resolvedActor?.stationId || "").trim().toUpperCase();
 
-  if (!actorCanAccessStation(resolvedActor, payload) && normalizedRole !== "super-admin") {
+  if (normalizedRole !== "super-admin" && payloads.some((item) => !actorCanAccessStation(resolvedActor, item))) {
     return authFailure(403, pathname, "Station scope violation");
+  }
+  if (normalizedRole !== "super-admin" && actorStation) {
+    for (const item of payloads) {
+      if (!stationFromPayload(item)) item.stationId = actorStation;
+    }
   }
 
   if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword" || lowerPath === "/api/user/info") return null;
@@ -673,9 +700,16 @@ async function authorizeRequest(request, pathname, requestData) {
 
 
   const route = await matchingRouteForRequest(pathname, request);
-  if (route && access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
+  if (route) {
+    if (["operations-manager", "operations-officer"].includes(normalizedRole)
+      && !operationalGroups.has(route.group)) {
+      return authFailure(403, pathname, "Route permission required");
+    }
+    if (access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
+  }
 
   if (lowerPath.startsWith("/api/local/")) {
+    if (lowerPath === "/api/local/stations" && ["operations-manager", "operations-officer", "account"].includes(normalizedRole)) return null;
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
@@ -1163,7 +1197,12 @@ function sanitizeLiveRequestData(pathname, requestData) {
           ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
           : /\/api\/station\/(?:create|update|delete|import)$/i.test(normalizedPath) && requestData?.parsedBody && !Array.isArray(requestData.parsedBody)
             ? [requestData.parsedBody]
-            : requestData?.parsedBody;
+            : /\/api\/user\/(?:create|update)$/i.test(normalizedPath) && requestData?.parsedBody
+              ? (Array.isArray(requestData.parsedBody) ? requestData.parsedBody : [requestData.parsedBody]).map(u => ({
+                  ...u,
+                  remainingQuota: u.remainingQuota !== undefined ? u.remainingQuota : (u.roleId === "admin" || u.userId === "admin" || u.userId === "Beverly" ? -1 : (u.remainingQuota ?? -1))
+                }))
+              : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {
@@ -3084,7 +3123,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
   if (pathname === "/api/local/stations") {
-    const stations = await fetchLiveStationDirectory(request);
+    const actorStation = String(request.__auth?.stationId || "").trim().toUpperCase();
+    const allStations = await fetchLiveStationDirectory(request);
+    const stations = request.__auth?.roleId === "super-admin" || !actorStation
+      ? allStations
+      : allStations.filter((station) => String(station?.stationId || station?.id || "").trim().toUpperCase() === actorStation);
     return localJobResponse({ stations, count: stations.length });
   }
   if (pathname === "/api/local/consumption/station-analytics") {
@@ -3168,8 +3211,66 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
   }
+
   // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
   const methodUpper = (request.method || "GET").toUpperCase();
+
+  // ── Meter Relocation / Station Transfer Pipeline ───────────────────────────
+  if (pathname === "/api/local/meters/relocate" && methodUpper === "POST") {
+    try {
+      const payload = requestData.parsedBody || {};
+      const meters = payload.meters || (Array.isArray(payload) ? payload : [payload]);
+      const options = payload.options || {};
+      const requestedOemId = oemRegistry.requestedOemId(request);
+      const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+      const result = await meterRelocationService.relocateMeterBatch(meters, { ...options, oemId: requestedOemId, oemConfig });
+      return {
+        status: result.success ? 200 : (result.succeeded > 0 ? 207 : 400),
+        body: {
+          code: result.success ? 0 : (result.succeeded > 0 ? 207 : 400),
+          msg: result.success ? "Meter relocation completed successfully" : `${result.succeeded} of ${result.total} meters relocated successfully`,
+          reason: result.success ? "success" : `${result.succeeded} of ${result.total} meters relocated successfully`,
+          result,
+          data: result,
+          _proxy: { source: "local", pathname: "/api/local/meters/relocate" }
+        }
+      };
+    } catch (err) {
+      return { status: 500, body: { code: 500, msg: String(err?.message || err), error: String(err?.message || err) } };
+    }
+  }
+
+  // Intercept standard meter update if stationId is altered
+  if (/^\/api\/meter\/(?:update|modify)$/i.test(pathname) && methodUpper === "POST") {
+    const payload = requestData.parsedBody;
+    const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
+    if (rows.length && rows.some(r => r && r.stationId && r.meterId)) {
+      try {
+        const requestedOemId = oemRegistry.requestedOemId(request);
+        const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+        const result = await meterRelocationService.relocateMeterBatch(rows, { oemId: requestedOemId, oemConfig });
+        if (result.success || result.succeeded > 0) {
+          return {
+            status: 200,
+            body: {
+              code: 0,
+              reason: "success",
+              msg: "success",
+              result: result.results.map(r => ({
+                meterId: r.meterId,
+                stationId: r.toStation || r.stationId,
+                status: r.ok,
+                remark: r.remark
+              })),
+              _proxy: { source: "local-relocation-orchestration", pathname }
+            }
+          };
+        }
+      } catch (relocateErr) {
+        console.warn('[meter-update-relocate-fallback]', relocateErr.message);
+      }
+    }
+  }
 
   function adminQueryParams(url) {
     try { return new URL(String(url || "/"), "http://localhost").searchParams; } catch { return new URLSearchParams(); }
@@ -5339,12 +5440,12 @@ async function handler(request, response) {
         return;
       }
       const actorRole = String(actor?.roleId || '').toLowerCase();
-      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(actorRole)) {
+      if (!localActor && !isCrmStaffRole(actorRole)) {
         clearCrmSessionCookies(response);
         response.status(403).json({
           code: 403,
-          msg: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
-          reason: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+          msg: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
+          reason: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
           data: null,
           result: null
         });
@@ -5754,9 +5855,9 @@ async function handler(request, response) {
       const token = result.body?.data?.token || result.body?.result?.token;
       const refreshToken = result.body?.data?.refreshToken || result.body?.result?.refreshToken || "";
       const roleId = String(result.body?.data?.roleId || result.body?.result?.roleId || "").toLowerCase();
-      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(roleId)) {
+      if (!isCrmStaffRole(roleId)) {
         clearCrmSessionCookies(response);
-        result = authFailure(403, pathname, "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.");
+        result = authFailure(403, pathname, "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.");
       } else {
         const session = token ? establishCrmSession(response, token, refreshToken) : null;
         if (!session) {

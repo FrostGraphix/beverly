@@ -32,7 +32,7 @@ export const routeManifest = [
   { group: "Administration", title: "Log", hash: "#/admin/log", apis: ["/api/log/read"], columns: ["id", "userId", "action", "status", "remark", "createDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Station", hash: "#/admin/station", apis: ["/api/station/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
-  { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
+  { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Move Station", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "/wallet-admin/", devExternalUrl: "http://localhost:5175/", roles: ["super-admin"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
@@ -106,13 +106,23 @@ export function normalizeRoleId(roleId = "super-admin") {
   const value = String(roleId || "super-admin").trim().toLowerCase();
   if (["superadmin", "super_admin", "super-admin", "0", "1"].includes(value)) return "super-admin";
   if (["admin", "administrator"].includes(value)) return "admin";
-  if (["operator", "operations", "operations-manager", "operation-manager"].includes(value)) return "operations-manager";
+  if (["operator", "operations", "operations-manager", "operations_manager", "operations manager", "operation-manager"].includes(value)) return "operations-manager";
+  if (["operations-officer", "operations_officer", "operations officer", "operation-officer"].includes(value)) return "operations-officer";
   if (["account", "accountant", "finance", "account-officer", "account_officer"].includes(value)) return "account";
   if (["finance-checker", "finance_checker", "checker"].includes(value)) return "finance-checker";
   if (["vendor-user", "vendor_user"].includes(value)) return "vendor_user";
   if (["vendor", "vendor-manager", "vendor_manager"].includes(value)) return "vendor";
   return value;
 }
+
+export const operationalGroups = new Set([
+  "Dashboard",
+  "Token Record",
+  "Remote Operation",
+  "Remote Operation Task",
+  "Data Report",
+  "Management"
+]);
 
 const permissionAliases = {
   "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken", "Token.ChangeMeterKeyToken", "ChangeMeterKeyToken", "Token.MeterKey"],
@@ -161,6 +171,9 @@ export function permissionsGrantRoute(permissionString = "", route = {}) {
 export function roleAllowsRoute(route, roleId = "super-admin", permissionString = "") {
   const normRole = normalizeRoleId(roleId);
   if (normRole === "super-admin") return true;
+  if (["operations-manager", "operations-officer"].includes(normRole)) {
+    return operationalGroups.has(route.group);
+  }
   if (permissionsGrantRoute(permissionString, route)) return true;
   return !route.roles || route.roles.includes(normRole);
 }

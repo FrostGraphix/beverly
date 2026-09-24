@@ -21,7 +21,7 @@ import fp from 'fastify-plugin';
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
-import { tokenAllowedAfterPasswordChange } from '../services/vendor-password-change.js';
+import { tokenAllowedAfterPasswordChange, tokenPredatesPasswordChange } from '../services/vendor-password-change.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
 import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
 
@@ -30,6 +30,7 @@ export type ActorType = 'staff' | 'vendor_user' | 'customer';
 export interface Actor {
     userId: string;          // auth.users.id (UUID)
     email: string | null;
+    phone?: string | null;
     type: ActorType;
     role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor' | 'customer'
     actorId: string;         // public.customers.id | public.vendor_users.id | userId for staff
@@ -64,6 +65,7 @@ const STAFF_ROLES = new Set([
     'account',
     'finance-checker',
     'operations-manager',
+    'operations-officer',
 ]);
 
 function normalizeVendorRole(role: unknown): 'vendor' | 'vendor_user' {
@@ -155,22 +157,24 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 2. Customer lookup
     let customerResult = await adminClient
         .from('customers')
-        .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
+        .select('id, kyc_tier, status, email, phone, auth_provider, email_verified_at, password_changed_at, password_session_id')
         .eq('auth_user_id', userId)
         .maybeSingle();
     if (customerResult.error && isMissingColumn(customerResult.error.message, 'auth_user_id')) {
         customerResult = await adminClient
             .from('customers')
-            .select('id, kyc_tier, status, email, auth_provider, email_verified_at')
+            .select('id, kyc_tier, status, email, phone, auth_provider, email_verified_at, password_changed_at, password_session_id')
             .eq('user_id', userId)
             .maybeSingle();
     }
     const cu = customerResult.data;
 
     if (cu && (cu as any).status === 'active') {
+        if (!tokenAllowedAfterPasswordChange(token, (cu as any).password_changed_at, (cu as any).password_session_id)) return null;
         return {
             userId,
             email,
+            phone: (cu as any).phone ?? null,
             type: 'customer',
             role: 'customer',
             actorId: (cu as any).id,
@@ -187,13 +191,13 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // Ordering marker for SOP tests: STAFF_ROLES.has(rawRole) stays after customer lookup.
     let staffResult = await adminClient
         .from('users')
-        .select('id, auth_user_id, user_id, email, role_key, station_id, station_ids')
+        .select('id, auth_user_id, user_id, email, role_key, station_id, station_ids, password_reset_required, password_changed_at, password_session_id')
         .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
     if (staffResult.error && isMissingColumn(staffResult.error.message, 'station_ids')) {
         staffResult = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, email, role_key, station_id')
+            .select('id, auth_user_id, user_id, email, role_key, station_id, password_reset_required, password_changed_at, password_session_id')
             .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
             .maybeSingle();
     }
@@ -201,6 +205,12 @@ async function resolveActor(token: string): Promise<Actor | null> {
     const staffRole = (staffRow as { role_key?: string } | null)?.role_key;
 
     if (staffRow && staffRole && (STAFF_ROLES.has(staffRole) || staffRole.startsWith('custom-'))) {
+        const staffPasswordSessionId = (staffRow as any).password_session_id as string | null;
+        const pendingAdministrativeReset = (staffRow as any).password_reset_required === true
+            && String(staffPasswordSessionId ?? '').startsWith('password-reset:');
+        if (pendingAdministrativeReset) {
+            if (tokenPredatesPasswordChange(token, (staffRow as any).password_changed_at)) return null;
+        } else if (!tokenAllowedAfterPasswordChange(token, (staffRow as any).password_changed_at, staffPasswordSessionId)) return null;
         const mfaEnrolled = await staffMfaEnrolled(userId);
         const appMfaVerified = mfaEnrolled && await staffMfaSessionVerified(userId, token);
         const stationIds = [...new Set([
@@ -217,6 +227,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
             stationIds,
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
+            passwordResetRequired: (staffRow as any).password_reset_required === true,
         };
     }
 
@@ -254,6 +265,13 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             if (reply.sent) return undefined;
             if (req.actor?.type !== 'staff') {
                 return reply.code(403).send({ error: 'forbidden', message: 'Staff role required.' });
+            }
+            const routeUrl = req.routeOptions?.url ?? '';
+            if (req.actor.passwordResetRequired && !['/me', '/password-change', '/logout'].includes(routeUrl)) {
+                return reply.code(403).send({
+                    error: 'password_reset_required',
+                    message: 'Change your temporary password before continuing.',
+                });
             }
             // MFA is opt-in until an active authenticator factor exists.
             // An unenrolled staff member must enter normally and can enroll

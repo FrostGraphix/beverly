@@ -310,6 +310,11 @@ onBeforeUnmount(() => {
           <p v-else-if="uploading" class="profile-feedback" role="status">Uploading picture...</p>
           <p v-else-if="feedback" class="profile-feedback success" role="status">{{ feedback }}</p>
         </article>
+        <article class="bw-card profile-panel">
+          <div class="profile-panel-head"><span class="profile-panel-kicker">Security</span><h2>Password</h2></div>
+          <p class="bw-muted">Update your password securely.</p>
+          <router-link class="bw-btn primary" to="/password-change">Change password</router-link>
+        </article>
       </section>
     </div>
   </AppShell>
