@@ -2041,3 +2041,10 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The linked-production dry run listed only `20260924150000_sparkmeter_production_canary_guard.sql`. Its first deployment failed transactionally because `authorization` was unsafe as a PostgreSQL alias; a red regression reproduced that defect, then the alias was replaced and all focused checks passed.
 - The corrected migration deployed successfully. Local and remote history now match through `20260924150000`. No canary authorization row was created, so production writes remain impossible through this guard.
 - A subsequent direct database lint could not authenticate the CLI login role. Migration-history verification succeeded independently; this lint connection issue remains operational follow-up evidence, not permission to activate writes.
+
+### 23.45 Post-deployment regression checkpoint (2026-09-24)
+
+- The complete root regression passed after deployment. The complete wallet suite passed 78 files and 517 tests, including Calinmeter and SparkMeter adapter coverage.
+- Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications. Local execution used Node 24.13.1; the earlier isolated Node 22.23.2 evidence remains authoritative.
+- The canary table exists in production, but contains no seeded authorization from this implementation. SparkMeter remains draft, unrouted, and unable to write.
+- Remaining external inputs are written SparkMeter ambiguous-write semantics, an exact canary customer, an explicit currency and maximum amount, and action-time transaction confirmation.
