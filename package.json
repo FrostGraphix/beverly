@@ -34,6 +34,7 @@
     "flow:audit": "node --disable-warning=ExperimentalWarning tools/creative-implementation-audit.cjs",
     "hardening:audit": "node --disable-warning=ExperimentalWarning tools/production-hardening-audit.cjs",
     "test:flow": "node --disable-warning=ExperimentalWarning tests/creative-implementation-flow.test.cjs",
+    "test:rbac": "node --disable-warning=ExperimentalWarning tests/system-role-permission-editing.test.cjs",
     "test:interval-export": "node --disable-warning=ExperimentalWarning tests/interval-export-service.test.cjs && node --disable-warning=ExperimentalWarning tests/interval-export-route.test.cjs && node --disable-warning=ExperimentalWarning tests/interval-page-contract.test.cjs",
     "test:consumption-sync": "node --disable-warning=ExperimentalWarning tests/consumption-sync-service.test.cjs && node --disable-warning=ExperimentalWarning tests/consumption-sync-governance.test.cjs && node --disable-warning=ExperimentalWarning tests/consumption-backfill-workaround.test.cjs && node --disable-warning=ExperimentalWarning tests/consumption-cold-archive-tool.test.cjs && node --disable-warning=ExperimentalWarning tests/reading-cold-archive.test.cjs && node --disable-warning=ExperimentalWarning tests/consumption-refresh-auth-boundary.test.mjs && node --disable-warning=ExperimentalWarning tests/retention-policy-contract.test.cjs",
     "test:onboarding": "node --disable-warning=ExperimentalWarning tests/onboarding-studio.test.mjs",

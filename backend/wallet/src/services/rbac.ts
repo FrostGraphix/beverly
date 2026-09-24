@@ -115,14 +115,6 @@ export async function ensureAccessDefaults(): Promise<void> {
                     : 'Wallet administration role managed by Beverly access policy.',
             }, { onConflict: 'role_key' });
         }
-        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-            for (const permission of permissions) {
-                await adminClient.from('permissions').upsert({
-                    role_key: roleKey,
-                    route_hash: permission,
-                }, { onConflict: 'role_key,route_hash' });
-            }
-        }
         _accessDefaultsSeeded = true;
     })();
     return _accessDefaultsPromise;

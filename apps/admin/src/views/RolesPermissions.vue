@@ -178,7 +178,7 @@ async function load() {
 
 /* ─── Permission toggle ───────────────────────────────────────────────── */
 function requestToggle(item: PermissionCatalogItem) {
-    if (!canManage.value || isSystemRole(selectedRole.value) || saving.value) return;
+    if (!canManage.value || selectedRole.value === 'super-admin' || saving.value) return;
     const on = rolePermSet.value.has(item.key);
     if (item.risk === 'critical') {
         confirm.value = {
@@ -897,7 +897,7 @@ onMounted(() => { void load(); });
                       <td class="ac-access-cell">
                         <button
                           :class="['ac-toggle-btn', rolePermSet.has(item.key) && 'is-on', selectedRole === 'super-admin' && 'is-locked']"
-                          :disabled="saving || !canManage || isSystemRole(selectedRole)"
+                          :disabled="saving || !canManage || selectedRole === 'super-admin'"
                           @click="requestToggle(item)"
                         >
                           <div :class="['ac-toggle', rolePermSet.has(item.key) && 'is-on', selectedRole === 'super-admin' && 'is-locked']">

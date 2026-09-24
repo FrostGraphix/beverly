@@ -1222,15 +1222,27 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = schema.parse(req.body);
         const { data: role } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
         if (!role) return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
-        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System role permissions are managed through reviewed migrations.' });
+        if (roleKey === 'super-admin') return reply.code(400).send({ error: 'system_role_locked', message: 'Super Admin permissions cannot be changed.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
+        const invalid = body.permissions.filter((permission) => !valid.has(permission));
+        if (invalid.length) {
+            return reply.code(400).send({
+                error: 'invalid_permissions',
+                message: 'One or more permissions are invalid.',
+                details: { permissions: [...new Set(invalid)] },
+            });
+        }
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
-        await adminClient.from('permissions').delete().eq('role_key', roleKey);
-        if (next.length) {
-            const { error } = await adminClient.from('permissions').insert(
-                next.map((permission) => ({ role_key: roleKey, route_hash: permission })),
-            );
-            if (error) return reply.code(400).send({ error: 'permission_update_failed', message: error.message });
+        const { error: replaceError } = await adminClient.rpc('admin_replace_role_permissions', {
+            p_role_key: roleKey,
+            p_permissions: next,
+        });
+        if (replaceError) {
+            req.log.error({ err: replaceError, roleKey }, 'Role permission replacement failed');
+            return reply.code(500).send({
+                error: 'permission_update_failed',
+                message: 'Permissions could not be updated. No changes were saved.',
+            });
         }
         await logAction({
             actorUserId: req.actor!.userId,
