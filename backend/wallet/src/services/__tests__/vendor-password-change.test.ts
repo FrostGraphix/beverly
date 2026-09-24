@@ -93,7 +93,11 @@ describe('vendor password replacement', () => {
             currentPassword: 'Temporary!Pass92',
             nextPassword: 'River!Quartz92',
             ip: '127.0.0.1',
-        })).rejects.toMatchObject({ code: 'password_recovery_required', status: 503 });
+        })).rejects.toMatchObject({
+            code: 'password_recovery_required',
+            status: 503,
+            message: 'Password state could not be confirmed. Use Forgot password to recover access.',
+        });
     });
 
     it('does not fail committed changes when audit storage is unavailable', async () => {

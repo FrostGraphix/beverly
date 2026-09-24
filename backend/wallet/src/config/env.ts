@@ -99,7 +99,7 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    VENDOR_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
+    VENDOR_PORTAL_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
     STAFF_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-admin/'),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
     VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
@@ -107,7 +107,7 @@ const schema = z.object({
 
     // Public app base URLs — used to build password-reset links in emails.
     CUSTOMER_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-customer/'),
-    VENDOR_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
+    VENDOR_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
 
     // Firebase Cloud Messaging — push notifications

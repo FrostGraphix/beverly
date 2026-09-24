@@ -8,12 +8,18 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const vercelJson = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
 const previewJson = JSON.parse(fs.readFileSync(path.join(root, "vercel.preview.json"), "utf8"));
 const vercelIgnore = fs.readFileSync(path.join(root, ".vercelignore"), "utf8");
+const supabaseConfig = fs.readFileSync(path.join(root, "supabase", "config.toml"), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 assert(!fs.existsSync(path.join(root, "now.json")), "legacy now.json must not exist");
+assert(
+  supabaseConfig.includes('site_url = "https://beverly.acoblighting.com"') &&
+    supabaseConfig.includes('"https://beverly.acoblighting.com/**"'),
+  "Supabase auth must allow canonical Beverly redirects"
+);
 assert(packageJson.engines?.node === "22.x", "package.json engines.node must pin Vercel to 22.x");
 assert(packageJson.packageManager === "pnpm@10.28.0", "package.json packageManager must pin Vercel pnpm");
 assert(vercelJson.version === 2, "vercel.json must stay on version 2");
@@ -36,15 +42,19 @@ assert(
   "customer password resets must return to the deployed customer portal"
 );
 assert(
-  vercelJson.env?.VENDOR_APP_URL === "https://acob-beverly.vercel.app/wallet-vendor/",
+  vercelJson.env?.VENDOR_APP_URL === "https://beverly.acoblighting.com/wallet-vendor/",
   "vendor password resets must return to the deployed vendor portal"
+);
+assert(
+  vercelJson.env?.VENDOR_PORTAL_URL === "https://beverly.acoblighting.com/wallet-vendor/",
+  "vendor invitations must return to the canonical production portal"
 );
 assert(
   vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return",
   "customer funding must return to the customer portal"
 );
 assert(
-  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://acob-beverly.vercel.app/wallet-vendor/wallet/fund?payment=return",
+  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return",
   "vendor funding must return to the vendor portal"
 );
 assert(

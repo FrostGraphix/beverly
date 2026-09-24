@@ -162,11 +162,11 @@ function main() {
   assert(localEnvExample.includes("http://localhost:5173/wallet/fund?payment=return"));
   assert(localEnvExample.includes("http://localhost:5174/wallet/fund?payment=return"));
   assert(walletEnvExample.includes("CUSTOMER_APP_URL=https://acob-beverly.vercel.app/wallet-customer/"));
-  assert(walletEnvExample.includes("VENDOR_APP_URL=https://acob-beverly.vercel.app/wallet-vendor/"));
+  assert(walletEnvExample.includes("VENDOR_APP_URL=https://beverly.acoblighting.com/wallet-vendor/"));
   assert(walletEnvExample.includes("https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return"));
-  assert(walletEnvExample.includes("https://acob-beverly.vercel.app/wallet-vendor/wallet/fund?payment=return"));
+  assert(walletEnvExample.includes("https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return"));
   assert(vercelConfig.includes("https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return"));
-  assert(vercelConfig.includes("https://acob-beverly.vercel.app/wallet-vendor/wallet/fund?payment=return"));
+  assert(vercelConfig.includes("https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return"));
   assert(!buyToken.includes("window.location.href = r.authorizationUrl"));
   assert(!buyMeter.includes("window.location.href = data.authorization_url"));
   assert(!fundWallet.includes("window.location.href = r.authorizationUrl"));

@@ -15,6 +15,7 @@ import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import crypto from 'node:crypto';
 import { generateTemporaryPassword } from './temporary-password.js';
+import { resolveVendorPortalUrl } from './vendor-portal-url.js';
 
 export class OnboardingError extends Error {
     public statusCode: number;
@@ -185,7 +186,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             password: tempPwd,
             options: {
                 data: { role: 'vendor', full_name: input.primaryUserFullName, station_id: primaryStation },
-                redirectTo: env.VENDOR_PORTAL_URL,
+                redirectTo: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
             },
         });
         if (authErr || !authUserData.user) {
@@ -278,7 +279,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
                 legalName: input.legalName,
                 loginEmail: input.primaryUserEmail,
                 temporaryPassword: tempPwd,
-                loginUrl: env.VENDOR_PORTAL_URL,
+                loginUrl: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
                 verificationUrl,
             });
             const delivery = await sendEmail({ to: input.primaryUserEmail, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding' });
@@ -338,7 +339,7 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
     const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'magiclink',
         email: (user as any).email,
-        options: { redirectTo: env.VENDOR_PORTAL_URL },
+        options: { redirectTo: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV) },
     });
     const verificationUrl = link?.properties?.action_link;
     if (linkError || !verificationUrl) throw new OnboardingError('Vendor verification link could not be regenerated.', 'verification_link_failed');
@@ -380,7 +381,7 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
             legalName: (organization as any).legal_name,
             loginEmail: (user as any).email,
             temporaryPassword,
-            loginUrl: env.VENDOR_PORTAL_URL,
+            loginUrl: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
             verificationUrl,
         });
         const delivery = await sendEmail({ to: (user as any).email, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding-resend' });

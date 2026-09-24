@@ -88,7 +88,7 @@ async function restoreOrEscalate(userId: string, previousPassword: string): Prom
         await restorePassword(userId, previousPassword);
     } catch {
         throw new VendorPasswordChangeError(
-            'Password recovery requires support assistance.',
+            'Password state could not be confirmed. Use Forgot password to recover access.',
             'password_recovery_required',
             503,
         );
