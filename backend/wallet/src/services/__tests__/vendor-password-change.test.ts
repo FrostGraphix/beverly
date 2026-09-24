@@ -80,12 +80,11 @@ describe('vendor password replacement', () => {
         expect(signOut).toHaveBeenCalledTimes(2);
     });
 
-    it('reports failed compensation without claiming cancellation safety', async () => {
+    it('keeps the committed password and continues when global revocation is unavailable', async () => {
         signOut.mockResolvedValueOnce({ error: { message: 'revocation unavailable' } });
-        updateUserById
-            .mockResolvedValueOnce({ error: null })
-            .mockResolvedValueOnce({ error: { message: 'restore failed' } });
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(tokenResponse('old-session-proof')));
+        vi.stubGlobal('fetch', vi.fn()
+            .mockResolvedValueOnce(tokenResponse('old-session-proof'))
+            .mockResolvedValueOnce(tokenResponse('new-session')));
         const { replaceVendorPassword } = await import('../vendor-password-change.js');
 
         await expect(replaceVendorPassword({
@@ -93,11 +92,12 @@ describe('vendor password replacement', () => {
             currentPassword: 'Temporary!Pass92',
             nextPassword: 'River!Quartz92',
             ip: '127.0.0.1',
-        })).rejects.toMatchObject({
-            code: 'password_recovery_required',
-            status: 503,
-            message: 'Password state could not be confirmed. Use Forgot password to recover access.',
-        });
+        })).resolves.toMatchObject({ ok: true, access_token: 'new-session' });
+
+        expect(updateUserById).toHaveBeenCalledTimes(1);
+        expect(logSecurityEvent).toHaveBeenCalledWith('suspicious_activity', expect.objectContaining({
+            severity: 'high',
+        }));
     });
 
     it('does not fail committed changes when audit storage is unavailable', async () => {

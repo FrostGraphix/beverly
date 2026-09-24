@@ -1820,7 +1820,10 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.delete('/vendors/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
-        const schema = z.object({ reason: z.string().trim().max(500).optional() });
+        const schema = z.object({
+            reason: z.string().trim().min(4).max(500),
+            confirmation: z.string().trim().min(1).max(160),
+        });
         const body = schema.parse(req.body ?? {});
         const { data: vendor, error: readError } = await adminClient
             .from('vendor_organizations')
@@ -1832,27 +1835,47 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!vendor || (vendor as any).deleted_at) {
             return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
         }
-
-        let { error } = await adminClient
-            .from('vendor_organizations')
-            .update({
-                status: 'closed',
-                deleted_at: new Date().toISOString(),
-                deleted_by: req.actor!.userId,
-                deletion_reason: body.reason ?? null,
-                updated_at: new Date().toISOString(),
-            })
-            .eq('id', id);
-
-        if (error && String(error.message || '').includes('deleted_at')) {
-            const fallback = await adminClient
-                .from('vendor_organizations')
-                .delete()
-                .eq('id', id);
-            error = fallback.error;
+        if (body.confirmation !== (vendor as any).legal_name) {
+            return reply.code(400).send({ error: 'confirmation_mismatch', message: 'Type the exact vendor name.' });
         }
+
+        const assignedStations = staffStations(req);
+        if (assignedStations && !assignedStations.includes(String((vendor as any).station_id ?? '').toUpperCase())) {
+            return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Vendor is outside your station scope.' });
+        }
+
+        const { data: deletion, error } = await adminClient.rpc('admin_soft_delete_vendor', {
+            p_vendor_id: id,
+            p_deleted_by: req.actor!.userId,
+            p_reason: body.reason,
+        });
         if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
-        return { ok: true, id };
+
+        const authUserIds = Array.isArray((deletion as any)?.authUserIds)
+            ? (deletion as any).authUserIds.filter((value: unknown): value is string => typeof value === 'string')
+            : [];
+        const cleanupFailures: string[] = [];
+        for (const authUserId of authUserIds) {
+            const { error: signOutError } = await adminClient.auth.admin.signOut(authUserId, 'global');
+            if (signOutError) req.log.warn({ err: signOutError, authUserId, vendorId: id }, 'Vendor session revocation failed');
+            const { error: deleteError } = await adminClient.auth.admin.deleteUser(authUserId, true);
+            if (deleteError) {
+                cleanupFailures.push(authUserId);
+                req.log.error({ err: deleteError, authUserId, vendorId: id }, 'Vendor auth deletion failed');
+            }
+        }
+
+        await logAction({
+            ...auditFromRequest(req),
+            action: 'vendor.deleted',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before: vendor as Record<string, unknown>,
+            after: { status: 'closed', deleted: true },
+            metadata: { reason: body.reason, authUsersRemoved: authUserIds.length - cleanupFailures.length, cleanupFailures },
+        });
+
+        return { ok: true, id, authUsersRemoved: authUserIds.length - cleanupFailures.length };
     });
 
     // ── freeze / unfreeze ──

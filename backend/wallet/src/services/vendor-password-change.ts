@@ -144,8 +144,16 @@ export async function replaceVendorPassword(input: {
 
     const { error: revokeError } = await adminClient.auth.admin.signOut(actor.userId, 'global');
     if (revokeError) {
-        await restoreOrEscalate(actor.userId, input.currentPassword);
-        throw new VendorPasswordChangeError('Password change was cancelled because existing sessions could not be revoked.', 'session_revocation_failed', 503);
+        // The password update already committed. Never attempt a rollback here:
+        // password-history policies can reject restoration and strand the user.
+        // The session-id gate below permits only the newly rotated session.
+        await logSecurityEvent('suspicious_activity', {
+            actorUserId: actor.userId,
+            severity: 'high',
+            ip: input.ip,
+            userAgent: input.userAgent,
+            metadata: { reason: 'password_change_session_revocation_failed' },
+        }).catch(() => undefined);
     }
 
     const rotated = await passwordGrant(actor.email, input.nextPassword);
@@ -176,7 +184,7 @@ export async function replaceVendorPassword(input: {
         severity: 'info',
         ip: input.ip,
         userAgent: input.userAgent,
-        metadata: { was_temp_password: actor.passwordResetRequired === true, sessions_revoked: true, session_rotated: true },
+        metadata: { was_temp_password: actor.passwordResetRequired === true, sessions_revoked: !revokeError, session_rotated: true },
     }).catch(() => undefined);
     if (actor.passwordResetRequired === true) {
         await logSecurityEvent('temp_password_used', {
