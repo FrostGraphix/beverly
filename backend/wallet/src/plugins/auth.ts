@@ -65,6 +65,7 @@ const STAFF_ROLES = new Set([
     'account',
     'finance-checker',
     'operations-manager',
+    'operations-officer',
 ]);
 
 function normalizeVendorRole(role: unknown): 'vendor' | 'vendor_user' {

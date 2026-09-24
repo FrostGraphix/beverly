@@ -600,10 +600,26 @@ function actorCanAccessStation(actor, payload) {
   return String(actorStation).toUpperCase() === String(requestedStation).toUpperCase();
 }
 
+const CRM_STAFF_ROLES = new Set([
+  "super-admin",
+  "super_admin",
+  "operations-manager",
+  "operations_manager",
+  "operations-officer",
+  "operations_officer",
+  "account",
+  "account-officer",
+  "account_officer"
+]);
+
+function isCrmStaffRole(roleId) {
+  return CRM_STAFF_ROLES.has(String(roleId || "").trim().toLowerCase());
+}
+
 function roleAllowsWalletPath(roleId, pathname) {
   const role = String(roleId || "").trim();
   const lowerPath = String(pathname || "").toLowerCase();
-  const staffRoles = new Set(["super-admin", "operations-manager", "account", "account-officer", "finance-checker"]);
+  const staffRoles = new Set(["super-admin", "operations-manager", "operations-officer", "account", "account-officer", "finance-checker"]);
   const vendorRoles = new Set(["vendor", "vendor_user"]);
   if (lowerPath.startsWith("/api/vendor/")) return vendorRoles.has(role) || staffRoles.has(role);
   if (lowerPath.startsWith("/api/wallet/funding/approve")) return role === "finance-checker" || role === "super-admin";
@@ -654,11 +670,21 @@ async function authorizeRequest(request, pathname, requestData) {
 
   const access = await getAccessControlModule();
   const normalizedRole = access.normalizeRoleId(resolvedActor.roleId);
+  const operationalGroups = access.operationalGroups;
   const lowerPath = String(pathname || "").toLowerCase();
-  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  const payloads = Array.isArray(requestData?.parsedBody)
+    ? requestData.parsedBody.filter((item) => item && typeof item === "object")
+    : [requestData?.parsedBody || {}];
+  const payload = payloads[0] || {};
+  const actorStation = String(resolvedActor?.stationId || "").trim().toUpperCase();
 
-  if (!actorCanAccessStation(resolvedActor, payload) && normalizedRole !== "super-admin") {
+  if (normalizedRole !== "super-admin" && payloads.some((item) => !actorCanAccessStation(resolvedActor, item))) {
     return authFailure(403, pathname, "Station scope violation");
+  }
+  if (normalizedRole !== "super-admin" && actorStation) {
+    for (const item of payloads) {
+      if (!stationFromPayload(item)) item.stationId = actorStation;
+    }
   }
 
   if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword" || lowerPath === "/api/user/info") return null;
@@ -674,9 +700,16 @@ async function authorizeRequest(request, pathname, requestData) {
 
 
   const route = await matchingRouteForRequest(pathname, request);
-  if (route && access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
+  if (route) {
+    if (["operations-manager", "operations-officer"].includes(normalizedRole)
+      && !operationalGroups.has(route.group)) {
+      return authFailure(403, pathname, "Route permission required");
+    }
+    if (access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
+  }
 
   if (lowerPath.startsWith("/api/local/")) {
+    if (lowerPath === "/api/local/stations" && ["operations-manager", "operations-officer", "account"].includes(normalizedRole)) return null;
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
@@ -3090,7 +3123,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
   if (pathname === "/api/local/stations") {
-    const stations = await fetchLiveStationDirectory(request);
+    const actorStation = String(request.__auth?.stationId || "").trim().toUpperCase();
+    const allStations = await fetchLiveStationDirectory(request);
+    const stations = request.__auth?.roleId === "super-admin" || !actorStation
+      ? allStations
+      : allStations.filter((station) => String(station?.stationId || station?.id || "").trim().toUpperCase() === actorStation);
     return localJobResponse({ stations, count: stations.length });
   }
   if (pathname === "/api/local/consumption/station-analytics") {
@@ -5403,12 +5440,12 @@ async function handler(request, response) {
         return;
       }
       const actorRole = String(actor?.roleId || '').toLowerCase();
-      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(actorRole)) {
+      if (!localActor && !isCrmStaffRole(actorRole)) {
         clearCrmSessionCookies(response);
         response.status(403).json({
           code: 403,
-          msg: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
-          reason: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+          msg: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
+          reason: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
           data: null,
           result: null
         });
@@ -5818,9 +5855,9 @@ async function handler(request, response) {
       const token = result.body?.data?.token || result.body?.result?.token;
       const refreshToken = result.body?.data?.refreshToken || result.body?.result?.refreshToken || "";
       const roleId = String(result.body?.data?.roleId || result.body?.result?.roleId || "").toLowerCase();
-      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(roleId)) {
+      if (!isCrmStaffRole(roleId)) {
         clearCrmSessionCookies(response);
-        result = authFailure(403, pathname, "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.");
+        result = authFailure(403, pathname, "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.");
       } else {
         const session = token ? establishCrmSession(response, token, refreshToken) : null;
         if (!session) {

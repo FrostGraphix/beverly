@@ -566,6 +566,7 @@ export default {
         "super-admin": "Super Admin",
         admin: "Administrator",
         "operations-manager": "Operations Manager",
+        "operations-officer": "Operations Officer",
         account: "Account Officer",
         vendor: "Vendor",
         vendor_user: "Vendor User",

@@ -170,6 +170,18 @@ function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
   };
 }
 
+const CRM_STAFF_ROLES = new Set([
+  "super-admin",
+  "super_admin",
+  "operations-manager",
+  "operations_manager",
+  "operations-officer",
+  "operations_officer",
+  "account",
+  "account-officer",
+  "account_officer"
+]);
+
 async function staffActorFromAuthUser(user = {}, fallback = {}) {
   if (!serviceConfigured() || !user.id) return null;
   const encodedUserId = encodeURIComponent(user.id);
@@ -301,15 +313,16 @@ async function signInWithPassword({ userId, password }) {
   }
 
   const user = body.user || {};
-  const actor = normalizedActorFromAuthUser(user, email);
+  const metadataActor = normalizedActorFromAuthUser(user, email);
+  const actor = await staffActorFromAuthUser(user, metadataActor).catch(() => metadataActor) || metadataActor;
   const normalizedRole = String(actor.roleId || '').toLowerCase();
-  if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(normalizedRole)) {
+  if (!CRM_STAFF_ROLES.has(normalizedRole)) {
     return {
       status: 403,
       body: {
         code: 403,
-        msg: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
-        reason: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+        msg: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
+        reason: "Access Denied: This account cannot sign in to Beverly CRM. Please use your designated portal.",
         data: null,
         result: null,
         _proxy: {
