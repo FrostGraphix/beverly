@@ -1402,82 +1402,80 @@ Before activating any OEM:
 
 ## 17. Recommended Implementation Phases
 
-### Phase 0: safety checkpoint
+This order supersedes the earlier gateway-before-identity sequence. A gateway cannot safely route by installation before installation identity exists. Likewise, wallet writes cannot switch before durable commands and reconciliation exist. Each phase uses one public-seam test at a time: red, minimal green, then review. Commit each passing, reversible slice. Update this audit after every phase.
 
-- Finish, commit, or separately preserve current KYC work.
-- Confirm `main` is clean and pushed.
-- Tag the last-known-good release.
-- Capture database schema and data backup.
-- Record current environment and feature-flag values securely.
-- Create a fresh OEM worktree from updated `main`.
+### Phase 0: safety checkpoint and baseline
 
-### Phase 1: canonical contracts
+- Use only `Beverly-multi-oem-v2` at starting commit `ff54438d`; preserve the stale OEM worktree untouched.
+- Confirm the clean worktree, remote baseline, last-known-good tag, database backup and restore procedure, deployment artifact, and secure feature-flag inventory.
+- Record current Calinmeter request/response fixtures, vending outcomes, telemetry counts, ledger totals, and regression results without storing secrets.
+- Gate: baseline tests and builds pass; backup restore is proven before any database migration. External backup and remote results remain blockers until evidenced.
 
-- Define canonical domain types.
-- Define adapter interface.
-- Define capability manifest.
-- Define normalized error and outcome model.
-- Define adapter conformance tests.
+### Phase 1: canonical contracts and conformance harness
+
+- Define fully typed tenant, installation, mapping, capability, operation, error, vend-outcome, command, and reading contracts.
+- Define the adapter interface and public gateway API. Keep CRM, wallet, and telemetry as consumers of Beverly contracts only.
+- Add schema validation and a reusable conformance suite at the confirmed adapter and gateway seams.
+- Gate: invalid, ambiguous, unsupported, or disabled installation requests have failing tests first and then fail closed. Existing tests and builds remain green.
 
 ### Phase 2: Calinmeter adapter extraction
 
-- Move current Calinmeter request building and parsing behind the adapter.
-- Preserve all current production behavior.
-- Run existing regression tests.
-- Add captured Calinmeter fixtures.
+- Move existing Calinmeter authentication, methods, payloads, parsing, pagination, token generation, remote-send, and reading normalization behind one versioned adapter.
+- Preserve captured Calinmeter outputs, error classes, financial outcomes, and current feature-flag behavior. Do not silently change upstream requests.
+- Gate: adapter conformance and all Calinmeter CRM, wallet, and consumption regressions pass against captured fixtures.
 
-### Phase 3: unified gateway
+### Phase 3: expand-only tenant and installation schema
 
-- Create one shared gateway boundary.
-- Route CRM and wallet through it.
-- Consolidate authentication and credential handling.
-- Add fail-closed explicit OEM resolution.
-- Add health, correlation IDs, and redacted audit.
+- Add tenants, installations, installation credentials, immutable adapter/config revisions, and external resource mappings with service-role-only mutation and tenant-safe RLS.
+- Add nullable installation IDs to every operational table, link, policy, cursor, archive, command-related record, and report source. Keep old columns and constraints during transition.
+- Backfill the seeded Calinmeter installation in resumable batches. Detect duplicate external IDs and unresolved ownership; quarantine uncertainty rather than guessing.
+- Gate: counts, uniqueness candidates, links, readings, deltas, valuation, rollups, orders, receipts, and ledger totals reconcile. Old code works against the expanded schema. No destructive constraint switch occurs yet.
 
-### Phase 4: data namespacing
+### Phase 4: read-only unified gateway and security
 
-- Introduce `oem_installations`.
-- Add internal resource mappings.
-- Add `oem_installation_id` to operational tables.
-- Backfill Calinmeter installation identity.
-- Replace collision-prone constraints and refresh functions.
-- Verify counts and aggregates before tightening constraints.
+- Implement one server-authoritative installation resolver and one adapter gateway. Route CRM reads, wallet meter lookup, and shadow telemetry reads through it behind independent flags.
+- Execute validated endpoint methods and mappings. Enforce installation status, tenant/station authorization, capability, HTTPS allowlists, DNS/private-network checks, production key requirements, revision freshness, and credential strategy parity.
+- Add installation/operation correlation, redacted evidence, distributed quotas, bounded concurrency, safe-read retries, and circuit state. Reject missing mappings without legacy fallback for explicit selections.
+- Gate: Calinmeter read parity and cross-tenant denial pass; a different offline fake OEM proves distinct auth, methods, pagination, envelopes, units, and error handling. No money writes switch here.
 
-### Phase 5: async command and outbox pipeline
+### Phase 5: durable command, outbox, and reconciliation foundation
 
-- Add OEM commands and attempts.
-- Add transactional outbox.
-- Move ambiguous vend and meter commands into recoverable states.
-- Add reconciliation workers.
+- Add append-only OEM commands, attempts, raw evidence references, and transactional outbox records. Define leases, idempotency scoped by installation and operation, and pending/unknown/manual-review states.
+- Build status-query reconciliation before any OEM vend dispatch switch. Never retry an ambiguous write blindly.
+- Gate: crash, timeout-after-success, duplicate request, worker restart, and stale lease tests preserve exactly-once financial capture and recoverable commands.
 
-### Phase 6: telemetry pipeline
+### Phase 6: wallet and operational write cutover
 
-- Make polling installation-aware.
-- Add webhook ingestion.
-- Store raw evidence.
-- Normalize readings.
-- Rebuild aggregates with installation-scoped keys.
+- Resolve approved internal meter and installation before purchase creation or hold. Persist installation on customer/vendor orders, links, policies, receipts, and provider evidence.
+- Move Calinmeter vend, remote-send, station/meter updates, and other supported commands through durable gateway dispatch behind per-operation flags. Unsupported direct credit remains rejected.
+- Gate: vendor/customer PIN, authority, idempotency, hold/capture/release, receipt, notification, and reconciliation tests pass. Calinmeter requests match baseline fixtures. Rollback disables new dispatch while retaining pending recovery.
 
-### Phase 7: Integration Studio
+### Phase 7: installation-safe telemetry and reports
 
-- Version configurations.
-- Add sample tester and certification results.
-- Add canary activation and rollback.
-- Add mapping and health views.
+- Switch polling claims, cursors, raw events, webhook replay keys, reading uniqueness, deltas, tariff snapshots, rollups, archives, and reports to installation-scoped identities.
+- Sign and verify webhooks per installation with timestamp, nonce, and event deduplication. Rebuild aggregates only after verified backfill.
+- Gate: colliding station/meter IDs remain isolated across two installations; polling/webhook duplicates converge; report and valuation totals reconcile before old keys are retired.
 
-### Phase 8: second real OEM
+### Phase 8: Integration Studio and rollback control
 
-- Intake real specification and sandbox.
-- Implement adapter.
-- Run conformance tests.
-- Shadow reads.
-- Reconcile data.
-- Canary one station and vend.
-- Gradually expand.
+- Version and audit configuration, credential rotation, mapping, certification, canary, and activation changes. Remove production fixture fallbacks and duplicate control-plane authority.
+- Provide one-action configuration rollback, health and mapping views, approval gates, and kill switches per installation and operation.
+- Gate: a rollback drill restores the last-known-good revision while preserving pending command reconciliation and expanded-schema compatibility.
 
-### Phase 9: remove legacy fallback
+### Phase 9: second OEM certification; no production activation
 
-- Remove Calinmeter environment fallback only after all production traffic uses the gateway and last-known-good rollback has been tested.
+- Intake a real specification, sandbox, representative samples, error catalogue, webhook rules, rate limits, idempotency semantics, and written test authorization. Missing material keeps the installation draft.
+- Run the shared conformance suite, shadow reads, mapping and financial reconciliation, then prepare a one-station canary plan.
+- Gate: a real second OEM passes sandbox certification. Stop before production activation, live canary vending, or production promotion, as requested.
+
+### Phase 10: deferred legacy removal
+
+- Do not remove Calinmeter fallback, old constraints, or backward-compatible columns during this implementation. Schedule their removal only after separate production activation, measured stabilization, and an approved rollback drill.
+
+### Continuous verification
+
+- After every phase: run the relevant seam tests, existing Calinmeter regression tests, typecheck, migration hygiene, and all builds. Record commands and outcomes here.
+- Before handoff: run full regression suites, security checks, static migration checks, fake-OEM conformance, and local end-to-end flows. Remote CI, preview smoke, staging guard, restore drill, and real-OEM sandbox results require external evidence; never mark them passed by inference.
 
 ---
 
@@ -1649,3 +1647,415 @@ Beverly should evolve the current OEM Hub into an integration control plane and 
 The first engineering task should not be adding more endpoint rows for another manufacturer. It should be extracting Calinmeter into the first versioned adapter and proving that existing Beverly behavior remains unchanged. Once that boundary exists, the second OEM becomes the acceptance test of the architecture rather than another set of conditionals embedded across CRM, wallet, telemetry, and frontend code.
 
 Commence the work only after the current KYC changes are safely checkpointed, `main` is clean and pushed, the last-known-good application and database state are backed up, and a fresh OEM worktree has been created from that exact starting commit.
+
+---
+
+## 23. Fresh-Worktree End-to-End Readiness Check (2026-09-14)
+
+This checkpoint applies to `codex/multi-tenant-oem-pipeline` at `ff54438d`, in `Beverly-multi-oem-v2`. The worktree was clean when checked. The historical `Beverly-multi-oem-gateway` worktree was not used. This is a static and local-test checkpoint, not sandbox or production certification.
+
+### 23.1 Verified execution-path blockers
+
+| Path | Current evidence | Required gate |
+|---|---|---|
+| CRM request to OEM | `api/reference.js` uses `X-Oem-Id`, resolves a manufacturer, and falls back to the incoming path when translation fails around line 5020. | Authorize installation, require a mapped canonical operation, enforce status and capability, and transform method, request, and response. |
+| CRM station/meter mirror | `api/reference.js` uses `oemConfig?.id` near lines 5143 and 5155, and calls `upsertMeterRecord(item)` without installation near line 5114. | Use validated installation UUIDs in every mapping and mirror write. |
+| Wallet registry | `backend/wallet/src/services/oem-registry.ts` queries `oem_credentials.station_id` near line 144, despite the foundation migration defining no such column. | Introduce installation credentials. Remove the invalid filter. |
+| Wallet vendor vend | `backend/wallet/src/services/vending.ts` first calls `lookupMeter(input.meterId)` near line 183; order records carry manufacturer `oem_id`, not installation identity. | Resolve one authorized installation before pricing, hold, idempotency, or dispatch. |
+| Wallet customer vend | `backend/wallet/src/services/customer-purchase.ts` first calls `lookupMeter(input.meterId)` near line 300. The purchase insert near line 331 lacks installation identity. | Resolve approved link and installation. Persist both before any hold. |
+| Token execution | `backend/wallet/src/services/token-engine.ts` retains provider-specific payloads and a direct-credit rejection. | Extract Calinmeter unchanged. Keep unknown strategies unsupported until specified. |
+| Telemetry and sync | `daily_meter_readings` indexes station/meter/date. `consumption_sync_station_state` inserts and claims by station alone. | Expand schema, backfill installation IDs, verify collisions, then switch uniqueness and claims. |
+| Credential security | Wallet registry warns and uses a default encryption key when configuration is missing. CRM crypto has a development fallback. | Production startup and readiness fail closed; version and rotate keys. |
+
+### 23.2 Cross-cutting acceptance gates
+
+The following must be proven together, not independently:
+
+1. An authenticated actor can see only authorized tenant installations. Unknown, draft, suspended, retired, and ambiguous installations cannot reach an upstream call.
+2. An internal station or meter UUID resolves to exactly one installation-scoped external identifier. Duplicate external IDs across installations remain separate in CRM, wallet, telemetry, reports, and archived evidence.
+3. Every advertised operation has a validated canonical request and response, explicit method, capability, timeout, error classification, and adapter version. Missing mappings fail closed.
+4. Production outbound calls use approved HTTPS hosts, DNS/private-network checks, redacted logs, and installation-scoped credentials. Credential rotation and stale-revision rejection work across instances.
+5. A vend hold and durable command exist before dispatch. Confirmed delivery captures once; definitive failure releases once; timeout remains unknown until status reconciliation. Duplicate requests cannot double-vend.
+6. Signed webhooks reject missing or invalid signatures, stale timestamps, reused nonces, and duplicate event IDs. Polling and webhook delivery converge on one canonical reading and one outcome.
+7. Installation-scoped leases, quotas, circuit breakers, retries, and cursors work across serverless instances. A process-local cache cannot serve as their authority.
+8. Backfill verification compares row counts, collision sets, daily deltas, tariff valuations, rollups, reports, customer links, purchase orders, receipts, and ledger totals before any read switch.
+9. Configuration revisions are immutable. Rollback stops new commands but preserves pending command evidence and reconciliation. Old application code remains compatible with expanded schema.
+10. The same adapter conformance suite passes Calinmeter and a deliberately different offline fake OEM. A real second OEM additionally requires its specification, sandbox, authorized test resources, and canary approval.
+
+### 23.3 Verification limits and external blockers
+
+Local `node tests/oem-registry.test.cjs` passed. Local `node tests/supabase-migrations.test.cjs` passed. This fresh worktree has no `node_modules`; wallet tests, full regression, and builds have not yet run here. No database backup, deployment flag inventory, remote CI result, preview smoke, staging guard, sandbox evidence, or rollback drill was available in this checkout. No real second-OEM specification, credentials, sandbox, or written canary authorization was supplied. These missing inputs must remain explicit blockers; no OEM semantics or production readiness should be inferred.
+
+### 23.4 Phase gate
+
+Phase 1 may begin against the confirmed public seams: adapter contract, gateway API, wallet vending API, and telemetry ingestion API. Phase 2 must preserve captured Calinmeter behavior. Phase 3 requires expand-only migrations and measured backfill verification before gateway routing. Phase 5 must precede wallet write cutover. Phase 9 and production activation remain blocked on real-OEM evidence and authorization.
+
+### 23.5 Implementation checkpoint (2026-09-14)
+
+- The fresh worktree baseline built all existing applications successfully using the frozen lockfile. The local runtime is Node 24, while the repository requires Node 22; Node 22 and remote CI verification remain outstanding.
+- Phase 1 started at `packages/oem-contracts/`. A public-seam test first failed because the package did not exist, then passed after adding fail-closed resolution for ambiguous installation candidates.
+- This initial contract does not query or authorize candidates. Its caller must supply actor- and resource-scoped candidates. No CRM, wallet, or telemetry caller has switched to it yet.
+- Phase 1 remains incomplete. Adapter interfaces, capability enforcement, canonical operation models, gateway execution, and conformance still require separate red-green slices.
+- Phase 1 verification: `node tests/oem-contracts.test.cjs`, `node tests/oem-registry.test.cjs`, `node tests/supabase-migrations.test.cjs`, `npm run build`, `npm test`, and the full wallet Vitest suite all passed locally. Wallet Vitest reported 62 files and 434 tests passed. The new contract test is included in `pretest` for subsequent runs.
+- A second red-green contract slice now rejects inactive installations. Tenant mismatch also fails closed. Active, matching-tenant identity passes. The contract still lacks actor permission and resource mapping; no live caller may rely on it alone.
+- Browser, remote CI, deployed preview, staging, Node 22, database restore, and real-OEM sandbox checks remain unverified. Local passing tests do not establish end-to-end certification.
+- No migration, OEM dispatch, production configuration, or activation was changed.
+
+### 23.6 Canonical adapter checkpoint (2026-09-14)
+
+- The shared package now defines the audited core adapter methods, installation-scoped lookup and vend command types, a capability-state model, and the five normalized vend outcomes.
+- Red-green contract tests deny missing or insufficient capabilities. Another red-green test denies a claimed vend success lacking a provider reference.
+- A further red-green test rejects malformed provider references on pending outcomes. Optional token evidence now requires a non-empty string.
+- A compile-time public adapter fixture checks the core interface. `npm run test:oem` runs runtime and type checks during root `pretest`.
+- `npm run test:oem`, `npm run build`, and `npm test` passed after the final vend-outcome validation. The full wallet Vitest suite last passed before this slice; it remains a separate final regression gate.
+- These are contracts, not a conforming Calinmeter adapter. No wallet capture path consumes the outcome validator yet. Phase 1 and all later phases remain incomplete.
+
+### 23.7 Calinmeter extraction checkpoint (2026-09-14)
+
+- Phase 2 began with two observed wallet wire formats: credit-token generation and remote token task creation. Their request builders now live in `backend/wallet/src/adapters/calinmeter-v1.ts`.
+- Existing `token-engine.ts` exports remain compatibility facades. Authorization stays server-owned. The same call sites still use the same URL, method, authentication, and response handling.
+- Two adapter-seam tests failed before extraction, then passed. The existing token-engine suite passed all 21 tests afterward. No real OEM specification was inferred.
+- This is not complete adapter extraction. Meter lookup, station reads, token response parsing, remote-task lifecycle, telemetry, CRM proxy behavior, and dynamic authentication remain Calinmeter-shaped elsewhere.
+- No production routing, database schema, activation, or financial state transition changed. Full wallet Vitest passed: 63 files, 436 tests. `npm run build` and `npm test` passed. Tests ran under local Node 24, not the declared Node 22. Browser, remote CI, staging, and real-OEM checks remain unverified.
+
+### 23.8 Calinmeter response checkpoint (2026-09-14)
+
+- Credit-token response aliases and fallbacks now parse inside `calinmeter-v1.ts`. The test uses `contracts/samples/credit-token-generate.code-reason-result.json`, which is labelled an observed-shape capture rather than a certified live sandbox record.
+- The adapter test failed before implementation, then passed. Existing token-engine tests passed all 21 cases. Missing tokens still produce the wallet's `token_missing` error.
+- The parser preserves current amount, units, timestamp, record-ID, and token alias behavior. It does not yet validate monetary finiteness or certify upstream financial truth; those remain separate fail-closed gateway and reconciliation work.
+- Full wallet regression passed: 63 files, 437 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding.
+
+### 23.9 Calinmeter account checkpoint (2026-09-14)
+
+- Wallet account-envelope parsing, exact meter selection, field aliases, and boolean normalization now live in `calinmeter-v1.ts`. The wallet still owns local/historical fallback and station authority checks.
+- A red-green adapter test used the captured `api__account__read.json` response. A second parity test covered the captured nested `account-read.code-msg-data.json` envelope.
+- Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. No installation authority was inferred from a bare meter serial; the current default-first lookup remains a documented blocker.
+
+### 23.11 Phase 3 control-plane slice
+
+- A red migration contract first proved the tenant and installation control plane was absent.
+- The expand-only migration now adds tenants, immutable adapter versions, installations, installation credentials, versioned operation mappings, capability manifests, immutable configuration revisions, external resource mappings, and installation-scoped sync cursors.
+- Every new table has forced RLS, service-role-only access, and explicit lifecycle checks. No tenant or installation row is seeded because ownership evidence is unavailable.
+- External identifiers are unique only inside an OEM installation. Legacy manufacturer columns, rows, and constraints remain untouched.
+- A guarded rollback script covers every added table but deliberately refuses unattended execution. Operators must prove emptiness and review dependencies before removing the guard.
+- `npm run test:oem`, migration hygiene, and the wallet TypeScript build passed locally. Node remains 24.13.1 while the repository requires Node 22.x.
+- Phase 3 remains incomplete. Nullable installation links, measured Calinmeter backfill, duplicate quarantine, remote migration validation, database backup, and restore evidence remain blocked or pending.
+
+### 23.12 Phase 3 operational-link slice
+
+- A red migration test first proved installation links were absent from wallet, telemetry, policy, archive, and reporting records.
+- A second expand-only migration adds nullable installation foreign keys and lookup indexes across thirteen existing operational tables.
+- The migration performs no ownership backfill, constraint replacement, row update, or legacy deletion. Existing Calinmeter behavior therefore remains unchanged.
+- A guarded rollback removes only the new columns and their dependent indexes. It refuses unattended execution.
+- OEM contracts, migration hygiene, legacy migration contracts, and wallet compilation passed locally.
+- Verified backfill planning remains blocked until deployed data can be inventoried, duplicated external identities can be quarantined, and tenant ownership can be proven.
+
+### 23.13 Wallet registry correction
+
+- A red source contract reproduced the invalid wallet query against `oem_credentials.station_id`, which the deployed foundation schema never defines.
+- The wallet registry no longer accepts station identity or queries imaginary station credentials. Its legacy compatibility path remains manufacturer-scoped until the installation resolver replaces it.
+- Token-engine routing retains its existing call surface but cannot imply station-scoped credentials. Explicit nondefault OEM failures still fail closed.
+- OEM contracts, all 21 token-engine tests, and wallet compilation passed locally.
+- Installation credential reads remain unimplemented. Production routing must not activate until that resolver, tenant authorization, revision checks, and endpoint validation pass.
+
+### 23.14 Credential-key fail-closed slice
+
+- A red contract proved the wallet accepted a deterministic development encryption key during production execution.
+- Wallet environment validation now requires `OEM_CREDENTIALS_ENCRYPTION_KEY` in production. Its crypto boundary also throws if invoked without that key.
+- The CRM credential crypto boundary now rejects the same missing production key. Development and test compatibility remains unchanged.
+- OEM contracts, CRM registry tests, and wallet compilation passed locally.
+- Key provisioning, rotation evidence, shared key-version inventory, and multi-instance cache invalidation remain external blockers.
+
+### 23.15 Phase 5 persistence slice
+
+- A red migration contract first proved durable command, attempt, evidence, webhook replay, outbox, and health tables were absent.
+- The new foundation scopes command idempotency by installation and operation. It retains pending, submitted, unknown, manual-review, and terminal outcomes.
+- Attempt rows retain request fingerprints, normalized failures, timings, and secured raw-response references. No secret or unredacted payload column was added.
+- Webhook event and nonce uniqueness is installation-scoped. Outbox publication has durable leases and deduplication.
+- A guarded rollback covers all six new tables and requires preserving unresolved evidence before execution.
+- OEM contracts, migration hygiene, and wallet compilation passed locally.
+- Dispatch workers, atomic claim functions, status reconciliation, crash testing, and wallet cutover remain incomplete. Production activation stays blocked.
+
+### 23.16 Full local regression checkpoint
+
+- The full wallet Vitest suite passed: 63 files and 443 tests.
+- The root production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications.
+- The complete root test suite passed, including OEM, security, authentication, migration, wallet MFA, local production simulation, and reference parity checks.
+- Build output still reports Node 24.13.1 against the required Node 22.x engine. This run cannot certify the supported runtime.
+- Browser suites, remote CI, deployed preview smoke, staging write guard, database backup restore, migration application, fake-OEM conformance, real-OEM sandbox, and canary authorization remain unverified.
+
+### 23.17 Wallet installation resolver slice
+
+- The confirmed public seam is server-authoritative installation resolution before any wallet upstream access.
+- A red integration test first proved ambiguous resource mappings lacked a wallet resolver. The new resolver delegates canonical identity and tenant validation to `@beverly/oem-contracts`.
+- A second red test proved tenant membership alone was insufficient. Resolution now also requires an explicit server-owned list of installation IDs allowed for the actor.
+- Explicit installation IDs and internal resource mappings share one fail-closed path. Missing, ambiguous, malformed, inactive, cross-tenant, and actor-forbidden selections never return an installation.
+- Focused resolver tests, wallet compilation, and OEM contracts passed locally.
+- Route integration remains pending. No existing Calinmeter caller was switched during this slice.
+
+### 23.18 Phase 2 completion checkpoint
+
+- Two red-green slices moved the remaining observed wallet station normalization and static bearer-header construction into the Calinmeter adapter.
+- Station aliases, disabled-state handling, ADMIN exclusion, ownership metadata, name sorting, and five-minute caller caching remain unchanged.
+- The bearer path trims its configured token, emits the existing Authorization header, and returns no header when the token is missing.
+- The synthetic station regression freezes existing code behavior only. No captured Calinmeter station response exists, so station conformance remains uncertified and explicitly blocked.
+- The full wallet suite passed locally: 64 files and 447 tests. Wallet compilation passed.
+- Phase 2 code extraction is locally complete. Final Phase 2 certification requires a captured, authorized Calinmeter station response.
+
+### 23.19 Supabase restore-drill checkpoint (2026-09-17)
+
+- The dedicated restore target is Supabase project `ndyewlelxgwkamqiphga`. Production activation and production routing remain unchanged.
+- PostgreSQL 17 tooling created separate application-schema, public-data, managed-data, and storage-content backups outside the repository. The combined `public` and `private` schema archive SHA-256 is `98B51E30DBF24D3C0BDAD946FCFF2C67479E3FFB2E5B90EE35C4A2BD8A02E9A6`.
+- The restore rebuilt `public` through pre-data, data, and post-data sections. Large `operational_snapshots` rows were restored through byte-bounded COPY batches after the nano target exhausted long COPY sessions. The table contains all 2,827 rows recorded by the backup.
+- Auth restoration retains 35 users. The ordered auth-user identifier signature matches the source exactly. Storage retains 10 buckets and the 216 objects captured by the refreshed storage snapshot. The live source added one later object; that post-snapshot drift was not copied into the point-in-time restore.
+- Source and restore schema inventories match exactly: 152 public tables, 9 views, 3 materialized views, 88 functions, 503 indexes, 529 constraints, 59 non-internal triggers, 337 policies, and 4 sequences.
+- Constraint and security states match exactly: 3 intentionally unvalidated constraints, zero invalid indexes, row-level security on all 152 public tables, and forced row-level security on 133 tables.
+- All 152 public tables restored. Against the later live source, 129 row counts still match and 23 differ because writes, retention, aggregation, and snapshot cleanup continued after backup creation. Those differences are recorded as expected temporal drift, not silently treated as restore loss.
+- Restore-only TOAST storage changes used during the large snapshot load were reverted to the source `extended` setting. The temporary restore-role timeout override was returned to two minutes.
+- The three expand-only OEM migrations applied transactionally on the restored target. Remote validation found all 15 new tables, forced RLS on every new table, all 13 nullable operational links, zero seeded tenant, installation, command, or outbox rows, and zero `anon` or `authenticated` mutation grants on representative control and command tables.
+- A reverse-order rollback drill removed the command foundation, operational links, and control plane only after proving the new tables were empty. It preserved 2,827 operational snapshots, 35 auth users, and 216 snapshot-time storage objects. The three migrations were then reapplied; the final target again contains all 15 forced-RLS tables and all 13 nullable links.
+- The drill proves logical backup restoration on the dedicated target. It does not certify production activation, current-source zero-drift replication, Node 22, remote CI, preview smoke, staging write guards, Calinmeter station fixtures, or a real second-OEM sandbox.
+- Full wallet regression passed: 63 files, 439 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No deployment or OEM activation changed.
+
+### 23.10 Calinmeter remote-task checkpoint (2026-09-14)
+
+- Calinmeter task status codes, result-row normalization, and remark mapping now live in `calinmeter-v1.ts`. `token-engine.ts` retains a compatibility export for remarks.
+- A red-green adapter test used the captured `API__RemoteMeterTask__GetTokenTask.json` failure row. A second parity test covered its success row.
+- Existing token-engine tests passed all 21 cases. Wallet TypeScript build passed. Task search, create/update dispatch, polling, retries, and financial reconciliation still reside outside the adapter.
+- Full wallet regression passed: 63 files, 441 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, staging, and OEM sandbox verification remain outstanding. No production routing changed.
+
+### 23.11 Calinmeter task lifecycle checkpoint (2026-09-15)
+
+- GetTokenTask lookup payloads, UpdateTokenTask confirmation IDs, nested task-row collection, and exact standby meter/token matching now live in `calinmeter-v1.ts`.
+- Two red-green slices first failed, then passed. Existing token-engine tests passed all 21 cases. Wallet TypeScript compilation passed.
+- Network execution, polling cadence, error classification, accepted no-change response, and durable command reconciliation remain outside the adapter. No live request behavior changed.
+- Full wallet regression passed: 63 files, 443 tests. `npm run build` and `npm test` passed. Node 22, browser, remote CI, preview, staging, restore, and OEM sandbox gates remain outstanding.
+
+### 23.20 SparkMeter credential and inventory checkpoint (2026-09-18)
+
+- The local ignored environment now owns the SparkMeter API base URL, API key, confirmed portfolio identifier, and sandbox environment selection. The unresolved API organization identifier remains blank rather than inferred.
+- A red contract exposed three tracked plaintext credential copies. The admin console, wallet development route, and SparkMeter knowledge base no longer contain that credential. The server reports only whether configuration exists.
+- The focused credential contract passed. The wallet build and complete root build passed. No package was installed and no production activation changed.
+- Authenticated read-only calls confirm `64bfd8cd-d361-4368-98c9-c0ea3730559d` as both the portfolio and API organization identifier. The previously recorded `c4c3e809-5487-43cf-be64-2826dbbb4f6d` returns `Bad organization` and is rejected.
+- The complete service-area listing contains 10 areas. Their reported customer total is 3,145. The authenticated customer endpoints classify 3,072 unique configured meter owners and 34 pending customers without meters, leaving 39 reported customers unclassified by those endpoints.
+- The available-meter endpoint returns 1,367 rows. Combined with configured ownership rows, the observed meter inventory contains 4,439 rows. Two meter identifiers appear in both configured ownership and available-meter responses; both are associated with OTU-COSTAIN customers.
+- Configured ownership has zero duplicate meter-ID groups, zero duplicate serial groups, and no missing meter IDs or serials. The two assigned/available overlaps and 39 unclassified-customer delta block automatic backfill.
+- Private CSV and JSON evidence is stored under the ignored `.private/` directory. Customer addresses, phone numbers, balances, and credentials are excluded. No database row is seeded from unresolved evidence.
+
+### 23.21 Official SparkMeter API documentation checkpoint (2026-09-18)
+
+- EarthSpark's official GitHub organization publishes `apiary_v1` and `apiary_v0` API Blueprint repositories. Exact source revisions and local snapshots are retained under ignored `.private/sparkmeter-official-docs/`.
+- API V1 documents `Authentication-Token` authentication, JSON:API resources, and one write operation: transaction creation. Its last commit is `04a6aff184a57e9036298af95a9dc2c546b2f5b5` from 2015-12-17.
+- API V0 documents meter operating-mode changes, transaction creation, incoming two-way SMS commands, and delivery acknowledgement. Its last commit is `5eee13a56025c5d73986139b58825cd79a3af713` from 2017-06-22.
+- The V1 document declares `https://cloud.sparkmeter.io/api/v1/`. That host did not resolve during verification. The authenticated ACOB deployment uses `https://www.sparkmeter.cloud` and different `/sm/organizations/...` routes.
+- EarthSpark's current Thundercloud repository is explicitly a developer preview that forbids live production metering or billing. It cannot certify the managed legacy platform's production write contract.
+- These are genuine official documents, but they do not establish current managed-platform idempotency, payment settlement, reversal, retry, webhook, compatibility, or support guarantees. Current production-write certification still requires EarthSpark support confirmation.
+
+### 23.22 Immediate evidence resolution checkpoint (2026-09-18)
+
+- The owner approved explicit configured-customer mappings as authoritative over SparkMeter's available-meter classification. The two OTU-COSTAIN overlaps are excluded from the unassigned set, leaving 3,072 configured owners, 1,365 corrected unassigned meters, and zero remaining assigned/unassigned overlaps.
+- The 39-row aggregate customer difference remains a counter reconciliation issue because SparkMeter returns no corresponding customer records. It is not imported, converted into invented identities, or treated as ownership evidence.
+- Existing server-held Calinmeter credentials produced an authorized, read-only `POST /api/station/read` response with HTTP 200 and 11 rows. The exact private response SHA-256 is `E9A5BEAC6FA5C930FFD149B84DEAB3D9931EDD1E6759F22508104C91CBBD10ED`.
+- A red-green adapter test now consumes a structurally faithful redacted capture. It confirms the live envelope, excludes the ADMIN pseudo-station, normalizes 10 operational stations, and preserves stable name sorting. All 12 focused adapter tests pass.
+- Phase 2 station-response evidence is now complete locally. Current managed SparkMeter write specifications remain the immediate external documentation blocker.
+
+### 23.23 ACOB SparkMeter sandbox provisioning checkpoint (2026-09-18)
+
+- A red migration contract required the confirmed `acob-lighting` tenant, ACOB Lighting Technology Limited sandbox installation, Alexander Obiechina authority evidence, observed organization identity, measured inventory counts, and explicit production/write denial.
+- The manufacturer vending constraint now represents `unsupported`. SparkMeter remains `draft`, has no adapter version, and cannot be misclassified as either STS vending or direct credit while current write semantics remain uncertified.
+- The restored Supabase target now contains one draft ACOB tenant and one draft SparkMeter sandbox installation. Its capability manifest records 3,072 configured owners, 1,365 corrected unassigned meters, the 39-row aggregate delta, uncertified writes, and unauthorized production activation.
+- No installation credential, operation mapping, external resource mapping, sync cursor, command, or production installation was created. Credentials remain only in ignored environment storage.
+- A reviewed restore-target rollback drill removed only the ACOB installation, tenant, SparkMeter manufacturer, manifest, and configuration revision. It preserved the Calinmeter manufacturer. Reapplication restored exactly one draft sandbox installation.
+- The provisioning contract, full OEM contract gate, migration hygiene, and remote validation pass. Current SparkMeter write specifications, encrypted credential provisioning, adapter implementation, and ownership backfill remain pending.
+
+### 23.24 Installation credential resolver checkpoint (2026-09-18)
+
+- The wallet now loads encrypted credentials by authorized installation identity instead of manufacturer or station inference.
+- The first typed strategy supports API-key headers. Inactive installations, missing rows, cross-installation rows, malformed ciphertext, malformed JSON, incomplete bundles, and unsupported strategies fail closed.
+- Focused installation and credential tests report thirteen passing cases. They cover success, absence, ambiguity, actor scope, tenant scope, inactive state, ciphertext integrity, bundle fields, and key versions. The wallet TypeScript build passes.
+- SparkMeter credentials were not provisioned. Its observed session authentication is not represented by the certified strategies, and managed write semantics remain undocumented.
+- Bearer-login, static-bearer, and OAuth2 bundle contracts remain pending. No production routing or activation changed.
+
+### 23.25 Endpoint security checkpoint (2026-09-18)
+
+- The installation schema now stores an exact approved-hostname allowlist. New active production rows require HTTPS and at least one approved hostname; the constraint is initially unvalidated to avoid an expand-only deployment scan.
+- Runtime validation rejects invalid URLs, credentials embedded in URLs, nonstandard ports, queries, fragments, unapproved hosts, DNS failures, mixed public/private answers, loopback, link-local, carrier-grade NAT, RFC1918, unique-local IPv6, and mapped private IPv4.
+- Seventeen focused endpoint tests, the OEM contract gate, migration hygiene, and wallet compilation pass.
+- The migration applied on the restore target. A reviewed rollback removed the constraint and column, validation confirmed removal, and reapplication restored them.
+- ACOB remains a draft sandbox with an empty allowlist. No routing or production activation changed.
+- Application DNS checks reduce SSRF risk. Infrastructure egress enforcement and connection-level DNS pinning remain deployment blockers against rebinding or post-validation routing changes.
+- Post-change regression is green. Every production build passed, the complete root test gate passed, and the full wallet suite reported 66 files with 476 tests passing.
+- Validation ran on Node 24.13.1. The repository requires Node 22.x, so supported-runtime CI remains a release blocker.
+
+### 23.26 Node 22 validation checkpoint (2026-09-18)
+
+- An isolated Node 22.23.2 runtime executed every production build successfully.
+- The complete root pretest and test gates passed under Node 22.23.2.
+- The full wallet suite passed under Node 22.23.2: 66 files and 476 tests.
+- Node 22 local validation is complete. Remote CI and deployed-runtime verification remain separate deployment gates.
+- SparkMeter production activation remains blocked. Current managed write specifications, a certified adapter, installation credentials, ownership backfill, routing integration, command dispatch, reconciliation, telemetry cutover, canary evidence, and infrastructure egress enforcement remain incomplete.
+- Support access was explicitly deferred. No provider behavior was inferred, and no production state changed.
+
+### 23.27 Official Koios write-contract checkpoint (2026-09-18)
+
+- The authenticated SparkMeter portal exposes official OAS3 documentation at `/docs/api/`. Koios v2 documents reads only. Koios v1 documents writes and explicitly applies only to sites using Nova Grid Edge Management Units.
+- Koios v1 requires `X-API-KEY` and `X-API-SECRET`. Payment writes require Full access scope and use `POST /api/v1/payments`.
+- The documented customer-ID request contains decimal-string `amount`, `memo`, and `customer_id`. A documented HTTP 201 response contains a processed payment and external identifier. Documented HTTP 400 errors confirm request rejection.
+- The new SparkMeter adapter builds only this documented payment shape. It rejects incomplete credentials, nonpositive minor-unit amounts, currency mismatches, and missing external-customer mappings. Undocumented or incomplete responses remain unknown.
+- Installation credentials now support a typed encrypted API-key pair. The reversible schema expansion, migration contract, migration hygiene, focused adapter tests, credential tests, and wallet compilation pass.
+- The schema migration and rollback drill passed on the restore target. It was reapplied after rollback. No credential row or production installation was created.
+- The complete wallet regression rerun passed serially: 67 test files and 485 tests. The root production build also passed. An earlier parallel run produced one unrelated Acobot RBAC timeout under resource contention; the isolated full rerun cleared it without code changes.
+- Live dispatch remains blocked. The API secret, API organization identifier, verified ACOB settlement currency, Nova applicability per production service area, customer backfill, and safe retry semantics remain unverified.
+
+### 23.28 Live portal verification checkpoint (2026-09-19)
+
+- The live SparkMeter Koios v1 portal confirms `X-API-KEY` and `X-API-SECRET` authentication, Full access scope for `POST /payments`, and Nova Grid Edge Management Unit applicability. Its customer-ID payment example uses a decimal-string amount, memo, and customer ID. It does not show a caller-supplied external ID in that request.
+- The user-supplied credential document instead claims HTTP Basic authentication and an `external_id` request field. Those claims conflict with the live portal and are not adopted as a write contract.
+- The supplied API secret and organization ID were placed only in the ignored local `.env`. A read-only `GET /api/v1/service_areas` using the documented dual headers returned HTTP 401. The credential pair is therefore not verified as active. No write request was made.
+- Production writes remain disabled. Activation requires valid Full access credentials, verified organization and service-area identity, settlement currency, Nova applicability, approved customer mappings, and documented reconciliation or safe retry behavior. Exposed credentials also require rotation.
+
+### 23.29 Production-gate rerun (2026-09-19)
+
+- A second read-only `GET /api/v1/service_areas` using the supplied dual-header credential pair returned HTTP 401 with `Authentication Error` and `Invalid credentials`. The pair cannot prove organization identity, token scope, service-area inventory, currency, or Nova eligibility.
+- The official Koios v1 portal documents `GET /payments?external_id=...` for a provider-issued external ID. Its `POST /payments` example does not accept caller-supplied `external_id`; the lookup alone does not prove idempotent POST retries after an ambiguous timeout.
+- Local `npm run test:oem`, the full wallet suite (67 files, 485 tests), `npm run build`, and `npm test` passed. This rerun used Node 24.13.1, while the required Node 22.23.2 validation was recorded separately in checkpoint 23.26. The latest local build does not replace a remote CI or deployed-runtime gate.
+- No remote credential rotation, production routing, payment, customer mutation, or destructive action occurred. Valid rotated Full access credentials and authoritative operational evidence remain required before any production-write activation.
+
+### 23.30 Fresh ACOB credential and identity checkpoint (2026-09-19)
+
+- The user created a new `Beverly OEM Integration` token in the ACOB Lighting Technology portal. The portal token listing shows Full access and the System sales account. Its key and secret were placed only in the ignored local `.env`; no values are recorded here. Read-only Koios v1 service-area access returned HTTP 200.
+- Koios v2 `/organizations` returned one accessible organization: ACOB Lighting Technology, ID `64bfd8cd-d361-4368-98c9-c0ea3730559d`. This matches the configured organization ID.
+- Koios v1 returned 10 uniquely named service areas. Koios v2 returned 10 uniquely named sites. Normalized names match one-to-one, and every v2 site reports `type=nova`. All 10 paired v1 service-area IDs differ from their same-name v2 site IDs; mapping must use the correct resource identity.
+- The supplied credential document labeled v1 service-area ID `a6230885-e9d5-4882-9b31-58d889cf3f51` as `Beverly AI`. Live v1 data labels that ID `ADEWALE COMMUNITY`. The document's label is rejected as ownership evidence. No live `Beverly AI` service area or site appeared in either 10-record listing.
+- The authenticated organization Settings page displays `NGN` currency. A read-only customer sample also reported `NGN` credit currency. This establishes the present organization setting, not a completed settlement or live-payment reconciliation.
+- The current token's payment-write permission and ambiguous-write retry guarantee were not exercised or established. The production database mapping check was unavailable because the local PostgreSQL client rejected an untrusted certificate chain; TLS verification was not disabled. No backfill or production write occurred.
+- The portal token list confirms the new token's Full access scope and System sales account. The organization Settings page confirms NGN. Read-only API listings establish Nova type for all 10 current v2 sites, but do not prove an end-to-end payment outcome.
+- A fresh v1 customer profile loaded 10 pages and 500 records before repeated upstream timeouts. That partial sample cannot certify current full customer ownership, the historical 39-customer aggregate delta, or backfill completeness. The prior approved correction remains planning evidence only; no customer mapping write was made.
+- Activation gate decision: remain draft and fail closed. Missing gates include a complete current customer crosswalk, verified production mapping storage, provider-confirmed ambiguous-payment retry or reconciliation semantics, a separate safe sandbox, authorized canary payment, wallet/receipt reconciliation, remote CI, and deployed Node 22 verification.
+
+### 23.31 Complete read-only customer inventory (2026-09-19)
+
+- The authenticated Koios v1 customer cursor traversal completed all 63 pages. It returned 3,111 unique customer IDs, with no duplicate customer IDs and no remaining cursor.
+- The response contained 3,072 unique meter IDs, with no duplicate meter assignments. Thirty-nine customer records had no meter. Every returned customer credit and plan currency was NGN.
+- Customer counts by live v1 service-area ID were 226 (`a6230885-e9d5-4882-9b31-58d889cf3f51`), 429 (`4a521e39-d1dc-4d7b-bcae-e20bdea7bcae`), 311 (`41a9f34d-b058-44bf-a534-1314a0effeb4`), 331 (`1b2b25f3-839c-47e8-88bb-8b28eb9dcfb8`), 435 (`ba387b08-9afb-4129-b2c2-09173f745315`), 313 (`5c05fe9f-0613-41ca-b992-d2775ca0b5c5`), 585 (`fc3d1934-17fb-4d26-97c1-f1ba39fd8307`), and 481 (`3e286080-4c33-4ee9-b604-48909a274e13`). Two listed service areas contained no customer records.
+- This inventory supersedes the partial 500-record profile in checkpoint 23.30. It establishes current provider-side uniqueness, but does not reconcile the historical dashboard aggregate or verify Beverly's production database mappings. No database or provider write occurred.
+- Supabase documents verified database connections using its project certificate and `verify-full`. No project certificate was found locally. The client rejected the current server chain, so TLS verification remains enabled and the production database crosswalk remains unverified. See https://supabase.com/docs/guides/database/connecting-to-postgres and https://supabase.com/docs/guides/platform/ssl-enforcement.
+- Activation remains blocked. The complete provider inventory does not establish safe payment retries, a separate sandbox, an authorized canary, wallet reconciliation, remote CI, or deployed Node 22 behavior.
+
+### 23.32 Verified database mapping state (2026-09-19)
+
+- The user directed that the 39 SparkMeter customers without meters remain untouched. They are excluded from any proposed meter-ownership backfill, certification count, or automatic mapping assignment. Their customer records remain visible in the read-only provider inventory.
+- Both configured PostgreSQL targets were reached using certificate-verified TLS with the Supabase Root 2021 CA and read-only transactions. Certificate verification was not bypassed. The target identities were taken from the existing ignored environment configuration; no credentials are recorded here.
+- The configured Beverly production database has `customers`, `meters`, `oem_manufacturers`, and legacy `oem_station_mappings`, but no `tenants`, `oem_installations`, or `external_resource_mappings` tables. Its only manufacturer is active Calinmeter. It has 10 legacy station mappings, 4,400 customer rows, and 7,686 meter rows. Consequently, production contains no SparkMeter installation or installation-scoped customer/meter mappings to verify.
+- The dedicated OEM restore database has the expanded control-plane tables and exactly one draft ACOB SparkMeter sandbox installation (`ed0eefb2-f017-43ad-a52e-82169684803b`). `external_resource_mappings` contains zero rows across all installations and resource types. The restore database has 4,395 customer rows, 7,686 meter rows, and 10 legacy station mappings. These aggregate counts are not an approved ownership crosswalk.
+- Both databases report 7,686 meters; production has five more customer rows than the restore target. This observed divergence requires a fresh backup/restore comparison before any migration or mapping write. No live or restore database write was made.
+- OEM-scoped counts sharpen that finding: production has 4,397 Calinmeter customers, three unassigned customers, and 7,686 Calinmeter meters. The restore target has 4,392 Calinmeter customers, three unassigned customers, and 7,686 Calinmeter meters. Neither target has any SparkMeter-owned customer or meter row.
+- Mapping verification therefore **fails closed**: provider-side uniqueness is proven, but Beverly-side ownership is not mapped. The 3,072 metered SparkMeter customers must not be treated as Beverly-owned resources until an independently checked internal-ID crosswalk exists. The 39 no-meter customers remain intentionally unassigned.
+
+### 23.33 Exhaustive existing-identity crosswalk check (2026-09-19)
+
+- A complete read-only comparison traversed all 63 SparkMeter customer pages against every stable identifier stored for Beverly's 4,397 Calinmeter customers and 7,686 Calinmeter meters. It compared provider customer IDs, customer codes, site IDs, meter IDs, and meter serials against the legacy upstream, account, site, and serial fields.
+- Result: zero exact identifier matches. The provider returned 3,111 customers and 3,072 meters; Beverly exposes 4,935 distinct Calinmeter customer identifiers and 7,692 distinct Calinmeter meter identifiers. No SparkMeter customer or meter can be safely linked to an existing Beverly record.
+- The checked Beverly application and wallet environment configurations both point to the same production Supabase project already audited. The separate OEM environment points only to the dedicated restore target. No additional configured Beverly data source exists that could contain an unexamined SparkMeter crosswalk.
+- This rules out automatic discovery from existing Beverly data. A new crosswalk source is required: an authoritative export or approved mapping that pairs each SparkMeter customer or meter external ID with a Beverly internal customer or meter UUID. The 39 customers without meters remain excluded by user direction. No record, configuration, or credential was changed.
+
+### 23.34 Approved isolated SparkMeter record creation (2026-09-19)
+
+- The user approved creating separate Beverly records for SparkMeter. The confirmed public seam was the sandbox import plan. The importer defaults to read-only mode and requires an explicit `--apply` for the dedicated OEM restore target.
+- A red contract test first required meterless exclusion, one customer and meter mapping per metered provider record, duplicate rejection, missing serial rejection, and bounded safe-read retries. The importer uses certificate-verified TLS, requires the fixed draft SparkMeter sandbox installation, and refuses any other target.
+- The completed sandbox import created 3,072 SparkMeter-owned customer rows, 3,072 SparkMeter-owned meter rows, 3,072 customer mappings, and 3,072 meter mappings. All 3,072 imported meters link to their imported customer. Mapping verification found zero invalid customer mappings and zero invalid meter mappings.
+- The 39 SparkMeter customers without meters were intentionally excluded. No corresponding Beverly customer, meter, or external-resource mapping was created for them. No Calinmeter record, production database record, provider record, credential, operation configuration, or installation status was changed.
+- The import is resumable and conflict-safe. Existing SparkMeter external IDs are never overwritten; each batch verifies its customer, meter, and mapping ownership before commit. No provider write, payment write, or production activation occurred.
+- A final read-only production HTTPS check found zero SparkMeter manufacturer records. The production database remains unchanged by this sandbox-only import.
+
+### 23.35 Production migration-history gate (2026-09-20)
+
+- The linked-production migration inventory and a dry-run push were executed without applying any database change. The dry-run failed closed because remote versions `20260917160000` and `20260918100000` do not exist in this local migration history, while local OEM migrations from `20260915120000` onward are not present remotely.
+- The repository migration runbook requires stopping on this condition. No migration-history repair, schema push, production installation, routing change, or production record creation was attempted.
+- A CLI fetch was evaluated to obtain remote history. It attempted broad local migration replacement, so its generated local artifacts were fully restored and removed. The worktree was returned to its prior committed migration state before this checkpoint was recorded.
+- Production control-plane deployment is blocked until the remote-only migrations are independently reviewed and reconciled with this branch. This is a migration-governance gate, not a SparkMeter data or credential failure.
+
+### 23.36 Production control-plane deployment (2026-09-20)
+
+- The two remote-only migrations were fetched into an isolated temporary project, reviewed, and added to local history without overwriting repository migrations. The local and remote migration inventories now agree through `20260918200000`.
+- The reviewed production migration push applied six pending migrations: the control plane, nullable operational links, durable command foundation, draft ACOB sandbox provisioning, endpoint allowlist metadata, and API-key-pair credential strategy. The deployment used the linked Supabase project after a successful `--include-all --dry-run`.
+- Production lint reports no schema errors. A read-only service-role verification found one ACOB Lighting Technology Limited installation with `environment=sandbox` and `status=draft`, zero external mappings, and zero OEM commands. This installation cannot route reads or writes as active production traffic.
+- No SparkMeter customer, meter, credential, operation configuration, write, payment, or production activation was added to the production database. The previously completed 3,072-record import remains confined to the dedicated restore sandbox. The 39 meterless customers remain untouched.
+
+### 23.37 SparkMeter prompt hardening checkpoint (2026-09-20)
+
+- A red-green public prompt-builder test removed stale SparkMeter claims from Beverly AI's grounded knowledge. The prompt no longer asserts unsupported STS vending, relay control, customer dissociation, or obsolete provider identifiers.
+- SparkMeter is now explicitly described as a draft integration with no payment, vending, relay, or customer write available. It names certified provider write and reconciliation evidence as production prerequisites.
+- The focused prompt regression and wallet TypeScript check pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
+
+### 23.38 Development-console capability hardening checkpoint (2026-09-21)
+
+- A red-green `GET /dev/oem` contract exposed a second stale SparkMeter surface: the development console advertised it as active STS vending with relay and customer-dissociation support, and returned obsolete provider identifiers and an operator email.
+- The console now returns SparkMeter only as a draft, unsupported-vending integration. Its manifest permits observed inventory reads only and denies payment, vending, relay, customer writes, and production activation.
+- The matching operator guide now directs readers to this audit and prohibits activation or live vending from its legacy onboarding checklist. The wallet's direct-credit guard comment also records SparkMeter's uncertified state.
+- Focused route and prompt regressions pass. No Calinmeter behavior, provider request, database record, credential, routing rule, or production activation changed.
+
+### 23.39 Official SparkMeter documentation and API recheck (2026-09-21)
+
+- The official SparkMeter Koios documentation page remains available at `https://www.sparkmeter.cloud/docs/api/`. Its current page title is `API Documentation | SparkMeter Koios`.
+- Certificate-verified, authenticated, read-only API calls returned HTTP 200 from `GET /api/v1/service_areas`. The response retained the documented `data`, `errors`, `cursor`, and `next_cursor` envelope.
+- A certificate-verified, read-only `GET /api/v1/payments?external_id=beverly-read-only-contract-probe` returned HTTP 404 with `Payment External ID Not Found`. This confirms the lookup route accepts a provider-issued external ID query, but does not prove caller-supplied payment idempotency or safe retry after an ambiguous `POST /payments` outcome.
+- No provider write, payment, customer mutation, credential change, routing change, or production activation occurred. SparkMeter remains draft and fail closed pending written provider retry semantics and a separate write sandbox.
+
+### 23.40 Approved production mapping import (2026-09-21)
+
+- The owner approved production-database mapping import. A reversible migration created a separate `production` environment ACOB SparkMeter installation, but retained `draft` status, no adapter version, no credentials, no operation configuration, and explicit write and activation denial.
+- A red-green target contract requires both `--apply` and `--production`; the default target remains the restore sandbox. The importer certificate-verifies PostgreSQL, verifies the exact draft installation identity, and uses only the explicitly linked production database URL when the dedicated production URL is absent.
+- The completed import created 3,072 SparkMeter customer rows, 3,072 meter rows, 3,072 customer mappings, and 3,072 meter mappings. All mapping ownership checks passed with zero invalid customer mappings and zero invalid meter mappings.
+- The 39 customers without meters remain excluded. No provider write, payment, credential, operation configuration, routing change, adapter certification, installation activation, or production vend occurred.
+
+### 23.41 Deployment and speculative-staging closure (2026-09-24)
+
+- Pull request `#153` is open. Its Vercel deployment and preview-comment checks succeeded. The deployed preview remains a non-production stage and does not activate SparkMeter.
+- `backend/scripts/prestage-draft-oems.cjs` previously created OEM records from guessed Calinmeter-shaped methods, capabilities, endpoint meanings, and vending behavior. The command is now retired and makes no database or provider request.
+- A red safety contract first failed against the speculative command, then passed after retirement. It is included in `npm run test:oem`. The OEM regression and root typecheck passed after the change.
+- The operator guide now requires certified provider evidence before creating any OEM installation configuration. Calinmeter behavior was not modified.
+- Authenticated preview smoke remains unexecuted because the required Vercel protection-bypass credential and dedicated smoke authentication are unavailable. This must not be inferred from a successful deployment check.
+- Production write activation, adapter dispatch, payment retry, and canary execution remain blocked. Required external evidence is unchanged: a written SparkMeter ambiguous-write/reconciliation contract and a dedicated provider write sandbox with test meters.
+
+### 23.42 Final local regression rerun (2026-09-24)
+
+- The complete root regression suite passed after the staging-command retirement. OEM contracts, authentication, migrations, security, wallet MFA, smoke tooling, and reference parity all passed.
+- Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications.
+- This rerun used local Node 24.13.1. The isolated Node 22.23.2 validation recorded in checkpoint 23.26 remains the supported-runtime evidence. Preview smoke and remote provider-write certification remain external gates.
+
+### 23.43 Wallet and browser regression rerun (2026-09-24)
+
+- The complete wallet suite passed: 69 files and 487 tests. It includes Calinmeter adapter regression and the SparkMeter draft-denial contracts.
+- Browser quality assurance passed for login, dashboard, accounts, guarded write behavior, remote-task views, reporting, wallet links, exports, printing, mobile consumption, station alerts, and administrator vendor-transfer verification.
+- No provider, production configuration, or financial write was issued during these tests.
+
+### 23.44 Production canary guard implementation (2026-09-24)
+
+- The owner directed implementation without an end-customer-consent runtime gate. Administrative authorization, provider-contract acknowledgement, installation allowlisting, customer allowlisting, expiry, amount ceilings, and single-use consumption remain mandatory.
+- A red adapter test first proved no production canary policy existed. The adapter now emits only a single-attempt, no-automatic-retry plan. Confirmed success is required before capture; ambiguous outcomes retain the hold and enter manual review.
+- A second red migration contract required an atomic authorization claim. The reversible migration adds service-role-only canary approvals and consumes exactly one approved row using `FOR UPDATE SKIP LOCKED`.
+- No authorization row is seeded. No installation status, credential, operation mapping, routing flag, payment, meter balance, or production write changed.
+- Focused adapter tests, the OEM regression gate, migration hygiene, Supabase migration contracts, and wallet compilation pass locally.
+- The branch merged `origin/main`, preserving production registry enforcement and reconciling all nine missing remote migrations. The OEM regression, focused adapter tests, migration hygiene, Supabase migration contracts, and wallet build passed afterward.
+- The linked-production dry run listed only `20260924150000_sparkmeter_production_canary_guard.sql`. Its first deployment failed transactionally because `authorization` was unsafe as a PostgreSQL alias; a red regression reproduced that defect, then the alias was replaced and all focused checks passed.
+- The corrected migration deployed successfully. Local and remote history now match through `20260924150000`. No canary authorization row was created, so production writes remain impossible through this guard.
+- A subsequent direct database lint could not authenticate the CLI login role. Migration-history verification succeeded independently; this lint connection issue remains operational follow-up evidence, not permission to activate writes.
+
+### 23.45 Post-deployment regression checkpoint (2026-09-24)
+
+- The complete root regression passed after deployment. The complete wallet suite passed 78 files and 517 tests, including Calinmeter and SparkMeter adapter coverage.
+- Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications. Local execution used Node 24.13.1; the earlier isolated Node 22.23.2 evidence remains authoritative.
+- The canary table exists in production, but contains no seeded authorization from this implementation. SparkMeter remains draft, unrouted, and unable to write.
+- The owner approved NGN currency and a maximum canary amount of NGN 100, represented canonically as `currency=NGN` and `maximum_amount_minor=10000`. No authorization row was created because the exact canary customer and action-time transaction confirmation remain missing.
+- Remaining external inputs are written SparkMeter ambiguous-write semantics, an exact canary customer, and action-time transaction confirmation.
+
+### 23.46 ACOB SparkMeter tariff verification (2026-09-24)
+
+- Authenticated, certificate-verified, read-only Koios requests queried `GET /api/v1/tariffs`, `GET /api/v1/service_areas`, and every page from `GET /api/v1/customers`. No provider or database write occurred.
+- The organization exposes eight tariff definitions. Five tariffs are assigned across all 3,072 metered customers: Residential FLAT (2,939), Public FLAT (65), Commercial FLAT (60), Productive FLAT (6), and Residential/Public A (2). Every assigned tariff is a flat rate of NGN 400.000/kWh.
+- Three NGN 180.000/kWh flat-rate definitions exist but have zero meter assignments: Commercial A1, Commercial B, and Commercial A. They must not be used for the canary calculation.
+- Every assigned tariff reports no time-of-use schedule, no block rate, no block-cycle reset, and no daily energy limit. No fixed fee or minimum spend was returned for the assigned planned tariffs. Low-balance thresholds vary and are notification controls, not energy rates.
+- Therefore NGN 100 divided by NGN 400/kWh equals 0.25 kWh before any customer-specific debt or payment adjustment. A read-only tariff response cannot prove the final credited energy from a live payment; that value must be confirmed from the selected customer's provider result.
+- The complete scan reconfirmed 3,111 customers, 3,072 meters, and 39 meterless customers. All 3,072 meters have a tariff assignment; no missing tariff was observed.
+- The current service-area response names `a6230885-e9d5-4882-9b31-58d889cf3f51` as `ADEWALE COMMUNITY`, not `Beverly AI` as recorded in the saved credential note. The live provider response is authoritative; the stale note must not drive routing.

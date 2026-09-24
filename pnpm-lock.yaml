@@ -212,6 +212,9 @@ importers:
 
   backend/wallet:
     dependencies:
+      '@beverly/oem-contracts':
+        specifier: workspace:*
+        version: link:../../packages/oem-contracts
       '@beverly/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
@@ -282,6 +285,8 @@ importers:
       vitest:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.41)(terser@5.47.1)
+
+  packages/oem-contracts: {}
 
   packages/tokens: {}
 

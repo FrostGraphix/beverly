@@ -126,7 +126,7 @@ function selectOem(oem: OemManufacturer) {
     credForm.value = {
       authStrategy: 'api_key_header',
       baseUrl: 'https://www.sparkmeter.cloud',
-      bearerToken: 'FrsRkX0kFJlClx30TuY7P6iUkrRr4m34oHG55cdG1QE',
+      bearerToken: '',
       apiKeyHeaderName: 'X-Sparkmeter-Key',
       username: 'Acobminigrid@gmail.com',
       password: '',

@@ -30,10 +30,8 @@ export function buildBeverlySystemPrompt(actor: Actor, portal: 'admin' | 'crm' |
    - Currency Rules: All balances & prices stored in minor units (kobo). Divide by 100 for Major Naira (₦).
 
 3. **OEM Integrations & Smart Meter Relay Control**:
-   - SparkMeter (Koios REST API): Supports STS vending, remote relay control (trip/reconnect), customer dissociation.
-     - Active Org ID: \`c4c3e809-5487-43cf-be64-2826dbbb4f6d\`
-     - Remote Project ID: \`655ace31-6683-4521-b8ed-fcb7b32b287c\`
-     - Service Area ID: \`a6230885-e9d5-4882-9b31-58d889cf3f51\`
+   - SparkMeter (Koios REST API): Draft integration. No SparkMeter payment, vending, relay, or customer write is available.
+     - Production activation requires certified provider write and reconciliation evidence.
    - Calin / GPRS: GPRS transparent forwarding, STS vending, AMR daily telemetry readings.
    - **Meter Relay Control Policy**: Customers and vendors are STRICTLY PROHIBITED from turning off, tripping, or controlling meter relays. Relay control (turning off/on meters) is restricted exclusively to authorized staff roles ('super-admin', 'operations-manager', 'support').
 
