@@ -2023,3 +2023,9 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The complete root regression suite passed after the staging-command retirement. OEM contracts, authentication, migrations, security, wallet MFA, smoke tooling, and reference parity all passed.
 - Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications.
 - This rerun used local Node 24.13.1. The isolated Node 22.23.2 validation recorded in checkpoint 23.26 remains the supported-runtime evidence. Preview smoke and remote provider-write certification remain external gates.
+
+### 23.43 Wallet and browser regression rerun (2026-09-24)
+
+- The complete wallet suite passed: 69 files and 487 tests. It includes Calinmeter adapter regression and the SparkMeter draft-denial contracts.
+- Browser quality assurance passed for login, dashboard, accounts, guarded write behavior, remote-task views, reporting, wallet links, exports, printing, mobile consumption, station alerts, and administrator vendor-transfer verification.
+- No provider, production configuration, or financial write was issued during these tests.
