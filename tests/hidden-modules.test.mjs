@@ -24,7 +24,7 @@ for (const route of superAdminRoutes) {
 assert(superAdminRoutes.length > operationsRoutes.length, "Super admin should see more routes than operations");
 assert(superAdminRoutes.length > accountRoutes.length, "Super admin should see more routes than account");
 assert.strictEqual(findRoute("#/admin/user", "operations-manager").hash, "#/dashboard");
-assert.strictEqual(findRoute("#/remote-support/gprs-tasks", "operations-manager").hash, "#/remote-support/gprs-tasks");
+assert.strictEqual(findRoute("#/remote-support/gprs-tasks", "operations-manager").hash, "#/dashboard");
 assert(superAdminRoutes.some((route) => route.hash === "#/admin/user"), "Admin user route missing");
 assert(superAdminRoutes.some((route) => route.hash === "#/remote-support/file-upload"), "File upload route missing");
 assert(routeGroups("super-admin").some((group) => group.name === "Administration"), "Administration group missing");
