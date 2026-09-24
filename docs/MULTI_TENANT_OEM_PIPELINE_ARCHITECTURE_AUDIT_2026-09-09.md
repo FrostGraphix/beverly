@@ -2029,3 +2029,12 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The complete wallet suite passed: 69 files and 487 tests. It includes Calinmeter adapter regression and the SparkMeter draft-denial contracts.
 - Browser quality assurance passed for login, dashboard, accounts, guarded write behavior, remote-task views, reporting, wallet links, exports, printing, mobile consumption, station alerts, and administrator vendor-transfer verification.
 - No provider, production configuration, or financial write was issued during these tests.
+
+### 23.44 Production canary guard implementation (2026-09-24)
+
+- The owner directed implementation without an end-customer-consent runtime gate. Administrative authorization, provider-contract acknowledgement, installation allowlisting, customer allowlisting, expiry, amount ceilings, and single-use consumption remain mandatory.
+- A red adapter test first proved no production canary policy existed. The adapter now emits only a single-attempt, no-automatic-retry plan. Confirmed success is required before capture; ambiguous outcomes retain the hold and enter manual review.
+- A second red migration contract required an atomic authorization claim. The reversible migration adds service-role-only canary approvals and consumes exactly one approved row using `FOR UPDATE SKIP LOCKED`.
+- No authorization row is seeded. No installation status, credential, operation mapping, routing flag, payment, meter balance, or production write changed.
+- Focused adapter tests, the OEM regression gate, migration hygiene, Supabase migration contracts, and wallet compilation pass locally.
+- Production migration deployment stopped safely. Nine remote migrations were absent from this branch but are present on `origin/main`; history must be reconciled before applying the canary guard.

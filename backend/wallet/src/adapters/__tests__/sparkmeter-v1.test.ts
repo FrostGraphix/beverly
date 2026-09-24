@@ -1,11 +1,56 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildSparkMeterProductionCanaryPlan,
     buildSparkMeterAuthHeaders,
     buildSparkMeterPaymentRequest,
     parseSparkMeterPaymentResponse,
 } from '../sparkmeter-v1.js';
 
 describe('SparkMeter Koios v1 adapter', () => {
+    it('builds a single-attempt production canary plan', () => {
+        expect(buildSparkMeterProductionCanaryPlan({
+            installationId: '53f12390-74f7-40b3-b1db-e907c256986d',
+            externalCustomerId: 'a49c0554-60be-406c-b109-03cc2ba785f4',
+            amountMinor: 100,
+        }, {
+            enabled: true,
+            approvedInstallationId: '53f12390-74f7-40b3-b1db-e907c256986d',
+            approvedExternalCustomerId: 'a49c0554-60be-406c-b109-03cc2ba785f4',
+            maximumAmountMinor: 100,
+            remainingUses: 1,
+            writeContractAcknowledged: true,
+        })).toEqual({
+            attemptLimit: 1,
+            automaticRetry: false,
+            captureMode: 'confirmed_success_only',
+            ambiguousOutcome: 'manual_review',
+            releaseHoldOnAmbiguous: false,
+        });
+    });
+
+    it.each([
+        [{ enabled: false }, 'disabled'],
+        [{ writeContractAcknowledged: false }, 'acknowledgement'],
+        [{ remainingUses: 0 }, 'exactly one remaining use'],
+        [{ approvedInstallationId: '11111111-1111-4111-8111-111111111111' }, 'installation'],
+        [{ approvedExternalCustomerId: 'different-customer' }, 'customer'],
+        [{ maximumAmountMinor: 99 }, 'amount exceeds approval'],
+    ])('fails closed when canary policy changes: %s', (override, expectedMessage) => {
+        expect(() => buildSparkMeterProductionCanaryPlan({
+            installationId: '53f12390-74f7-40b3-b1db-e907c256986d',
+            externalCustomerId: 'a49c0554-60be-406c-b109-03cc2ba785f4',
+            amountMinor: 100,
+        }, {
+            enabled: true,
+            approvedInstallationId: '53f12390-74f7-40b3-b1db-e907c256986d',
+            approvedExternalCustomerId: 'a49c0554-60be-406c-b109-03cc2ba785f4',
+            maximumAmountMinor: 100,
+            remainingUses: 1,
+            writeContractAcknowledged: true,
+            ...override,
+        })).toThrow(expectedMessage);
+    });
+
     it('builds the documented authentication headers', () => {
         expect(buildSparkMeterAuthHeaders('public-key', 'private-secret')).toEqual({
             'X-API-KEY': 'public-key',

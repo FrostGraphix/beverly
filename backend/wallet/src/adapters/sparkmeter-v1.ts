@@ -16,6 +16,62 @@ export interface SparkMeterPaymentRequest {
     };
 }
 
+export interface SparkMeterProductionCanaryInput {
+    installationId: string;
+    externalCustomerId: string;
+    amountMinor: number;
+}
+
+export interface SparkMeterProductionCanaryPolicy {
+    enabled: boolean;
+    approvedInstallationId: string;
+    approvedExternalCustomerId: string;
+    maximumAmountMinor: number;
+    remainingUses: number;
+    writeContractAcknowledged: boolean;
+}
+
+export interface SparkMeterProductionCanaryPlan {
+    attemptLimit: 1;
+    automaticRetry: false;
+    captureMode: 'confirmed_success_only';
+    ambiguousOutcome: 'manual_review';
+    releaseHoldOnAmbiguous: false;
+}
+
+/** Build a fail-closed plan for one explicitly allowlisted production canary. */
+export function buildSparkMeterProductionCanaryPlan(
+    input: SparkMeterProductionCanaryInput,
+    policy: SparkMeterProductionCanaryPolicy,
+): SparkMeterProductionCanaryPlan {
+    if (!policy.enabled) throw new Error('SparkMeter production canary is disabled');
+    if (!policy.writeContractAcknowledged) {
+        throw new Error('SparkMeter write contract acknowledgement is required');
+    }
+    if (policy.remainingUses !== 1) {
+        throw new Error('SparkMeter production canary requires exactly one remaining use');
+    }
+    if (input.installationId !== policy.approvedInstallationId) {
+        throw new Error('SparkMeter production canary installation is not approved');
+    }
+    if (input.externalCustomerId !== policy.approvedExternalCustomerId) {
+        throw new Error('SparkMeter production canary customer is not approved');
+    }
+    if (!Number.isSafeInteger(policy.maximumAmountMinor) || policy.maximumAmountMinor <= 0) {
+        throw new Error('SparkMeter production canary maximum is invalid');
+    }
+    if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 || input.amountMinor > policy.maximumAmountMinor) {
+        throw new Error('SparkMeter production canary amount exceeds approval');
+    }
+    return {
+        attemptLimit: 1,
+        automaticRetry: false,
+        captureMode: 'confirmed_success_only',
+        ambiguousOutcome: 'manual_review',
+        releaseHoldOnAmbiguous: false,
+    };
+}
+
 /** Build Koios v1's documented dual authentication headers. */
 export function buildSparkMeterAuthHeaders(apiKey: string, apiSecret: string): Record<'X-API-KEY' | 'X-API-SECRET', string> {
     const key = apiKey.trim();
