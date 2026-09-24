@@ -60,19 +60,19 @@ begin
     return null;
   end if;
 
-  select authorization.id
+  select canary.id
     into claimed_id
-    from public.oem_canary_authorizations authorization
-   where authorization.oem_installation_id = p_oem_installation_id
-     and authorization.operation_key = p_operation_key
-     and authorization.external_customer_id = p_external_customer_id
-     and authorization.currency = upper(btrim(p_currency))
-     and authorization.maximum_amount_minor >= p_amount_minor
-     and authorization.status = 'approved'
-     and authorization.remaining_uses = 1
-     and authorization.write_contract_acknowledged = true
-     and authorization.expires_at > p_now
-   order by authorization.created_at asc
+    from public.oem_canary_authorizations canary
+   where canary.oem_installation_id = p_oem_installation_id
+     and canary.operation_key = p_operation_key
+     and canary.external_customer_id = p_external_customer_id
+     and canary.currency = upper(btrim(p_currency))
+     and canary.maximum_amount_minor >= p_amount_minor
+     and canary.status = 'approved'
+     and canary.remaining_uses = 1
+     and canary.write_contract_acknowledged = true
+     and canary.expires_at > p_now
+   order by canary.created_at asc
    for update skip locked
    limit 1;
 

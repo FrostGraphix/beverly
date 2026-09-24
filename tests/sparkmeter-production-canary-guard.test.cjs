@@ -18,6 +18,7 @@ assert(migration.includes("create table if not exists public.oem_canary_authoriz
 assert(migration.includes("remaining_uses = 1"), "single-use authorization guard missing");
 assert(migration.includes("write_contract_acknowledged"), "write-contract acknowledgement missing");
 assert(migration.includes("for update skip locked"), "atomic authorization claim missing");
+assert(!migration.includes("oem_canary_authorizations authorization"), "reserved authorization alias is unsafe");
 assert(migration.includes("grant execute on function public.claim_oem_canary_authorization"), "service-role claim grant missing");
 assert(!migration.includes("owner_consent"), "owner consent must not become a runtime gate");
 assert(rollback.includes("drop function if exists public.claim_oem_canary_authorization"), "claim rollback missing");
