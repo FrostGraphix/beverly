@@ -87,6 +87,7 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
 };
 
 export const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
+export const CUSTOM_ROLE_RESTRICTED_PERMISSIONS = new Set(['dev.console']);
 
 export class PermissionResolutionError extends Error {
     constructor(message = 'Permissions could not be verified.') {

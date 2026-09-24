@@ -48,7 +48,7 @@ import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
+import { CUSTOM_ROLE_RESTRICTED_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
 import { generateTemporaryPassword } from '../services/temporary-password.js';
@@ -1232,6 +1232,16 @@ const route: FastifyPluginAsync = async (fastify) => {
                 details: { permissions: [...new Set(invalid)] },
             });
         }
+        const restricted = roleKey.startsWith('custom-')
+            ? body.permissions.filter((permission) => CUSTOM_ROLE_RESTRICTED_PERMISSIONS.has(permission))
+            : [];
+        if (restricted.length) {
+            return reply.code(400).send({
+                error: 'restricted_permissions',
+                message: 'Custom roles cannot receive system-only permissions.',
+                details: { permissions: [...new Set(restricted)] },
+            });
+        }
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
         const { error: replaceError } = await adminClient.rpc('admin_replace_role_permissions', {
             p_role_key: roleKey,
@@ -1267,30 +1277,39 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = z.object({
             name: z.string().trim().min(2).max(64),
             description: z.string().trim().max(240).optional().default(''),
-            permissions: z.array(z.string()).max(PERMISSION_CATALOG.length).default([]),
+            permissions: z.array(z.string()).min(1).max(PERMISSION_CATALOG.length),
         }).parse(req.body);
         const slug = body.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         const roleKey = `custom-${slug}`;
         if (slug.length < 2) {
             return reply.code(400).send({ error: 'invalid_role_name', message: 'Choose a unique custom role name.' });
         }
-        const { data: existing } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
-        if (existing) return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
-        const selectedPermissions = [...new Set(body.permissions.filter((p) => valid.has(p)))];
-        const { data: role, error: roleError } = await adminClient.from('roles').insert({
-            name: roleKey, role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
-        }).select('role_key, role_name, label, description').single();
-        if (roleError || !role) return reply.code(400).send({ error: 'role_create_failed', message: roleError?.message ?? 'Could not create role.' });
-        if (selectedPermissions.length) {
-            const { error: permissionError } = await adminClient.from('permissions').insert(
-                selectedPermissions.map((route_hash) => ({ role_key: roleKey, route_hash })),
-            );
-            if (permissionError) {
-                await adminClient.from('roles').delete().eq('role_key', roleKey);
-                return reply.code(400).send({ error: 'role_permission_create_failed', message: permissionError.message });
-            }
+        const invalid = body.permissions.filter((permission) => !valid.has(permission));
+        if (invalid.length) {
+            return reply.code(400).send({ error: 'invalid_permissions', message: 'One or more permissions are invalid.', details: { permissions: [...new Set(invalid)] } });
         }
+        const restricted = body.permissions.filter((permission) => CUSTOM_ROLE_RESTRICTED_PERMISSIONS.has(permission));
+        if (restricted.length) {
+            return reply.code(400).send({ error: 'restricted_permissions', message: 'Custom roles cannot receive system-only permissions.', details: { permissions: [...new Set(restricted)] } });
+        }
+        const selectedPermissions = [...new Set(body.permissions)];
+        const { data: result, error: createError } = await adminClient.rpc('admin_create_custom_role', {
+            p_role_key: roleKey,
+            p_role_name: body.name,
+            p_description: body.description,
+            p_permissions: selectedPermissions,
+        });
+        if (createError) {
+            req.log.error({ err: createError, roleKey }, 'Custom role creation failed');
+            return reply.code(500).send({ error: 'role_create_failed', message: 'The role could not be created. No changes were saved.' });
+        }
+        const outcome = result as { status?: string; role?: Record<string, unknown> } | null;
+        if (outcome?.status === 'role_exists') return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        if (outcome?.status !== 'created' || !outcome.role) {
+            return reply.code(400).send({ error: outcome?.status ?? 'role_create_failed', message: 'The role could not be created.' });
+        }
+        const role = outcome.role;
         await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
             action: 'access.role.created', targetType: 'role', targetId: roleKey, after: { name: body.name, permissions: selectedPermissions } });
         return { ok: true, role, permissions: selectedPermissions };
@@ -1313,11 +1332,14 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const roleKey = (req.params as { roleKey: string }).roleKey;
         if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
-        const { count, error: countError } = await adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role_key', roleKey);
-        if (countError) return reply.code(400).send({ error: 'role_usage_check_failed', message: countError.message });
-        if (count) return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
-        const { error } = await adminClient.from('roles').delete().eq('role_key', roleKey);
-        if (error) return reply.code(400).send({ error: 'role_delete_failed', message: error.message });
+        const { data: outcome, error: deleteError } = await adminClient.rpc('admin_delete_custom_role', { p_role_key: roleKey });
+        if (deleteError) {
+            req.log.error({ err: deleteError, roleKey }, 'Custom role deletion failed');
+            return reply.code(500).send({ error: 'role_delete_failed', message: 'The role could not be deleted. No changes were saved.' });
+        }
+        if (outcome === 'role_not_found') return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
+        if (outcome === 'role_in_use') return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
+        if (outcome !== 'deleted') return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
         await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
             action: 'access.role.deleted', targetType: 'role', targetId: roleKey });
         return { ok: true, roleKey };

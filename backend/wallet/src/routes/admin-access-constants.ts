@@ -6,4 +6,5 @@ export {
     ROLE_LABELS,
     ROLE_LEGACY_NAMES,
     SYSTEM_ROLE_KEYS,
+    CUSTOM_ROLE_RESTRICTED_PERMISSIONS,
 } from '../services/rbac.js';
