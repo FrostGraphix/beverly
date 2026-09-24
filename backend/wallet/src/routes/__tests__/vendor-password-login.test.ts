@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     vendorUpdate: vi.fn(),
+    vendorLookupError: null as null | { message: string },
     signOut: vi.fn(),
     verifyVendorMfaChallenge: vi.fn(),
     lookupMeter: vi.fn(),
@@ -48,7 +49,10 @@ vi.mock('../../db/supabase.js', () => ({
     adminClient: {
         from: (table: string) => ({
             select: () => ({
-                eq: () => ({ maybeSingle: async () => ({ data: table === 'vendor_users' ? { ...vendor } : null, error: null }) }),
+                eq: () => ({ maybeSingle: async () => ({
+                    data: table === 'vendor_users' && !mocks.vendorLookupError ? { ...vendor } : null,
+                    error: table === 'vendor_users' ? mocks.vendorLookupError : null,
+                }) }),
             }),
             update: (payload: Record<string, unknown>) => ({
                 eq: async () => {
@@ -116,6 +120,7 @@ describe('vendor password login HTTP seam', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.vendorUpdate.mockResolvedValue({ error: null });
+        mocks.vendorLookupError = null;
         mocks.signOut.mockResolvedValue({ error: null });
         vi.stubEnv('SUPABASE_URL', 'https://supabase.example.test');
         vi.stubEnv('SUPABASE_ANON_KEY', 'anon-key');
@@ -140,7 +145,7 @@ describe('vendor password login HTTP seam', () => {
         });
         await app.close();
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode, response.body).toBe(200);
         expect(response.json().vendor.password_reset_required).toBe(false);
         expect(mocks.vendorUpdate).toHaveBeenCalledWith({
             password_session_id: 'new-session',
@@ -158,7 +163,7 @@ describe('vendor password login HTTP seam', () => {
         });
         await app.close();
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode, response.body).toBe(200);
         expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
             phone: '+2348000000000',
             password: 'River!Quartz92',
@@ -177,6 +182,24 @@ describe('vendor password login HTTP seam', () => {
 
         expect(response.statusCode).toBe(503);
         expect(response.json()).toMatchObject({ error: 'session_binding_failed' });
+        expect(mocks.signOut).toHaveBeenCalledWith('auth-user-1', 'global');
+    });
+
+    it('reports vendor directory outages without misclassifying the account', async () => {
+        mocks.vendorLookupError = { message: 'Could not query the database for the schema cache. Retrying.' };
+        const app = await createApp();
+        const response = await app.inject({
+            method: 'POST',
+            url: '/auth/email/login',
+            payload: { email: 'owner@example.test', password: 'River!Quartz92' },
+        });
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(503);
+        expect(response.json()).toEqual({
+            error: 'vendor_directory_unavailable',
+            message: 'Your account could not be loaded. Try again shortly.',
+        });
         expect(mocks.signOut).toHaveBeenCalledWith('auth-user-1', 'global');
     });
 });
@@ -201,7 +224,7 @@ describe('vendor MFA challenge HTTP seam', () => {
         });
         await app.close();
 
-        expect(response.statusCode).toBe(503);
+        expect(response.statusCode, response.body).toBe(503);
         expect(response.json()).toEqual({
             error: 'mfa_secret_invalid',
             message: 'Use a recovery code. Contact Beverly support if none remain.',

@@ -723,12 +723,20 @@ const route: FastifyPluginAsync = async (fastify) => {
         const accessToken = tokData.access_token;
         const userId = tokData.user.id;
 
-        const { data: vu } = await adminClient
+        const { data: vu, error: vendorLookupError } = await adminClient
             .from('vendor_users')
             .select('id, vendor_organization_id, role, full_name, phone, email, email_verified_at, profile_picture_url, mfa_enrolled, password_reset_required, password_changed_at, password_session_id, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
             .eq('auth_user_id', userId)
             .maybeSingle();
+        if (vendorLookupError) {
+            await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+            return reply.code(503).send({
+                error: 'vendor_directory_unavailable',
+                message: 'Your account could not be loaded. Try again shortly.',
+            });
+        }
         if (!vu) {
+            await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
             return reply.code(403).send({ error: 'not_vendor', message: 'This account is not linked to a vendor.' });
         }
         let confirmedAt = body.email
