@@ -2049,3 +2049,13 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The canary table exists in production, but contains no seeded authorization from this implementation. SparkMeter remains draft, unrouted, and unable to write.
 - The owner approved NGN currency and a maximum canary amount of NGN 100, represented canonically as `currency=NGN` and `maximum_amount_minor=10000`. No authorization row was created because the exact canary customer and action-time transaction confirmation remain missing.
 - Remaining external inputs are written SparkMeter ambiguous-write semantics, an exact canary customer, and action-time transaction confirmation.
+
+### 23.46 ACOB SparkMeter tariff verification (2026-09-24)
+
+- Authenticated, certificate-verified, read-only Koios requests queried `GET /api/v1/tariffs`, `GET /api/v1/service_areas`, and every page from `GET /api/v1/customers`. No provider or database write occurred.
+- The organization exposes eight tariff definitions. Five tariffs are assigned across all 3,072 metered customers: Residential FLAT (2,939), Public FLAT (65), Commercial FLAT (60), Productive FLAT (6), and Residential/Public A (2). Every assigned tariff is a flat rate of NGN 400.000/kWh.
+- Three NGN 180.000/kWh flat-rate definitions exist but have zero meter assignments: Commercial A1, Commercial B, and Commercial A. They must not be used for the canary calculation.
+- Every assigned tariff reports no time-of-use schedule, no block rate, no block-cycle reset, and no daily energy limit. No fixed fee or minimum spend was returned for the assigned planned tariffs. Low-balance thresholds vary and are notification controls, not energy rates.
+- Therefore NGN 100 divided by NGN 400/kWh equals 0.25 kWh before any customer-specific debt or payment adjustment. A read-only tariff response cannot prove the final credited energy from a live payment; that value must be confirmed from the selected customer's provider result.
+- The complete scan reconfirmed 3,111 customers, 3,072 meters, and 39 meterless customers. All 3,072 meters have a tariff assignment; no missing tariff was observed.
+- The current service-area response names `a6230885-e9d5-4882-9b31-58d889cf3f51` as `ADEWALE COMMUNITY`, not `Beverly AI` as recorded in the saved credential note. The live provider response is authoritative; the stale note must not drive routing.
