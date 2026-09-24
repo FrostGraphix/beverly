@@ -210,7 +210,7 @@ const initials = computed(() => {
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 const isSuperAdmin = computed(() => auth.user?.role === 'super-admin' || auth.user?.role === 'super_admin');
 const isCrmEligible = computed(() =>
-    ['super-admin', 'super_admin', 'operations-manager', 'operations_manager'].includes(String(auth.user?.role ?? '').toLowerCase())
+    ['super-admin', 'super_admin', 'operations-manager', 'operations_manager', 'operations-officer', 'operations_officer'].includes(String(auth.user?.role ?? '').toLowerCase())
 );
 const displayName = computed(() => auth.user?.full_name || auth.user?.email || 'Administrator');
 const currentUserFirstName = computed(() => {

@@ -564,12 +564,15 @@ function pushUniqueRows(targetRows, nextRows, seenKeys, route = {}) {
   return added;
 }
 
-async function sendTableRequest(request, api = defaultTableApi) {
-  return request.method === "GET" ? api.getApi(request.path, request.params) : api.postApi(request.path, request.payload);
+async function sendTableRequest(request, route, api = defaultTableApi) {
+  const options = { headers: { "X-Route-Hash": String(route?.hash || "") } };
+  return request.method === "GET"
+    ? api.getApi(request.path, request.params, options)
+    : api.postApi(request.path, request.payload, options);
 }
 
 async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit = maxTableRows) {
-  const firstResponse = await sendTableRequest(request, api);
+  const firstResponse = await sendTableRequest(request, route, api);
   const firstCollection = responseRows(firstResponse, route);
   const rows = [];
   const seenKeys = new Set();
@@ -595,7 +598,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
           ...request,
           payload: { ...request.payload, pageSize: clampedSize },
           params: { ...request.params, pageLimit: clampedSize }
-        }, index), api)));
+        }, index), route, api)));
         for (const response of responses) pushUniqueRows(rows, responseRows(response, route).rows, seenKeys, route);
       }
       return { rows: rows.slice(0, Math.min(total, rowLimit)), total };
@@ -609,7 +612,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
         params: { ...request.params, pageLimit: clampedSize }
       }, pageIndex);
       
-      const nextRes = await sendTableRequest(nextReq, api);
+      const nextRes = await sendTableRequest(nextReq, route, api);
       const nextCol = responseRows(nextRes, route);
       
       if (!nextCol.rows.length) break;
@@ -634,7 +637,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
   const pageCount = Math.min(Math.ceil(total / requestedSize), Math.ceil(rowLimit / requestedSize));
   if (request.path.toLowerCase() === "/api/account/read") {
     for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
-      const pageResponse = await sendTableRequest(withPage(request, pageIndex), api);
+      const pageResponse = await sendTableRequest(withPage(request, pageIndex), route, api);
       const added = pushUniqueRows(rows, responseRows(pageResponse, route).rows, seenKeys, route);
       if (!added || rows.length >= rowLimit) break;
     }
@@ -644,7 +647,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
 
   if (!Number.isFinite(rowLimit)) {
     for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
-      const pageResponse = await sendTableRequest(withPage(request, pageIndex), api);
+      const pageResponse = await sendTableRequest(withPage(request, pageIndex), route, api);
       const added = pushUniqueRows(rows, responseRows(pageResponse, route).rows, seenKeys, route);
       if (!added) break;
     }
@@ -653,7 +656,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
 
   const pageRequests = [];
   for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
-    pageRequests.push(sendTableRequest(withPage(request, pageIndex), api));
+    pageRequests.push(sendTableRequest(withPage(request, pageIndex), route, api));
   }
 
   const pageResponses = await Promise.all(pageRequests);
@@ -791,7 +794,7 @@ export async function fetchTableData(route, options = {}, api = defaultTableApi)
   if (routeUsesServerPagination(route)) {
     const collection = requestOptions.exportAll
       ? await fetchAllTableRows(request, route, api, rowLimit)
-      : responseRows(await sendTableRequest(request, api), route);
+      : responseRows(await sendTableRequest(request, route, api), route);
     const mapped = mapTableCollection({ data: { rows: collection.rows, total: collection.total } }, route);
     return {
       ...mapped,

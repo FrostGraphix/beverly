@@ -12,29 +12,29 @@ function main() {
   const supabaseService = read("backend/src/services/supabase-service.js");
   const pkg = JSON.parse(read("package.json"));
 
-  // 1. Verify signInWithPassword in supabase-service.js rejects vendor & customer accounts with 403
+  // 1. Verify signInWithPassword uses an explicit CRM staff allowlist.
   assert.match(
     supabaseService,
-    /\['vendor',\s*'vendor_user',\s*'vendor-user',\s*'customer'\]\.includes\(normalizedRole\)/,
-    "signInWithPassword must check and reject vendor/customer roleId"
+    /const CRM_STAFF_ROLES = new Set\(\[[\s\S]*?operations-officer[\s\S]*?\]\)/,
+    "signInWithPassword must define approved CRM staff roles"
   );
   assert.match(
     supabaseService,
-    /Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM/,
-    "signInWithPassword must return explicit 403 rejection message for vendor/customer"
+    /if \(!CRM_STAFF_ROLES\.has\(normalizedRole\)\)/,
+    "signInWithPassword must reject every non-CRM role"
   );
 
   // 2. Verify /api/auth/session rejects vendor & customer accounts
   assert.match(
     referenceJs,
-    /\['vendor',\s*'vendor_user',\s*'vendor-user',\s*'customer'\]\.includes\(actorRole\)/,
+    /if \(!localActor && !isCrmStaffRole\(actorRole\)\)/,
     "/api/auth/session must verify actorRole and reject non-staff accounts"
   );
 
   // 3. Verify /api/user/login response handling refuses session cookies for vendor & customer accounts
   assert.match(
     referenceJs,
-    /\['vendor',\s*'vendor_user',\s*'vendor-user',\s*'customer'\]\.includes\(roleId\)/,
+    /if \(!isCrmStaffRole\(roleId\)\)/,
     "/api/user/login must refuse session creation for vendor/customer roleId"
   );
 
@@ -48,7 +48,7 @@ function main() {
   console.log({
     status: "crm vendor login block contract passed",
     endpoints: ["/api/user/login", "/api/auth/session"],
-    blockedRoles: ["vendor", "vendor_user", "vendor-user", "customer"],
+    blockedRoles: "all non-CRM roles",
   });
 }
 

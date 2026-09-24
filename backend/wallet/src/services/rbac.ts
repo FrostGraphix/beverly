@@ -52,6 +52,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
         'wallet.customers.view', 'wallet.meters.approve', 'wallet.kyc.view', 'wallet.kyc.review', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view', 'wallet.reports.view',
     ],
+    'operations-officer': [
+        'wallet.dashboard.view', 'wallet.vending.monitor', 'wallet.customers.view',
+        'wallet.meters.approve', 'wallet.disputes.manage', 'wallet.support.manage',
+        'wallet.consumption.view', 'wallet.reports.view',
+    ],
     'finance-checker': [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
         'wallet.customers.view', 'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
@@ -67,6 +72,7 @@ export const ROLE_LABELS: Record<string, string> = {
     'super-admin': 'Super Admin',
     developer: 'Developer',
     'operations-manager': 'Operations Manager',
+    'operations-officer': 'Operations Officer',
     'finance-checker': 'Finance Checker',
     account: 'Account Officer',
 };
@@ -75,6 +81,7 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
     'super-admin': 'admin',
     developer: 'developer',
     'operations-manager': 'ops',
+    'operations-officer': 'operations-officer',
     'finance-checker': 'analyst',
     account: 'finance',
 };
