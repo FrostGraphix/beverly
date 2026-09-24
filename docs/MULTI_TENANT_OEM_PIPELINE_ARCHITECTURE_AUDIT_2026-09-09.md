@@ -2059,3 +2059,11 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Therefore NGN 100 divided by NGN 400/kWh equals 0.25 kWh before any customer-specific debt or payment adjustment. A read-only tariff response cannot prove the final credited energy from a live payment; that value must be confirmed from the selected customer's provider result.
 - The complete scan reconfirmed 3,111 customers, 3,072 meters, and 39 meterless customers. All 3,072 meters have a tariff assignment; no missing tariff was observed.
 - The current service-area response names `a6230885-e9d5-4882-9b31-58d889cf3f51` as `ADEWALE COMMUNITY`, not `Beverly AI` as recorded in the saved credential note. The live provider response is authoritative; the stale note must not drive routing.
+
+### 23.47 Exact SparkMeter canary candidate (2026-09-24)
+
+- A read-only search of the approved restore mappings found one explicitly ACOB-named metered customer: `ACOB_AJEGUNLE_034B`. Its SparkMeter customer ID is `0202178d-9853-461b-b341-b575a78078e1`; its meter ID is `320f7fe9-63e7-4f33-8a9c-d5acfc862a95`; its meter serial is `SMRSD-04-000844F5`.
+- An independent live `GET /api/v1/customers/0202178d-9853-461b-b341-b575a78078e1` response matched that customer, meter, and tariff. It reports AJEGUNLE service area `41a9f34d-b058-44bf-a534-1314a0effeb4`, site `ca0e1988-41c8-4298-a229-1ec1c2f19585`, automatic operating mode, and Residential FLAT tariff `d847e43c-8c80-43bb-a74d-1ac7614545b4` at NGN 400/kWh.
+- The live customer response reports NGN 0.00 credit, NGN 0.00 plan balance, and NGN 0.00 technical debt. Therefore an NGN 100 payment should represent 0.25 kWh under the returned flat rate, subject to confirmation from the actual provider result.
+- Customer naming and zero balances make this the lowest-observed-risk candidate, but the read API does not expose current connectivity. No payment, authorization row, credential change, routing change, or provider mutation occurred.
+- The production database direct hostname temporarily failed DNS resolution during the independent production-mapping lookup. The provider identity and approved restore mapping agree, but production canary authorization remains unseeded until the production crosswalk is rechecked and the provider-contract acknowledgement gate is satisfied.
