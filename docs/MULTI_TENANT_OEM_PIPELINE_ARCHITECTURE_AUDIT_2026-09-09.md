@@ -2008,3 +2008,18 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - A red-green target contract requires both `--apply` and `--production`; the default target remains the restore sandbox. The importer certificate-verifies PostgreSQL, verifies the exact draft installation identity, and uses only the explicitly linked production database URL when the dedicated production URL is absent.
 - The completed import created 3,072 SparkMeter customer rows, 3,072 meter rows, 3,072 customer mappings, and 3,072 meter mappings. All mapping ownership checks passed with zero invalid customer mappings and zero invalid meter mappings.
 - The 39 customers without meters remain excluded. No provider write, payment, credential, operation configuration, routing change, adapter certification, installation activation, or production vend occurred.
+
+### 23.41 Deployment and speculative-staging closure (2026-09-24)
+
+- Pull request `#153` is open. Its Vercel deployment and preview-comment checks succeeded. The deployed preview remains a non-production stage and does not activate SparkMeter.
+- `backend/scripts/prestage-draft-oems.cjs` previously created OEM records from guessed Calinmeter-shaped methods, capabilities, endpoint meanings, and vending behavior. The command is now retired and makes no database or provider request.
+- A red safety contract first failed against the speculative command, then passed after retirement. It is included in `npm run test:oem`. The OEM regression and root typecheck passed after the change.
+- The operator guide now requires certified provider evidence before creating any OEM installation configuration. Calinmeter behavior was not modified.
+- Authenticated preview smoke remains unexecuted because the required Vercel protection-bypass credential and dedicated smoke authentication are unavailable. This must not be inferred from a successful deployment check.
+- Production write activation, adapter dispatch, payment retry, and canary execution remain blocked. Required external evidence is unchanged: a written SparkMeter ambiguous-write/reconciliation contract and a dedicated provider write sandbox with test meters.
+
+### 23.42 Final local regression rerun (2026-09-24)
+
+- The complete root regression suite passed after the staging-command retirement. OEM contracts, authentication, migrations, security, wallet MFA, smoke tooling, and reference parity all passed.
+- Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications.
+- This rerun used local Node 24.13.1. The isolated Node 22.23.2 validation recorded in checkpoint 23.26 remains the supported-runtime evidence. Preview smoke and remote provider-write certification remain external gates.
