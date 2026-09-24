@@ -2047,4 +2047,5 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The complete root regression passed after deployment. The complete wallet suite passed 78 files and 517 tests, including Calinmeter and SparkMeter adapter coverage.
 - Every production build passed for the wallet backend, CRM, admin, vendor, customer, and landing applications. Local execution used Node 24.13.1; the earlier isolated Node 22.23.2 evidence remains authoritative.
 - The canary table exists in production, but contains no seeded authorization from this implementation. SparkMeter remains draft, unrouted, and unable to write.
-- Remaining external inputs are written SparkMeter ambiguous-write semantics, an exact canary customer, an explicit currency and maximum amount, and action-time transaction confirmation.
+- The owner approved NGN currency and a maximum canary amount of NGN 100, represented canonically as `currency=NGN` and `maximum_amount_minor=10000`. No authorization row was created because the exact canary customer and action-time transaction confirmation remain missing.
+- Remaining external inputs are written SparkMeter ambiguous-write semantics, an exact canary customer, and action-time transaction confirmation.
