@@ -18,6 +18,14 @@
 - `PAYSTACK_WEBHOOK_URL=<public /api/v1/webhook/paystack URL>`
 - `APP_ENCRYPTION_KEY=<32+ characters>`
 - `CRON_SECRET=<16+ random characters>`
+- `PROFILE_PICTURE_SCAN_COMMAND=<scanner executable available to runtime>`
+
+The scanner reads document bytes from standard input. It receives the stored
+file name as its first argument. It must exit `0` for clean files and `1` for
+detected threats. Other exit codes and timeouts mean scanner service failure.
+KYC uploads continue to manual review when scanning is unavailable. Their
+unscanned status and reason appear in the wallet-admin review queue. Malware
+verdicts remain blocked; clean scans never approve identity evidence.
 
 ## Safe Startup
 

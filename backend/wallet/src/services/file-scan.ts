@@ -1,22 +1,49 @@
 import { execFile } from 'node:child_process';
 
-type MalwareScanResult =
-    | { ok: boolean; mode: 'command'; output?: string }
-    | { ok: boolean; mode: 'disabled'; output?: string };
+export type MalwareScanResult =
+    | { ok: true; mode: 'command' | 'disabled'; output?: string }
+    | { ok: false; mode: 'command'; reason: 'infected'; scanReason: 'malware_detected'; output?: string }
+    | {
+        ok: false;
+        mode: 'command' | 'disabled';
+        reason: 'unavailable';
+        scanReason: 'scanner_not_configured' | 'scanner_not_found' | 'scanner_timeout' | 'scanner_execution_failed';
+        output?: string;
+    };
 
 export async function runMalwareScan(fileBytes: Buffer, fileName: string): Promise<MalwareScanResult> {
     const cmd = process.env.PROFILE_PICTURE_SCAN_COMMAND?.trim();
     if (!cmd) {
         const production = process.env.NODE_ENV?.trim().toLowerCase() === 'production';
-        return {
-            ok: !production,
-            mode: 'disabled',
-            output: production ? 'Malware scanner is not configured.' : undefined,
-        };
+        if (production) {
+            console.error('[file-scan] scanner is not configured');
+            return {
+                ok: false, mode: 'disabled', reason: 'unavailable', scanReason: 'scanner_not_configured',
+                output: 'Malware scanner is not configured.',
+            };
+        }
+        return { ok: true, mode: 'disabled' };
     }
-    return new Promise<{ ok: boolean; mode: 'command'; output?: string }>((resolve) => {
+    return new Promise<MalwareScanResult>((resolve) => {
         const child = execFile(cmd, [fileName], { timeout: 8000 }, (error, stdout, stderr) => {
-            if (error) return resolve({ ok: false, mode: 'command', output: `${stdout}\n${stderr}`.trim() });
+            if (error) {
+                const exitCode = typeof error.code === 'number' ? error.code : null;
+                const output = `${stdout}\n${stderr}`.trim();
+                // ClamAV-compatible scanners use exit code 1 for infected files.
+                // Missing commands, timeouts, and other exit codes mean that
+                // scanning could not be completed, not that the file is unsafe.
+                if (exitCode === 1) {
+                    return resolve({ ok: false, mode: 'command', reason: 'infected', scanReason: 'malware_detected', output });
+                }
+                console.error('[file-scan] configured scanner unavailable', { exitCode });
+                const errno = (error as NodeJS.ErrnoException).code;
+                const scanReason = error.killed || errno === 'ETIMEDOUT'
+                    ? 'scanner_timeout'
+                    : errno === 'ENOENT'
+                        ? 'scanner_not_found'
+                        : 'scanner_execution_failed';
+                return resolve({ ok: false, mode: 'command', reason: 'unavailable', scanReason, output });
+            }
             resolve({ ok: true, mode: 'command', output: `${stdout}\n${stderr}`.trim() });
         });
         child.stdin?.write(fileBytes);

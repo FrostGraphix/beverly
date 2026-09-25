@@ -18,7 +18,7 @@ interface Review {
   reviewer_note?: string | null;
   submission_json: Record<string, unknown>;
   subject?: Record<string, any>;
-  documents: Array<{ id: string; doc_type: string; mime_type: string; size_bytes: number; status: string }>;
+  documents: Array<{ id: string; doc_type: string; mime_type: string; size_bytes: number; status: string; security_scan_status?: string; security_scan_reason?: string | null }>;
 }
 
 const auth = useStaffAuthStore();
@@ -48,6 +48,23 @@ function hasRequiredEvidence(row: Review): boolean {
   const hasSelfie = documentTypes.has('selfie');
   const hasAddress = [...documentTypes].some((type) => addressDocumentTypes.has(type));
   return hasIdentity && hasSelfie && (row.requested_tier !== 2 || hasAddress);
+}
+
+function fileScanSummary(document: Review['documents'][number]): string {
+  if (document.security_scan_status === 'clean') return 'File scan passed. Verify identity evidence manually.';
+  if (document.security_scan_status === 'unscanned') {
+    const reason = document.security_scan_reason;
+    const reasonText: Record<string, string> = {
+      scanner_not_configured: 'scanner not configured',
+      scanner_not_found: 'scanner command unavailable',
+      scanner_timeout: 'scanner timed out',
+      scanner_execution_failed: 'scanner could not complete',
+      scanner_disabled: 'scanner disabled',
+      scan_status_not_recorded: 'no scan record exists',
+    };
+    return `Not scanned: ${reasonText[reason ?? ''] ?? 'reason unavailable'}. Review carefully.`;
+  }
+  return 'File scan status is pending.';
 }
 
 function subjectName(row: Review): string {
@@ -173,6 +190,7 @@ onMounted(() => load());
               <button v-for="document in row.documents" :key="document.id" type="button" class="document" @click="openDocument(document.id)">
                 <span>{{ document.doc_type.replace(/_/g, ' ') }}</span>
                 <small>{{ Math.ceil(document.size_bytes / 1024) }} KB · View securely</small>
+                <small :class="document.security_scan_status === 'unscanned' ? 'scan-warning' : 'scan-status'">{{ fileScanSummary(document) }}</small>
               </button>
               <span v-if="!row.documents.length" class="missing">No documents attached.</span>
             </div>
@@ -224,6 +242,7 @@ onMounted(() => load());
 .review-detail{padding:var(--s-4);border-top:1px solid var(--border);background:var(--surface-2)}.review-detail dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-2) var(--s-4);margin:0 0 var(--s-4)}.review-detail dl div{display:grid;grid-template-columns:130px 1fr;gap:var(--s-2)}.review-detail dt{text-transform:capitalize;color:var(--text-muted)}.review-detail dd{margin:0;word-break:break-word}
 .documents{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}.documents>p{width:100%;margin:0;font-weight:800}.document{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);color:var(--text);text-align:left;cursor:pointer;text-transform:capitalize}.document small,.missing{color:var(--text-muted)}
 .review-actions{display:flex;justify-content:flex-end;gap:var(--s-2);margin-top:var(--s-4);padding-top:var(--s-3);border-top:1px solid var(--border)}.record-link{text-decoration:none;margin-right:auto}.review-note{margin:var(--s-4) 0 0;color:var(--text-muted)}
+.scan-status,.scan-warning{white-space:normal}.scan-status{color:var(--text-muted)}.scan-warning{color:var(--danger);font-weight:700}
 .load-more{justify-self:center;margin:var(--s-2) 0}
 .note-label{display:block;font-weight:800;margin-bottom:6px}.note-input{width:100%;resize:vertical;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2);color:var(--text);padding:10px 12px;font:inherit}.note-input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow)}.note-help{margin:6px 0 0;color:var(--text-muted);font-size:var(--t-xs)}
 @media(max-width:700px){.kpi-grid.bw-mobile-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:var(--s-2)}.kpi-grid.bw-mobile-kpi-grid>.kpi{display:grid!important;min-height:0;padding:10px!important;gap:2px var(--s-2)!important}.kpi-grid.bw-mobile-kpi-grid>:last-child:nth-child(odd){grid-column:auto!important}.kpi small{font-size:11px}.toolbar{align-items:stretch;flex-direction:column}.toolbar .bw-input{width:100%}.segmented{overflow-x:auto}.segmented button{flex:1}.review-summary{grid-template-columns:1fr auto}.account-badge,.when{grid-row:1}.identity{grid-column:1}.tier{grid-column:2;grid-row:2}.review-detail dl{grid-template-columns:1fr}.page-head{align-items:flex-start}.page-head .bw-btn{flex-shrink:0}}

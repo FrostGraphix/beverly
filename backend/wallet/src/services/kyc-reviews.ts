@@ -108,16 +108,21 @@ export async function activateKycUpload(input: {
         throw new KycReviewError('File content does not match its type.', 'document_content_mismatch', 422);
     }
     const scan = await runMalwareScan(fileBytes, fileName);
-    if (!scan.ok) {
+    if (!scan.ok && scan.reason === 'infected') {
         await adminClient.storage.from(KYC_BUCKET).remove([path]);
         await adminClient.from('kyc_documents').delete().eq('id', input.documentId);
-        throw new KycReviewError('Document failed security scanning.', 'document_scan_failed', 422);
+        throw new KycReviewError('Security scanning detected a threat. This file cannot be submitted.', 'document_malware_detected', 422);
     }
+    const scanStatus = scan.ok && scan.mode === 'command' ? 'clean' : 'unscanned';
+    const scanReason = scanStatus === 'clean'
+        ? null
+        : scan.ok ? 'scanner_disabled' : scan.scanReason;
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await adminClient.from('kyc_documents')
-        .update({ uploaded_at: uploadedAt }).eq('id', input.documentId).eq(column, input.subjectId);
+        .update({ uploaded_at: uploadedAt, security_scan_status: scanStatus, security_scan_reason: scanReason })
+        .eq('id', input.documentId).eq(column, input.subjectId);
     if (updateError) throw new KycReviewError('Upload activation failed.', 'document_activation_failed', 500);
-    return { id: input.documentId, uploadedAt };
+    return { id: input.documentId, uploadedAt, scanStatus, scanReason };
 }
 
 export async function submitKycReview(input: {
@@ -220,7 +225,7 @@ export async function listKycReviews(input: {
     const [customers, vendors, documents, meters] = await Promise.all([
         pageCustomerIds.length ? adminClient.from('customers').select('id, full_name, email, phone, kyc_tier, kyc_status').in('id', pageCustomerIds) : Promise.resolve({ data: [] as any[] }),
         pageVendorIds.length ? adminClient.from('vendor_organizations').select('id, legal_name, trading_name, contact_email, contact_phone, cac_number, tin, operating_stations, kyc_tier, kyc_status').in('id', pageVendorIds) : Promise.resolve({ data: [] as any[] }),
-        rows.length ? adminClient.from('kyc_documents').select('id, review_request_id, doc_type, mime_type, size_bytes, status, created_at').in('review_request_id', rows.map((r: any) => r.id)) : Promise.resolve({ data: [] as any[] }),
+        rows.length ? adminClient.from('kyc_documents').select('id, review_request_id, doc_type, mime_type, size_bytes, status, security_scan_status, security_scan_reason, created_at').in('review_request_id', rows.map((r: any) => r.id)) : Promise.resolve({ data: [] as any[] }),
         pageCustomerIds.length ? adminClient.from('customer_meters').select('customer_id, station_id').in('customer_id', pageCustomerIds) : Promise.resolve({ data: [] as any[] }),
     ]);
     const stationsByCustomer = new Map<string, string[]>();
