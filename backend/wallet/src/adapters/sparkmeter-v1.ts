@@ -39,6 +39,78 @@ export interface SparkMeterProductionCanaryPlan {
     releaseHoldOnAmbiguous: false;
 }
 
+export interface SparkMeterCreditSafetyInput {
+    creditMinor: number;
+    planBalanceMinor: number;
+    operatingMode: string;
+    lastMeterState: string;
+    lastReadingAt: string;
+    now: string;
+}
+
+export interface SparkMeterCreditSafetyDecision {
+    allowFinancialWrite: boolean;
+    displayedBalanceMinor: number;
+    expectedMeterState: 'on' | 'off';
+    requiresManualReview: boolean;
+    reason: 'safe' | 'telemetry_stale' | 'zero_credit_meter_on' | 'provider_balance_negative' | 'unsafe_meter_mode';
+}
+
+const SPARKMETER_TELEMETRY_FRESHNESS_MS = 30 * 60 * 1_000;
+
+/** Fail closed when provider state cannot prove safe prepaid operation. */
+export function evaluateSparkMeterCreditSafety(
+    input: SparkMeterCreditSafetyInput,
+): SparkMeterCreditSafetyDecision {
+    const displayedBalanceMinor = Math.max(0, input.creditMinor);
+    const hasCredit = input.creditMinor + input.planBalanceMinor > 0;
+    const expectedMeterState = hasCredit ? 'on' : 'off';
+    const base = { displayedBalanceMinor, expectedMeterState } as const;
+
+    if (input.creditMinor < 0 || input.planBalanceMinor < 0) {
+        return {
+            ...base,
+            allowFinancialWrite: false,
+            requiresManualReview: true,
+            reason: 'provider_balance_negative',
+        };
+    }
+    if (input.operatingMode.trim().toLowerCase() !== 'auto') {
+        return {
+            ...base,
+            allowFinancialWrite: false,
+            requiresManualReview: true,
+            reason: 'unsafe_meter_mode',
+        };
+    }
+    if (!hasCredit && input.lastMeterState.trim().toLowerCase() === 'on') {
+        return {
+            ...base,
+            allowFinancialWrite: false,
+            requiresManualReview: true,
+            reason: 'zero_credit_meter_on',
+        };
+    }
+
+    const readingTime = Date.parse(input.lastReadingAt);
+    const currentTime = Date.parse(input.now);
+    const telemetryAge = currentTime - readingTime;
+    if (!Number.isFinite(telemetryAge) || telemetryAge < 0 || telemetryAge > SPARKMETER_TELEMETRY_FRESHNESS_MS) {
+        return {
+            ...base,
+            allowFinancialWrite: false,
+            requiresManualReview: false,
+            reason: 'telemetry_stale',
+        };
+    }
+    return {
+        ...base,
+        allowFinancialWrite: true,
+        requiresManualReview: false,
+        reason: 'safe',
+    };
+}
+
 /** Build a fail-closed plan for one explicitly allowlisted production canary. */
 export function buildSparkMeterProductionCanaryPlan(
     input: SparkMeterProductionCanaryInput,

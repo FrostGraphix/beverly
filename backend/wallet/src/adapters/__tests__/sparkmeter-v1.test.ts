@@ -3,10 +3,79 @@ import {
     buildSparkMeterProductionCanaryPlan,
     buildSparkMeterAuthHeaders,
     buildSparkMeterPaymentRequest,
+    evaluateSparkMeterCreditSafety,
     parseSparkMeterPaymentResponse,
 } from '../sparkmeter-v1.js';
 
 describe('SparkMeter Koios v1 adapter', () => {
+    it('blocks stale telemetry without estimating debt', () => {
+        expect(evaluateSparkMeterCreditSafety({
+            creditMinor: 0,
+            planBalanceMinor: 0,
+            operatingMode: 'auto',
+            lastMeterState: 'off',
+            lastReadingAt: '2026-09-25T09:00:00.000Z',
+            now: '2026-09-25T10:00:01.000Z',
+        })).toEqual({
+            allowFinancialWrite: false,
+            displayedBalanceMinor: 0,
+            expectedMeterState: 'off',
+            requiresManualReview: false,
+            reason: 'telemetry_stale',
+        });
+    });
+
+    it('flags energized zero-credit meters', () => {
+        expect(evaluateSparkMeterCreditSafety({
+            creditMinor: 0,
+            planBalanceMinor: 0,
+            operatingMode: 'auto',
+            lastMeterState: 'on',
+            lastReadingAt: '2026-09-25T09:50:00.000Z',
+            now: '2026-09-25T10:00:00.000Z',
+        })).toEqual({
+            allowFinancialWrite: false,
+            displayedBalanceMinor: 0,
+            expectedMeterState: 'off',
+            requiresManualReview: true,
+            reason: 'zero_credit_meter_on',
+        });
+    });
+
+    it('never projects negative customer credit', () => {
+        expect(evaluateSparkMeterCreditSafety({
+            creditMinor: -25,
+            planBalanceMinor: 0,
+            operatingMode: 'auto',
+            lastMeterState: 'off',
+            lastReadingAt: '2026-09-25T09:50:00.000Z',
+            now: '2026-09-25T10:00:00.000Z',
+        })).toEqual({
+            allowFinancialWrite: false,
+            displayedBalanceMinor: 0,
+            expectedMeterState: 'off',
+            requiresManualReview: true,
+            reason: 'provider_balance_negative',
+        });
+    });
+
+    it('permits fresh positive auto-mode credit', () => {
+        expect(evaluateSparkMeterCreditSafety({
+            creditMinor: 10_000,
+            planBalanceMinor: 0,
+            operatingMode: 'auto',
+            lastMeterState: 'on',
+            lastReadingAt: '2026-09-25T09:50:00.000Z',
+            now: '2026-09-25T10:00:00.000Z',
+        })).toEqual({
+            allowFinancialWrite: true,
+            displayedBalanceMinor: 10_000,
+            expectedMeterState: 'on',
+            requiresManualReview: false,
+            reason: 'safe',
+        });
+    });
+
     it('builds a single-attempt production canary plan', () => {
         expect(buildSparkMeterProductionCanaryPlan({
             installationId: '53f12390-74f7-40b3-b1db-e907c256986d',
