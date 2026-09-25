@@ -16,6 +16,6 @@ describe('production malware scanning', () => {
         delete process.env.PROFILE_PICTURE_SCAN_COMMAND;
         const { runMalwareScan } = await import('../file-scan.js');
         await expect(runMalwareScan(Buffer.from('%PDF-1.7'), 'document.pdf'))
-            .resolves.toEqual(expect.objectContaining({ ok: false, mode: 'disabled' }));
+            .resolves.toEqual(expect.objectContaining({ ok: false, mode: 'disabled', reason: 'unavailable' }));
     });
 });

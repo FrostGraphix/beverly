@@ -111,7 +111,14 @@ export async function activateKycUpload(input: {
     if (!scan.ok) {
         await adminClient.storage.from(KYC_BUCKET).remove([path]);
         await adminClient.from('kyc_documents').delete().eq('id', input.documentId);
-        throw new KycReviewError('Document failed security scanning.', 'document_scan_failed', 422);
+        if (scan.reason === 'unavailable') {
+            throw new KycReviewError(
+                'Beverly could not check this document. The upload was removed. Try again later.',
+                'document_scanner_unavailable',
+                503,
+            );
+        }
+        throw new KycReviewError('This document could not be accepted by security checks.', 'document_scan_failed', 422);
     }
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await adminClient.from('kyc_documents')
