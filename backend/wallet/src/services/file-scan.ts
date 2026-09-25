@@ -2,7 +2,14 @@ import { execFile } from 'node:child_process';
 
 export type MalwareScanResult =
     | { ok: true; mode: 'command' | 'disabled'; output?: string }
-    | { ok: false; mode: 'command' | 'disabled'; reason: 'infected' | 'unavailable'; output?: string };
+    | { ok: false; mode: 'command'; reason: 'infected'; scanReason: 'malware_detected'; output?: string }
+    | {
+        ok: false;
+        mode: 'command' | 'disabled';
+        reason: 'unavailable';
+        scanReason: 'scanner_not_configured' | 'scanner_not_found' | 'scanner_timeout' | 'scanner_execution_failed';
+        output?: string;
+    };
 
 export async function runMalwareScan(fileBytes: Buffer, fileName: string): Promise<MalwareScanResult> {
     const cmd = process.env.PROFILE_PICTURE_SCAN_COMMAND?.trim();
@@ -10,7 +17,10 @@ export async function runMalwareScan(fileBytes: Buffer, fileName: string): Promi
         const production = process.env.NODE_ENV?.trim().toLowerCase() === 'production';
         if (production) {
             console.error('[file-scan] scanner is not configured');
-            return { ok: false, mode: 'disabled', reason: 'unavailable', output: 'Malware scanner is not configured.' };
+            return {
+                ok: false, mode: 'disabled', reason: 'unavailable', scanReason: 'scanner_not_configured',
+                output: 'Malware scanner is not configured.',
+            };
         }
         return { ok: true, mode: 'disabled' };
     }
@@ -23,10 +33,16 @@ export async function runMalwareScan(fileBytes: Buffer, fileName: string): Promi
                 // Missing commands, timeouts, and other exit codes mean that
                 // scanning could not be completed, not that the file is unsafe.
                 if (exitCode === 1) {
-                    return resolve({ ok: false, mode: 'command', reason: 'infected', output });
+                    return resolve({ ok: false, mode: 'command', reason: 'infected', scanReason: 'malware_detected', output });
                 }
                 console.error('[file-scan] configured scanner unavailable', { exitCode });
-                return resolve({ ok: false, mode: 'command', reason: 'unavailable', output });
+                const errno = (error as NodeJS.ErrnoException).code;
+                const scanReason = error.killed || errno === 'ETIMEDOUT'
+                    ? 'scanner_timeout'
+                    : errno === 'ENOENT'
+                        ? 'scanner_not_found'
+                        : 'scanner_execution_failed';
+                return resolve({ ok: false, mode: 'command', reason: 'unavailable', scanReason, output });
             }
             resolve({ ok: true, mode: 'command', output: `${stdout}\n${stderr}`.trim() });
         });

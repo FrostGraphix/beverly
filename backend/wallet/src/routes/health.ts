@@ -26,14 +26,6 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/ready', async (_req, reply) => {
         const checks: Record<string, { ok: boolean; mode?: 'required' | 'disabled'; latencyMs?: number; error?: string }> = {};
 
-        const scannerConfigured = Boolean(process.env.PROFILE_PICTURE_SCAN_COMMAND?.trim());
-        const scannerRequired = process.env.NODE_ENV?.trim().toLowerCase() === 'production';
-        checks.fileScanning = scannerRequired
-            ? scannerConfigured
-                ? { ok: true, mode: 'required' }
-                : { ok: false, mode: 'required', error: 'scanner_not_configured' }
-            : { ok: true, mode: scannerConfigured ? 'required' : 'disabled' };
-
         // DB
         const dbStart = Date.now();
         try {

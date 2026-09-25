@@ -91,6 +91,24 @@ describe('KYC review evidence rules', () => {
         }));
     });
 
+    it('sends unscanned evidence to manual review without granting KYC approval', async () => {
+        const { submitKycReview } = await import('../kyc-reviews.js');
+        documents = [
+            { id: 'doc-1', doc_type: 'national_id', uploaded_at: '2026-09-25T00:00:00Z', security_scan_status: 'unscanned' },
+            { id: 'doc-2', doc_type: 'selfie', uploaded_at: '2026-09-25T00:00:00Z', security_scan_status: 'unscanned' },
+        ];
+
+        await expect(submitKycReview({
+            subjectType: 'customer', subjectId: 'customer-1', requestedTier: 1,
+            submittedBy: 'user-1', submission: { method: 'manual_document_review' }, documentIds: ['doc-1', 'doc-2'],
+        })).resolves.toMatchObject({ id: 'review-1', status: 'pending' });
+        expect(rpc).toHaveBeenCalledOnce();
+        expect(rpc).toHaveBeenCalledWith('submit_kyc_evidence_review', expect.objectContaining({
+            p_subject_type: 'customer', p_requested_tier: 1,
+        }));
+        expect(rpc).not.toHaveBeenCalledWith('review_kyc_tier_request', expect.anything());
+    });
+
     it('scopes review pagination before rows are selected', async () => {
         const { listKycReviews } = await import('../kyc-reviews.js');
         await listKycReviews({
