@@ -84,26 +84,37 @@ function optionalText(value) {
  *
  * @param {string} url
  * @param {Record<string, string>} headers
- * @param {(url: string, init: { headers: Record<string, string>, signal: AbortSignal }) => Promise<Response>} request
+ * @param {(url: string, init: { headers: Record<string, string>, signal: AbortSignal, redirect: "error" }) => Promise<Response>} request
  * @param {number} delayMs
+ * @param {(delay: number) => Promise<void>} wait
  * @returns {Promise<Response>}
  */
-async function fetchWithRetries(url, headers, request = fetch, delayMs = 1700) {
+async function fetchWithRetries(url, headers, request = fetch, delayMs = 1700, wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay))) {
+  if (!Number.isFinite(delayMs) || delayMs < 0 || delayMs > 30000) throw new Error("Invalid customer retry delay");
   /** @type {Error | null} */
   let lastError = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    let retryDelay = delayMs * (2 ** attempt);
+    // The signal remains active while the caller consumes the response body.
+    const signal = AbortSignal.timeout(30000);
     try {
-      const response = await request(url, { headers, signal: controller.signal });
+      const response = await request(url, { headers, signal, redirect: "error" });
       if (response.ok || (response.status < 500 && response.status !== 429)) return response;
       lastError = new Error(`SparkMeter customer read failed: HTTP ${response.status}`);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("SparkMeter customer read failed");
-    } finally {
-      clearTimeout(timeout);
+      const retryAfter = response.headers.get("retry-after");
+      if (retryAfter) {
+        const minimumDelay = /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now();
+        if (!Number.isFinite(minimumDelay) || minimumDelay > 60000) {
+          await response.body?.cancel();
+          return response; // Operator replay, never retry before the provider permits it.
+        }
+        retryDelay = Math.max(retryDelay, minimumDelay);
+      }
+      await response.body?.cancel();
+    } catch {
+      lastError = new Error("SparkMeter customer read failed: transport unavailable");
     }
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    if (attempt < 2) await wait(retryDelay);
   }
   throw lastError || new Error("SparkMeter customer read failed");
 }
@@ -136,7 +147,8 @@ function buildSparkMeterSandboxImportPlan(input) {
     }
     customerIds.add(externalId);
 
-    if (!Array.isArray(rawCustomer.meters) || rawCustomer.meters.length === 0) {
+    if (!Array.isArray(rawCustomer.meters)) throw new Error("SparkMeter meters must be an array");
+    if (rawCustomer.meters.length === 0) {
       skippedWithoutMeters += 1;
       continue;
     }
@@ -175,26 +187,45 @@ function buildSparkMeterSandboxImportPlan(input) {
   return { customers, meters, mappings, skippedWithoutMeters };
 }
 
-/** @returns {Promise<SparkMeterCustomer[]>} */
-async function fetchSparkMeterCustomers() {
-  const apiKey = requiredText(process.env.SPARKMETER_API_KEY, "SPARKMETER_API_KEY");
-  const apiSecret = requiredText(process.env.SPARKMETER_API_SECRET, "SPARKMETER_API_SECRET");
+/**
+ * Read the complete observed Koios customer cursor sequence before any import.
+ * @param {{ apiKey?: string, apiSecret?: string, request?: typeof fetch, delayMs?: number, maxPages?: number }} options
+ * @returns {Promise<SparkMeterCustomer[]>}
+ */
+async function fetchSparkMeterCustomers(options = {}) {
+  const apiKey = requiredText(options.apiKey ?? process.env.SPARKMETER_API_KEY, "SPARKMETER_API_KEY");
+  const apiSecret = requiredText(options.apiSecret ?? process.env.SPARKMETER_API_SECRET, "SPARKMETER_API_SECRET");
+  const maxPages = options.maxPages ?? 10000;
+  const delayMs = options.delayMs ?? 1700;
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1 || maxPages > 10000) throw new Error("Invalid customer page limit");
+  if (!Number.isFinite(delayMs) || delayMs < 0) throw new Error("Invalid customer request delay");
+  const seenCursors = new Set();
+  let pages = 0;
   /** @type {SparkMeterCustomer[]} */
   const customers = [];
   let cursor = null;
 
   do {
+    if (pages >= maxPages) throw new Error("SparkMeter customer page limit exceeded");
+    pages += 1;
     const url = new URL("/api/v1/customers", SPARKMETER_BASE_URL);
     url.searchParams.set("per_page", "50");
     if (cursor) url.searchParams.set("cursor", cursor);
-    const response = await fetchWithRetries(url.toString(), { "X-API-KEY": apiKey, "X-API-SECRET": apiSecret });
+    const response = await fetchWithRetries(url.toString(), { "X-API-KEY": apiKey, "X-API-SECRET": apiSecret }, options.request ?? fetch, delayMs);
     if (!response.ok) throw new Error(`SparkMeter customer read failed: HTTP ${response.status}`);
-    /** @type {{ data?: unknown, next_cursor?: unknown }} */
+    /** @type {{ data?: unknown, next_cursor?: unknown, errors?: unknown }} */
     const body = await response.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("SparkMeter customer response is invalid");
+    if (body.errors !== undefined && (!Array.isArray(body.errors) || body.errors.length > 0)) throw new Error("SparkMeter customer response contains errors");
+    if (body.next_cursor != null && (typeof body.next_cursor !== "string" || !body.next_cursor.trim())) throw new Error("SparkMeter customer cursor is invalid");
     if (!Array.isArray(body.data)) throw new Error("SparkMeter customer response lacks data array");
     customers.push(.../** @type {SparkMeterCustomer[]} */ (body.data));
     cursor = optionalText(body.next_cursor);
-    if (cursor) await new Promise((resolve) => setTimeout(resolve, 1700));
+    if (cursor) {
+      if (seenCursors.has(cursor)) throw new Error("SparkMeter customer cursor repeated");
+      seenCursors.add(cursor);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   } while (cursor);
 
   return customers;
@@ -322,7 +353,7 @@ async function main() {
   }
 }
 
-module.exports = { buildSparkMeterSandboxImportPlan, fetchWithRetries, resolveImportConnectionString, resolveImportTarget };
+module.exports = { buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers, resolveImportConnectionString, resolveImportTarget };
 
 if (require.main === module) {
   main().catch((error) => {
