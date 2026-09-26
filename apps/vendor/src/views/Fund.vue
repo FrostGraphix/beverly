@@ -18,7 +18,7 @@ interface FundingRequest {
     created_at: string;
 }
 
-const mode = ref<Mode>('bank');
+const mode = ref<Mode>(PAYSTACK_AVAILABLE ? 'paystack' : 'bank');
 const amountNaira = ref(50000);
 const loading = ref(false);
 const error = ref<string | null>(null);
