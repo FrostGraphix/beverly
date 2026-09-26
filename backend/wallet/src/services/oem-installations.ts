@@ -41,6 +41,8 @@ const supabaseInstallationStore: InstallationStore = {
             const { data, error } = await adminClient
                 .from('oem_installations')
                 .select('id, tenant_id, status')
+                .eq('tenant_id', request.tenantId)
+                .in('id', [...request.allowedInstallationIds])
                 .eq('id', request.installationId);
             if (error) throw error;
             return ((data ?? []) as InstallationRow[]).map(normalizeInstallationRow);
@@ -50,6 +52,8 @@ const supabaseInstallationStore: InstallationStore = {
         const { data, error } = await adminClient
             .from('external_resource_mappings')
             .select('oem_installations!inner(id, tenant_id, status)')
+            .eq('oem_installations.tenant_id', request.tenantId)
+            .in('oem_installation_id', [...request.allowedInstallationIds])
             .eq('resource_type', request.resourceType)
             .eq('internal_id', request.internalResourceId)
             .eq('status', 'active');
@@ -68,8 +72,17 @@ export async function resolveAuthorizedInstallation(
     request: InstallationResolutionRequest,
     store: InstallationStore = supabaseInstallationStore,
 ): Promise<InstallationCandidate> {
+    if (!request.tenantId?.trim() || !Array.isArray(request.allowedInstallationIds)
+        || request.allowedInstallationIds.length === 0
+        || request.allowedInstallationIds.some((id) => typeof id !== 'string' || !id.trim())
+        || (request.installationId !== undefined && !request.allowedInstallationIds.includes(request.installationId))) {
+        throw new OemContractError('OEM_TENANT_FORBIDDEN', 'Trusted tenant and installation scope are required');
+    }
     const candidates = await store.findCandidates(request);
     const installation = resolveInstallation(candidates);
+    if (request.installationId !== undefined && installation.id !== request.installationId) {
+        throw new OemContractError('OEM_INSTALLATION_INVALID', 'Resolved installation does not match request');
+    }
     if (!request.allowedInstallationIds.includes(installation.id)) {
         throw new OemContractError('OEM_TENANT_FORBIDDEN', 'Actor cannot access installation');
     }
