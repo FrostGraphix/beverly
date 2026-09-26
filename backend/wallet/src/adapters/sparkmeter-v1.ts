@@ -49,22 +49,43 @@ export interface SparkMeterCreditSafetyInput {
 }
 
 export interface SparkMeterCreditSafetyDecision {
-    allowFinancialWrite: boolean;
-    displayedBalanceMinor: number;
-    expectedMeterState: 'on' | 'off';
+    allowFinancialWrite: false;
+    /** Provider credit, including debt; null means the supplied amount is malformed. */
+    displayedBalanceMinor: number | null;
+    /** Advisory zero-credit expectation, never confirmation of physical relay state. */
+    expectedMeterState: 'unknown' | 'off';
     requiresManualReview: boolean;
-    reason: 'safe' | 'telemetry_stale' | 'zero_credit_meter_on' | 'provider_balance_negative' | 'unsafe_meter_mode';
+    reason: 'advisory_only' | 'invalid_telemetry' | 'telemetry_stale' | 'zero_credit_meter_on' | 'provider_balance_negative' | 'unsafe_meter_mode';
 }
 
+// Portal display heuristic only; this is not a documented offline cutoff guarantee.
 const SPARKMETER_TELEMETRY_FRESHNESS_MS = 30 * 60 * 1_000;
 
-/** Fail closed when provider state cannot prove safe prepaid operation. */
+/** Advisory observations only; telemetry never authorizes payments or proves physical cutoff. */
 export function evaluateSparkMeterCreditSafety(
     input: SparkMeterCreditSafetyInput,
 ): SparkMeterCreditSafetyDecision {
-    const displayedBalanceMinor = Math.max(0, input.creditMinor);
-    const hasCredit = input.creditMinor + input.planBalanceMinor > 0;
-    const expectedMeterState = hasCredit ? 'on' : 'off';
+    const displayedBalanceMinor = Number.isSafeInteger(input?.creditMinor) ? input.creditMinor : null;
+    const meterState = typeof input?.lastMeterState === 'string' ? input.lastMeterState.trim().toLowerCase() : '';
+    const explicitZone = /T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+    const readingTime = typeof input?.lastReadingAt === 'string' && explicitZone.test(input.lastReadingAt)
+        ? Date.parse(input.lastReadingAt) : Number.NaN;
+    const currentTime = typeof input?.now === 'string' && explicitZone.test(input.now)
+        ? Date.parse(input.now) : Number.NaN;
+    const telemetryAge = currentTime - readingTime;
+    if (displayedBalanceMinor === null || !Number.isSafeInteger(input?.planBalanceMinor)
+        || typeof input?.operatingMode !== 'string' || !['on', 'off'].includes(meterState)
+        || !Number.isFinite(telemetryAge) || telemetryAge < 0) {
+        return {
+            displayedBalanceMinor,
+            expectedMeterState: 'unknown',
+            allowFinancialWrite: false,
+            requiresManualReview: true,
+            reason: 'invalid_telemetry',
+        };
+    }
+    const hasCredit = input.creditMinor > 0 || input.planBalanceMinor > 0;
+    const expectedMeterState = hasCredit ? 'unknown' : 'off';
     const base = { displayedBalanceMinor, expectedMeterState } as const;
 
     if (input.creditMinor < 0 || input.planBalanceMinor < 0) {
@@ -92,10 +113,7 @@ export function evaluateSparkMeterCreditSafety(
         };
     }
 
-    const readingTime = Date.parse(input.lastReadingAt);
-    const currentTime = Date.parse(input.now);
-    const telemetryAge = currentTime - readingTime;
-    if (!Number.isFinite(telemetryAge) || telemetryAge < 0 || telemetryAge > SPARKMETER_TELEMETRY_FRESHNESS_MS) {
+    if (telemetryAge > SPARKMETER_TELEMETRY_FRESHNESS_MS) {
         return {
             ...base,
             allowFinancialWrite: false,
@@ -105,9 +123,9 @@ export function evaluateSparkMeterCreditSafety(
     }
     return {
         ...base,
-        allowFinancialWrite: true,
+        allowFinancialWrite: false,
         requiresManualReview: false,
-        reason: 'safe',
+        reason: 'advisory_only',
     };
 }
 

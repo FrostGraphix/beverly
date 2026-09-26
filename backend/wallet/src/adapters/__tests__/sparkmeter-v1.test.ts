@@ -8,6 +8,36 @@ import {
 } from '../sparkmeter-v1.js';
 
 describe('SparkMeter Koios v1 adapter', () => {
+    it.each([
+        { creditMinor: Number.NaN },
+        { creditMinor: Number.POSITIVE_INFINITY },
+        { creditMinor: 0.5 },
+        { planBalanceMinor: Number.MAX_SAFE_INTEGER + 1 },
+        { lastMeterState: 'unknown' },
+        { lastMeterState: '' },
+        { operatingMode: null },
+        { now: 'invalid' },
+        { lastReadingAt: '2026-09-25T10:00:01.000Z' },
+        { lastReadingAt: '2026-09-25T09:50:00' },
+    ])('rejects malformed or uncertain telemetry: %j', (override) => {
+        const result = evaluateSparkMeterCreditSafety({
+            creditMinor: 100,
+            planBalanceMinor: 0,
+            operatingMode: 'auto',
+            lastMeterState: 'off',
+            lastReadingAt: '2026-09-25T09:50:00.000Z',
+            now: '2026-09-25T10:00:00.000Z',
+            ...override,
+        } as Parameters<typeof evaluateSparkMeterCreditSafety>[0]);
+        expect(result).toMatchObject({
+            allowFinancialWrite: false,
+            requiresManualReview: true,
+            expectedMeterState: 'unknown',
+            reason: 'invalid_telemetry',
+        });
+        expect(result.displayedBalanceMinor === null || Number.isSafeInteger(result.displayedBalanceMinor)).toBe(true);
+    });
+
     it('blocks stale telemetry without estimating debt', () => {
         expect(evaluateSparkMeterCreditSafety({
             creditMinor: 0,
@@ -42,7 +72,7 @@ describe('SparkMeter Koios v1 adapter', () => {
         });
     });
 
-    it('never projects negative customer credit', () => {
+    it('preserves provider debt for review', () => {
         expect(evaluateSparkMeterCreditSafety({
             creditMinor: -25,
             planBalanceMinor: 0,
@@ -52,14 +82,14 @@ describe('SparkMeter Koios v1 adapter', () => {
             now: '2026-09-25T10:00:00.000Z',
         })).toEqual({
             allowFinancialWrite: false,
-            displayedBalanceMinor: 0,
+            displayedBalanceMinor: -25,
             expectedMeterState: 'off',
             requiresManualReview: true,
             reason: 'provider_balance_negative',
         });
     });
 
-    it('permits fresh positive auto-mode credit', () => {
+    it('never authorizes payment from fresh positive telemetry', () => {
         expect(evaluateSparkMeterCreditSafety({
             creditMinor: 10_000,
             planBalanceMinor: 0,
@@ -68,11 +98,11 @@ describe('SparkMeter Koios v1 adapter', () => {
             lastReadingAt: '2026-09-25T09:50:00.000Z',
             now: '2026-09-25T10:00:00.000Z',
         })).toEqual({
-            allowFinancialWrite: true,
+            allowFinancialWrite: false,
             displayedBalanceMinor: 10_000,
-            expectedMeterState: 'on',
+            expectedMeterState: 'unknown',
             requiresManualReview: false,
-            reason: 'safe',
+            reason: 'advisory_only',
         });
     });
 
