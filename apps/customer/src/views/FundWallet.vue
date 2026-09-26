@@ -6,7 +6,7 @@ import { naira } from '../lib/format';
 
 const PAYSTACK_AVAILABLE = import.meta.env.VITE_PAYSTACK_PAYMENTS_ENABLED === 'true';
 type Mode = 'paystack' | 'bank';
-const mode = ref<Mode>('bank');
+const mode = ref<Mode>(PAYSTACK_AVAILABLE ? 'paystack' : 'bank');
 
 const amountRaw = ref('');
 const quickAmts = [100_00, 500_00, 1000_00, 2000_00, 5000_00, 10000_00];
@@ -243,7 +243,7 @@ onMounted(async () => {
       </button>
 
       <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-4)">
-        Paystack remains paused.
+        Secure checkout by Paystack. Wallet credit follows verified payment.
       </p>
       </template>
 
