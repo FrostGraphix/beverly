@@ -131,6 +131,11 @@ assert.throws(
     throw new Error("sensitive-provider-payload");
   }, 0), (error) => !error.message.includes("sensitive-provider-payload"));
   assert.strictEqual(failedCalls, 3, "transport retries must remain bounded");
+  await assert.rejects(() => fetchSparkMeterCustomers({
+    apiKey: "test-key", apiSecret: "test-secret", delayMs: 0,
+    request: async () => new Response("private-provider-payload", { status: 200 })
+  }), (error) => error.message === "SparkMeter customer response is not valid JSON",
+  "invalid JSON errors must not disclose upstream body snippets");
   console.log(JSON.stringify({ status: "SparkMeter sandbox import contract passed" }, null, 2));
 })().catch((error) => {
   console.error(error);

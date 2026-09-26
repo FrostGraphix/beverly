@@ -214,7 +214,9 @@ async function fetchSparkMeterCustomers(options = {}) {
     const response = await fetchWithRetries(url.toString(), { "X-API-KEY": apiKey, "X-API-SECRET": apiSecret }, options.request ?? fetch, delayMs);
     if (!response.ok) throw new Error(`SparkMeter customer read failed: HTTP ${response.status}`);
     /** @type {{ data?: unknown, next_cursor?: unknown, errors?: unknown }} */
-    const body = await response.json();
+    const body = await response.json().catch(() => {
+      throw new Error("SparkMeter customer response is not valid JSON");
+    });
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("SparkMeter customer response is invalid");
     if (body.errors !== undefined && (!Array.isArray(body.errors) || body.errors.length > 0)) throw new Error("SparkMeter customer response contains errors");
     if (body.next_cursor != null && (typeof body.next_cursor !== "string" || !body.next_cursor.trim())) throw new Error("SparkMeter customer cursor is invalid");
