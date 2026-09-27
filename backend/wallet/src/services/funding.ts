@@ -493,45 +493,22 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         );
     }
 
-    // (No intermediate state — `funding_requests_status_check` constraint only
-    // allows the canonical lifecycle. We post the ledger entry first with an
-    // idempotency key, then transition status atomically: if another approver
-    // beat us to it, the UPDATE returns zero rows and we recognize the race.)
-
-    const entry = await postEntry({
-        walletId: canonicalWallet.id,
-        direction: 'credit',
-        amountMinor: funding.amount_minor,
-        entryType: 'funding_credit',
-        referenceType: 'funding_request',
-        referenceId: funding.id,
-        idempotencyKey: `funding.${funding.id}.credit`,
-        memo: `Funding approved · ${funding.channel}`,
-        createdBy: input.approvedBy,
-        audit: { actorType: 'staff', actorRole: 'finance-checker' },
+    const { data: approval, error: approvalError } = await adminClient.rpc('fn_approve_funding_request', {
+        p_funding_request_id: funding.id,
+        p_wallet_id: canonicalWallet.id,
+        p_approved_by: input.approvedBy,
     });
-
-    // Atomic transition: only one approver can flip from pending → approved.
-    const { data: updated, error: updErr } = await adminClient
-        .from('funding_requests')
-        .update({
-            status: 'approved',
-            approved_by: input.approvedBy,
-            approved_at: new Date().toISOString(),
-        })
-        .eq('id', funding.id)
-        .in('status', ['under_review', 'proof_uploaded'])
-        .select('*')
-        .maybeSingle();
-    if (updErr) throw new FundingError(updErr.message, 'update_failed');
-    if (!updated) {
-        // Race: another reviewer transitioned the row before us. The shared
-        // idempotency key on the ledger entry guaranteed at most one credit.
-        // Return the current state so the UI reconciles.
-        const { data: latest } = await adminClient
-            .from('funding_requests').select('*').eq('id', funding.id).single();
-        return { funding: latest as FundingRequest, ledgerEntry: entry };
+    if (approvalError || !approval) {
+        const message = approvalError?.message ?? 'Funding approval failed.';
+        if (/self approval/i.test(message)) throw new FundingError(message, 'self_approval');
+        if (/wallet not active/i.test(message)) throw new FundingError(message, 'wallet_inactive');
+        if (/wallet owner mismatch/i.test(message)) throw new FundingError(message, 'wallet_mismatch');
+        if (/invalid funding state/i.test(message)) throw new FundingError(message, 'invalid_state');
+        throw new FundingError(message, 'approval_failed');
     }
+    const result = approval as { funding: FundingRequest; ledgerEntry: LedgerEntry };
+    const updated = result.funding;
+    const entry = result.ledgerEntry;
 
     await logAction({
         actorUserId: input.approvedBy,
