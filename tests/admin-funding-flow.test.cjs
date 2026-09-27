@@ -17,6 +17,7 @@ function main() {
   const service = read("backend/wallet/src/services/funding.ts");
   const ledger = read("backend/wallet/src/services/ledger.ts");
   const migration = read("supabase/migrations/20260518165000_wallet_runtime_ledger_schema.sql");
+  const atomicApprovalMigration = read("supabase/migrations/20260927180000_atomic_funding_approval.sql");
 
   assert(api.includes("const hasBody = body !== undefined"), "API helper must detect empty bodies.");
   assert(api.includes("if (hasBody) headers['Content-Type']"), "API helper must omit JSON content-type without body.");
@@ -43,7 +44,10 @@ function main() {
   assert(service.includes("vendor_organizations(legal_name, trading_name, contact_email"), "Funding service must hydrate vendor identity.");
   assert(service.includes("entryType: 'funding_credit'"), "Funding approval must write funding credit entries.");
   assert(service.includes("idempotencyKey: `funding.${funding.id}.credit`"), "Funding approval must stay idempotent.");
-  assert(service.includes(".in('status', ['under_review', 'proof_uploaded'])"), "Funding approval must be race-safe.");
+  assert(service.includes("adminClient.rpc('fn_approve_funding_request'"), "Funding approval must use its atomic database transaction.");
+  assert(atomicApprovalMigration.includes("for update"), "Funding approval must lock the request and wallet rows.");
+  assert(atomicApprovalMigration.includes("v_entry := public.fn_post_ledger_entry"), "Funding approval must credit within the transaction.");
+  assert(atomicApprovalMigration.includes("set status = 'approved'"), "Funding approval must transition within the transaction.");
 
   assert(ledger.includes("update public.wallets") || migration.includes("update public.wallets"), "Ledger credit must update wallet balance.");
   assert(migration.includes("entry_type in (") && migration.includes("'funding_credit'"), "Ledger schema must allow funding credits.");

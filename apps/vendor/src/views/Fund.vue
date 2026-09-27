@@ -274,9 +274,6 @@ onMounted(async () => {
                 @click="payNow" :disabled="loading || !amountValid">
           {{ loading ? 'Initiating...' : `Pay ${amountValid ? naira(amountMinor) : ''} with Paystack` }}
         </button>
-        <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-3); text-align: center">
-          Cards, bank transfer, USSD. Credit posts after webhook confirmation.
-        </p>
       </div>
 
       <div v-if="mode === 'bank'" class="bw-card bank-transfer-card">

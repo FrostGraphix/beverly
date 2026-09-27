@@ -7,6 +7,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { redisConnection, queuesEnabled } from '../queue/index.js';
+import { env } from '../config/env.js';
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -50,6 +51,16 @@ const route: FastifyPluginAsync = async (fastify) => {
             } catch (e) {
                 checks.redis = { ok: false, error: (e as Error).message };
             }
+        }
+
+        if (!env.PAYSTACK_PAYMENTS_ENABLED) {
+            checks.paystack = { ok: true, mode: 'disabled' };
+        } else if (!env.PAYSTACK_SECRET_KEY || !env.PAYSTACK_PUBLIC_KEY) {
+            checks.paystack = { ok: false, mode: 'required', error: 'credentials_unavailable' };
+        } else if (!env.PAYSTACK_WEBHOOK_URL) {
+            checks.paystack = { ok: false, mode: 'required', error: 'webhook_url_unavailable' };
+        } else {
+            checks.paystack = { ok: true, mode: 'required' };
         }
 
         const allOk = Object.values(checks).every((c) => c.ok);
