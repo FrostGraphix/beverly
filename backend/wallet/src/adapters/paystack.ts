@@ -19,9 +19,20 @@ interface PaystackOk<T> { status: true; message: string; data: T; }
 interface PaystackErr { status: false; message: string; }
 type PaystackResp<T> = PaystackOk<T> | PaystackErr;
 
+export class PaystackServiceError extends Error {
+    readonly code = 'paystack_unavailable';
+    readonly statusCode = 503;
+    readonly expose = true;
+
+    constructor() {
+        super('Paystack is temporarily unavailable. Kindly use bank transfer.');
+        this.name = 'PaystackServiceError';
+    }
+}
+
 async function call<T>(path: string, init: RequestInit): Promise<T> {
     if (!env.PAYSTACK_SECRET_KEY) {
-        throw new Error('PAYSTACK_SECRET_KEY not configured');
+        throw new PaystackServiceError();
     }
     const res = await fetch(`${BASE}${path}`, {
         ...init,

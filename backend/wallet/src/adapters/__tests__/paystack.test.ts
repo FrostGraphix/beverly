@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// We import after mocking env to ensure secret is set
+const mockEnv = vi.hoisted(() => ({
+    PAYSTACK_SECRET_KEY: 'sk_test_secret_123' as string | undefined,
+}));
+
 vi.mock('../../config/env.js', () => ({
-    env: {
-        PAYSTACK_SECRET_KEY: 'sk_test_secret_123',
-    },
+    env: mockEnv,
     isProd: false,
     isDev: true,
     corsOrigins: [],
@@ -15,6 +16,10 @@ import crypto from 'node:crypto';
 
 describe('paystack webhook signature', () => {
     const secret = 'sk_test_secret_123';
+
+    beforeEach(() => {
+        mockEnv.PAYSTACK_SECRET_KEY = secret;
+    });
 
     it('accepts a valid HMAC-SHA512 signature', () => {
         const body = JSON.stringify({ event: 'charge.success', data: { reference: 'abc' } });
@@ -43,5 +48,19 @@ describe('paystack webhook signature', () => {
             amountMinor: 10.5,
             reference: 'ref-1',
         })).rejects.toThrow('positive integer in kobo');
+    });
+
+    it('returns a safe service error when credentials are unavailable', async () => {
+        mockEnv.PAYSTACK_SECRET_KEY = undefined;
+
+        await expect(initializeTransaction({
+            email: 'buyer@example.test',
+            amountMinor: 50_000,
+            reference: 'ref-2',
+        })).rejects.toMatchObject({
+            code: 'paystack_unavailable',
+            statusCode: 503,
+            message: 'Paystack is temporarily unavailable. Kindly use bank transfer.',
+        });
     });
 });
