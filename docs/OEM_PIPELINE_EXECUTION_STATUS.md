@@ -1,6 +1,18 @@
 # OEM pipeline execution status
 
-Status: **Incomplete**. Updated 2026-09-26.
+Status: **Incomplete**. Updated 2026-09-27.
+
+## Latest checkpoint
+
+- Official authenticated Koios documentation access was recovered by refreshing an expired CSRF login session. The owner does not need to supply documentation already captured in `SPARKMETER_KOIOS_V2_VERIFIED_CONTRACT.md`.
+- Live organization/site/freshness queries succeeded. Ten Nova sites were discovered; four returned freshness timestamps. AJEGUNLE freshness was null. Documented live queries and a historical query for 2026-09-27 returned successful empty pages. No physical meter state was established.
+- Versioned installation credential encryption/decryption is now consumed by `loadInstallationCredentials`. New envelopes authenticate installation ID and version. Rotation preparation supports legacy v1 to newer keys without changing legacy Calinmeter encryption. No stored credentials were rotated.
+- ESLint dependencies and recommended TypeScript configuration are now installed. Full lint runs but fails with 997 existing violations; no rules were suppressed. The four new/changed credential implementation/test files pass targeted lint.
+- Node 22.23.2 wallet regression passed: 79 files, 549 tests. Wallet typecheck and build passed. These checks do not prove missing runtime integration or deployed database isolation.
+
+### Credential rotation operation
+
+Supply `OEM_INSTALLATION_ENCRYPTION_KEYS` as a secret JSON object mapping versions 2 and above to canonical base64-encoded 32-byte keys. Keep keys available for all stored versions. `rotateInstallationBundle` prepares authenticated ciphertext for a higher version; persist envelope and version together using an atomic compare-and-swap against the old values. That database rotation workflow remains to be implemented and exercised. Keep old keys until all rows and recovery backups have been accounted for; do not remove a key based only on a successful local roundtrip test.
 
 ## Evidence-backed gaps
 
@@ -56,7 +68,7 @@ The Node 22 suite used the existing cached Node 22.23.2 executable at the front 
 
 An authenticated live read of `/api/v1/customers?per_page=1` returned HTTP 200 with JSON and no redirect. A one-page-budget scan correctly stopped at its budget. An initial complete-inventory attempt failed with an unclassified error. A subsequent full live scan completed and validated 3,112 customers, 3,073 metered customers, 3,073 meters, zero malformed meter collections and 39 intentionally excluded meterless customers. This differs from the earlier 3,111/3,072 snapshot; no new rows were imported. These are read-only results from the ACOB provider account, not a provider write sandbox, live relay verification or database reconciliation. Provider writes: zero. Database writes: zero.
 
-Provide authenticated managed Koios documentation access or an exported OpenAPI specification containing meter telemetry, historical query parameters, pagination, timestamp/timezone conventions, units, corrections and late data. Also obtain provider-specific ambiguous-payment reconciliation guarantees and firmware-specific evidence of local prepaid cutoff while Nova is offline. The existing v1 inventory and payment examples do not establish these contracts.
+Documentation access is now recovered. Remaining provider clarification concerns energy counter-versus-interval meaning, credit balance units, corrections/late-data semantics, ambiguous-payment reconciliation and firmware-specific local cutoff. The official schema and read-query contracts are recorded separately. Successful empty queries cannot substitute for a nonempty authorized telemetry fixture.
 
 Protected-preview smoke is separately blocked: none of `VERCEL_PROTECTION_BYPASS`, `VERCEL_AUTOMATION_BYPASS`, or `VERCEL_AUTOMATION_BYPASS_SECRET` is configured in the loaded local environment. `LIVE_API_BEARER_TOKEN` exists, but its suitability for preview authentication has not been verified. Configure the bypass through secure environment storage; do not paste it into documentation.
 
