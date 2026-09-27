@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { encryptInstallationBundle } from '../oem-credential-keyring.js';
 import { encryptSecret } from '../oem-registry.js';
 import {
     InstallationCredentialError,
@@ -13,6 +14,19 @@ const installation = {
 };
 
 describe('OEM installation credential loading', () => {
+    afterEach(() => vi.unstubAllEnvs());
+    it('loads credentials after an installation-bound key rotation', async () => {
+        const keys = JSON.stringify({ 2: Buffer.alloc(32, 17).toString('base64') });
+        vi.stubEnv('OEM_INSTALLATION_ENCRYPTION_KEYS', keys);
+        const encryptedSecretBundle = encryptInstallationBundle(JSON.stringify({ apiKey: 'rotated-key', apiSecret: 'rotated-secret' }), installation.id, 2);
+        const store: InstallationCredentialStore = { async findByInstallationId() {
+            return { oemInstallationId: installation.id, authStrategy: 'api_key_pair', encryptedSecretBundle,
+                encryptionKeyVersion: 2, tokenEndpoint: null, tokenExpiryPolicy: {} };
+        } };
+        await expect(loadInstallationCredentials(installation, store)).resolves.toMatchObject({
+            apiKey: 'rotated-key', apiSecret: 'rotated-secret', encryptionKeyVersion: 2,
+        });
+    });
     it('returns decrypted API-key credentials for an authorized installation', async () => {
         const store: InstallationCredentialStore = {
             async findByInstallationId() {

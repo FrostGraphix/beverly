@@ -1,5 +1,5 @@
 import { adminClient } from '../db/supabase.js';
-import { decryptSecret } from './oem-registry.js';
+import { CredentialKeyringError, decryptInstallationBundle } from './oem-credential-keyring.js';
 import type { InstallationCandidate } from './oem-installations.js';
 
 export type InstallationAuthStrategy =
@@ -96,8 +96,13 @@ function requireNonEmptyString(value: unknown, field: string): string {
     return value.trim();
 }
 
-function parseSecretBundle(encryptedSecretBundle: string): Record<string, unknown> {
-    const plaintext = decryptSecret(encryptedSecretBundle);
+function parseSecretBundle(row: InstallationCredentialRow): Record<string, unknown> {
+    let plaintext: string;
+    try {
+        plaintext = decryptInstallationBundle(row.encryptedSecretBundle, row.oemInstallationId, row.encryptionKeyVersion);
+    } catch (error) {
+        throw new InstallationCredentialError(error instanceof CredentialKeyringError ? error.code : 'OEM_CREDENTIALS_INVALID', 'Credential bundle cannot be decrypted');
+    }
     if (!plaintext) {
         throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Credential bundle cannot be decrypted');
     }
@@ -123,10 +128,7 @@ export async function loadInstallationCredentials(
     if (row.oemInstallationId !== installation.id) {
         throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Credential installation mismatch');
     }
-    if (row.encryptionKeyVersion !== 1) {
-        throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Encryption key version is unsupported');
-    }
-    const bundle = parseSecretBundle(row.encryptedSecretBundle);
+    const bundle = parseSecretBundle(row);
     if (row.authStrategy === 'api_key_pair') {
         return {
             oemInstallationId: row.oemInstallationId,
