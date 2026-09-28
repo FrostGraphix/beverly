@@ -172,8 +172,8 @@ async function repairApprovedCredits() {
             text: needsReview
                 ? `Repaired ${result.repaired} credits. ${needsReview} funding issues need finance review.`
                 : result.repaired
-                ? `Repaired ${result.repaired} approved funding credits. Wallet owners can refresh their balances now.`
-                : `Checked ${result.checked} approved funding credits. No repairs needed.`,
+                ? `Repaired ${result.repaired} approved funding credits. Review Funding History for remaining mismatches.`
+                : 'No missing credits were eligible for repair. Review Funding History for remaining mismatches.',
         };
         await load();
     } catch (e: any) {
