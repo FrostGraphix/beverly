@@ -20,6 +20,7 @@ export async function notifyVendor(input: VendorNotification): Promise<boolean> 
         type: input.type,
         title: input.title,
         body: input.body,
+        message: input.body,
         metadata: { ...input.metadata, path: input.path },
         dedupe_key: input.dedupeKey ?? null,
         read: false,

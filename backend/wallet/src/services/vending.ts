@@ -19,7 +19,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyVendor } from './vendor-notifications.js';
-import { sendNotification } from './notifications.js';
+import { notifyTokenPurchased, sendNotification } from './notifications.js';
 import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
@@ -445,6 +445,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         dedupeKey: `vending.purchase.${po.id}`,
         metadata: { purchaseOrderId: po.id, meterId: meter.meterId, deliveryState: po.delivery_state },
     }).catch(() => undefined);
+
+    if (meter.customerId) {
+        await notifyTokenPurchased(meter.customerId, {
+            purchaseOrderId: po.id,
+            meterId: meter.meterId,
+            units: preview.units,
+            amountMinor: preview.grossAmountMinor,
+        }).catch(() => undefined);
+    }
 
     return {
         purchaseOrder: po,

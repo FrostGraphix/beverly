@@ -480,10 +480,10 @@ async function fulfillCustomerTokenPurchase(
         }
 
         notifyTokenPurchased((po as any).customer_id, {
+            purchaseOrderId,
             meterId: meter.meterId,
             units,
             amountMinor: (po as any).amount_minor,
-            token: tokenRes.token,
         }).catch(() => undefined);
     } catch (error: any) {
         const { error: reviewUpdateError } = await adminClient
