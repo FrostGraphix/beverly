@@ -35,6 +35,7 @@ function main() {
   assert(page.includes("function ownerName"), "Funding page must render wallet owner names.");
   assert(page.includes("function ownerEmail"), "Funding page must render wallet owner emails.");
   assert(page.includes("vendor_organizations") && page.includes("customers"), "Funding page must read customer and vendor identity.");
+  assert(page.includes("Review Funding History for remaining mismatches"), "Reconciliation must not claim no issues when integrity mismatches may remain.");
   assert(history.includes("credit_state") && history.includes("Credit missing"), "Funding history must distinguish approval from wallet credit.");
 
   assert(route.includes("getBalance"), "Funding route must import balance lookup.");
