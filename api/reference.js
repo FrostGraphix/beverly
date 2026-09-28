@@ -1042,6 +1042,7 @@ async function runLoggedConsumptionSync(request, input) {
 const walletMaintenanceTasks = new Set([
   "holds",
   "payments",
+  "funding-credits",
   "stuck-purchases",
   "remote-send",
   "reconciliation",
@@ -1056,6 +1057,7 @@ async function runWalletMaintenance(task) {
   switch (task) {
     case "holds": return scheduler.sweepExpiredHolds();
     case "payments": return scheduler.sweepPendingPayments();
+    case "funding-credits": return scheduler.sweepApprovedFundingCredits();
     case "stuck-purchases": return scheduler.scanStuckPurchases();
     case "remote-send": return scheduler.reconcileRemoteSends();
     case "fraud-baseline": return scheduler.recomputeFraudBaselines();

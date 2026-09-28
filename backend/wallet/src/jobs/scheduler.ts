@@ -23,6 +23,32 @@ import {
 } from '../services/payment-status.js';
 import { fulfillSuccessfulPaystackTransaction, markUnsuccessfulPaystackTransaction } from '../services/payment-transactions.js';
 
+export async function sweepApprovedFundingCredits(): Promise<{
+    checked: number;
+    repaired: number;
+    missingLedger: number;
+    staleWallet: number;
+    blockedInactive: number;
+    duplicateCredits: number;
+    gatewayMissing: number;
+}> {
+    const { data, error } = await adminClient.rpc('fn_reconcile_approved_funding_credits', {
+        p_limit: 250,
+    });
+    if (error) throw new Error(error.message);
+    const result = data as {
+        checked: number;
+        repaired: number;
+        missingLedger: number;
+        staleWallet: number;
+        blockedInactive: number;
+        duplicateCredits: number;
+        gatewayMissing: number;
+    };
+    console.info(`[JOB:funding-credits] checked=${result.checked} repaired=${result.repaired} blocked=${result.blockedInactive} stale=${result.staleWallet} duplicate=${result.duplicateCredits} gatewayMissing=${result.gatewayMissing}`);
+    return result;
+}
+
 // ── Hold expiry sweeper ────────────────────────────────────────────────────────
 export async function sweepExpiredHolds(): Promise<void> {
     await reconcileGeneratedHoldOrders();

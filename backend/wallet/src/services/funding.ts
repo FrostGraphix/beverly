@@ -8,7 +8,7 @@
  * Approval always writes one immutable funding_credit ledger entry.
  */
 import { adminClient } from '../db/supabase.js';
-import { postEntry, type LedgerEntry } from './ledger.js';
+import { type LedgerEntry } from './ledger.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
@@ -377,78 +377,22 @@ async function canonicalFundingWallet(funding: FundingRequest): Promise<Wallet> 
     const ownerType = funding.owner_type ?? (funding.customer_id ? 'customer' : 'vendor');
     const ownerId = ownerType === 'customer' ? funding.customer_id : funding.vendor_organization_id;
     if (!ownerId) throw new FundingError('funding request owner is missing', 'owner_missing');
-    const wallet = await getOrCreateWallet(ownerType, ownerId);
-    if (wallet.id !== funding.wallet_id) {
-        await adminClient
-            .from('funding_requests')
-            .update({ wallet_id: wallet.id })
-            .eq('id', funding.id);
-    }
-    return wallet;
+    return getOrCreateWallet(ownerType, ownerId);
 }
 
 async function findFundingCredit(fundingId: string): Promise<LedgerEntry | null> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('wallet_ledger_entries')
         .select('*')
-        .eq('idempotency_key', `funding.${fundingId}.credit`)
-        .maybeSingle();
-    return (data as LedgerEntry) ?? null;
-}
-
-async function repairApprovedFundingWallet(input: {
-    funding: FundingRequest;
-    canonicalWallet: Wallet;
-    existingEntry: LedgerEntry;
-    approvedBy: string;
-}): Promise<LedgerEntry> {
-    if (input.existingEntry.wallet_id === input.canonicalWallet.id) {
-        return input.existingEntry;
-    }
-    assertWalletCanTransact(input.canonicalWallet, 'receive funding');
-
-    await postEntry({
-        walletId: input.existingEntry.wallet_id,
-        direction: 'debit',
-        amountMinor: input.existingEntry.amount_minor,
-        entryType: 'reversal_debit',
-        referenceType: 'funding_request',
-        referenceId: input.funding.id,
-        idempotencyKey: `funding.${input.funding.id}.stale_wallet_reversal`,
-        memo: `Funding repair debit · ${input.funding.channel}`,
-        createdBy: input.approvedBy,
-        audit: { actorType: 'staff', actorRole: 'finance-checker' },
-    });
-
-    const repairedEntry = await postEntry({
-        walletId: input.canonicalWallet.id,
-        direction: 'credit',
-        amountMinor: input.existingEntry.amount_minor,
-        entryType: 'funding_credit',
-        referenceType: 'funding_request',
-        referenceId: input.funding.id,
-        idempotencyKey: `funding.${input.funding.id}.canonical_credit`,
-        memo: `Funding repair credit · ${input.funding.channel}`,
-        createdBy: input.approvedBy,
-        audit: { actorType: 'staff', actorRole: 'finance-checker' },
-    });
-
-    await adminClient
-        .from('funding_requests')
-        .update({ wallet_id: input.canonicalWallet.id })
-        .eq('id', input.funding.id);
-
-    await logAction({
-        actorUserId: input.approvedBy,
-        actorType: 'staff',
-        action: 'funding.repair.canonical_wallet',
-        targetType: 'funding_request',
-        targetId: input.funding.id,
-        before: { walletId: input.existingEntry.wallet_id, ledgerEntryId: input.existingEntry.id },
-        after: { walletId: input.canonicalWallet.id, ledgerEntryId: repairedEntry.id },
-    });
-
-    return repairedEntry;
+        .eq('reference_type', 'funding_request')
+        .eq('reference_id', fundingId)
+        .eq('direction', 'credit')
+        .in('entry_type', ['funding_credit', 'payment_credit'])
+        .order('created_at', { ascending: true })
+        .limit(2);
+    if (error) throw new FundingError(error.message, 'ledger_lookup_failed');
+    if ((data?.length ?? 0) > 1) throw new FundingError('Funding has duplicate credits. Finance review is required.', 'duplicate_credit');
+    return (data?.[0] as LedgerEntry) ?? null;
 }
 
 export async function approveFundingRequest(input: ApproveFundingInput): Promise<{
@@ -463,6 +407,9 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         .single();
     if (frErr || !fr) throw new FundingError('funding request not found', 'not_found');
     const funding = fr as FundingRequest;
+    if (funding.channel === 'paystack') {
+        throw new FundingError('Paystack funding requires gateway verification.', 'gateway_verification_required');
+    }
     const canonicalWallet = await canonicalFundingWallet(funding);
     try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
     catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
@@ -472,14 +419,12 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         // idempotent return
         const existing = await findFundingCredit(funding.id);
         if (existing) {
-            const ledgerEntry = await repairApprovedFundingWallet({
-                funding,
-                canonicalWallet,
-                existingEntry: existing,
-                approvedBy: input.approvedBy,
-            });
-            return { funding: fundingForCredit, ledgerEntry };
+            if (funding.wallet_id !== canonicalWallet.id || existing.wallet_id !== canonicalWallet.id || existing.amount_minor !== funding.amount_minor) {
+                throw new FundingError('Approved funding needs wallet review.', 'wallet_mismatch');
+            }
+            return { funding: fundingForCredit, ledgerEntry: existing };
         }
+        throw new FundingError('Approved funding credit is missing. Run funding reconciliation.', 'credit_missing');
     }
     if (funding.status !== 'under_review' && funding.status !== 'proof_uploaded') {
         throw new FundingError(`Cannot approve a request in status "${funding.status}".`, 'invalid_state');
@@ -547,70 +492,29 @@ export async function reconcileApprovedFundingCredits(input: {
     missingLedger: number;
     staleWallet: number;
     blockedInactive: number;
+    duplicateCredits: number;
+    gatewayMissing: number;
 }> {
-    const { data } = await adminClient
-        .from('funding_requests')
-        .select('*')
-        .eq('status', 'approved')
-        .order('approved_at', { ascending: false })
-        .limit(input.limit ?? 250);
-
-    let repaired = 0;
-    let missingLedger = 0;
-    let staleWallet = 0;
-    let blockedInactive = 0;
-
-    for (const row of data ?? []) {
-        const funding = row as FundingRequest;
-        const canonicalWallet = await canonicalFundingWallet(funding);
-        const existing = await findFundingCredit(funding.id);
-
-        if (!existing) {
-            try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
-            catch {
-                blockedInactive += 1;
-                continue;
-            }
-            missingLedger += 1;
-            await postEntry({
-                walletId: canonicalWallet.id,
-                direction: 'credit',
-                amountMinor: funding.amount_minor,
-                entryType: 'funding_credit',
-                referenceType: 'funding_request',
-                referenceId: funding.id,
-                idempotencyKey: `funding.${funding.id}.credit`,
-                memo: `Funding reconciled · ${funding.channel}`,
-                createdBy: input.repairedBy,
-                audit: { actorType: 'staff', actorRole: 'finance-checker' },
-            });
-            repaired += 1;
-            continue;
-        }
-
-        if (existing.wallet_id !== canonicalWallet.id) {
-            try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
-            catch {
-                blockedInactive += 1;
-                continue;
-            }
-            staleWallet += 1;
-            await repairApprovedFundingWallet({
-                funding,
-                canonicalWallet,
-                existingEntry: existing,
-                approvedBy: input.repairedBy,
-            });
-            repaired += 1;
-        }
-    }
-
-    return {
-        checked: data?.length ?? 0,
-        repaired,
-        missingLedger,
-        staleWallet,
-        blockedInactive,
+    const { data, error } = await adminClient.rpc('fn_reconcile_approved_funding_credits', {
+        p_limit: input.limit ?? 250,
+    });
+    if (error || !data) throw new FundingError(error?.message ?? 'Funding reconciliation failed.', 'reconcile_failed');
+    await logAction({
+        actorUserId: input.repairedBy,
+        actorType: 'staff',
+        action: 'funding.reconcile.approved',
+        targetType: 'funding_request',
+        targetId: input.repairedBy,
+        after: data,
+    }).catch(() => undefined);
+    return data as {
+        checked: number;
+        repaired: number;
+        missingLedger: number;
+        staleWallet: number;
+        blockedInactive: number;
+        duplicateCredits: number;
+        gatewayMissing: number;
     };
 }
 

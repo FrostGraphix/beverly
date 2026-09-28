@@ -2239,6 +2239,32 @@ const route: FastifyPluginAsync = async (fastify) => {
         const rows = (scopedOwners ? scopedRows.slice(0, pageSize) : scopedRows) as any[];
         const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
         const withUrls = await attachProofUrls(rows);
+        const approvedIds = rows.filter((row) => row.status === 'approved').map((row) => row.id);
+        const { data: creditRows, error: creditError } = approvedIds.length
+            ? await adminClient.from('wallet_ledger_entries')
+                .select('reference_id, wallet_id, amount_minor, entry_type')
+                .eq('reference_type', 'funding_request')
+                .eq('direction', 'credit')
+                .in('entry_type', ['funding_credit', 'payment_credit'])
+                .in('reference_id', approvedIds)
+            : { data: [], error: null };
+        if (creditError) throw creditError;
+        const creditsByRequest = new Map<string, Array<{ wallet_id: string; amount_minor: number }>>();
+        for (const entry of creditRows ?? []) {
+            const key = String(entry.reference_id);
+            const entries = creditsByRequest.get(key) ?? [];
+            entries.push(entry as { wallet_id: string; amount_minor: number });
+            creditsByRequest.set(key, entries);
+        }
+        const fundingWithCredits = withUrls.map((row) => {
+            if (row.status !== 'approved') return { ...row, credit_state: null };
+            const credits = creditsByRequest.get(row.id) ?? [];
+            const creditState = credits.length === 0 ? 'missing'
+                : credits.length > 1 ? 'duplicate'
+                    : credits[0].wallet_id !== row.wallet_id || Number(credits[0].amount_minor) !== Number(row.amount_minor)
+                        ? 'mismatch' : 'credited';
+            return { ...row, credit_state: creditState };
+        });
         // KPI aggregates (only on first page / no cursor)
         let summary: Record<string, number> | null = null;
         if (!cursor) {
@@ -2259,7 +2285,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 approvedMinor: sumMinor('approved'),
             };
         }
-        return { funding: withUrls, nextCursor, summary };
+        return { funding: fundingWithCredits, nextCursor, summary };
     });
 
     fastify.post('/funding/reconcile-approved', async (req, reply) => {

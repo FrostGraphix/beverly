@@ -162,10 +162,16 @@ async function repairApprovedCredits() {
             repaired: number;
             missingLedger: number;
             staleWallet: number;
+            blockedInactive: number;
+            duplicateCredits: number;
+            gatewayMissing: number;
         }>('/api/v1/admin/funding/reconcile-approved', {});
+        const needsReview = result.staleWallet + result.blockedInactive + result.duplicateCredits + result.gatewayMissing;
         banner.value = {
-            tone: 'success',
-            text: result.repaired
+            tone: needsReview ? 'error' : 'success',
+            text: needsReview
+                ? `Repaired ${result.repaired} credits. ${needsReview} funding issues need finance review.`
+                : result.repaired
                 ? `Repaired ${result.repaired} approved funding credits. Wallet owners can refresh their balances now.`
                 : `Checked ${result.checked} approved funding credits. No repairs needed.`,
         };
