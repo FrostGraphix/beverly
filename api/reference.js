@@ -5405,6 +5405,7 @@ async function handler(request, response) {
       return;
     }
     if (isCanonicalWalletRequest(pathname)) {
+      setResponseHeader(response, "Cache-Control", "no-store");
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
       if (canonicalResult && (canonicalResult.status < 400 || !pathname.includes('/remote-send') || canonicalResult.status >= 400)) {

@@ -1,8 +1,23 @@
 # OEM pipeline execution status
 
-Status: **Incomplete**. Updated 2026-09-27.
+Status: **Incomplete**. Updated 2026-09-28.
 
 ## Latest checkpoint
+
+- Added `/api/v1/oem/installations` behind existing staff authentication and explicit installation grants. Active tenant and grant filters apply in storage; client-supplied scope is ignored. Responses expose only installation metadata, reject malformed joins, bound queries to ten seconds and fail closed beyond 200 grants. This does not authorize provider dispatch.
+- Added expand-only `20260927120000_oem_actor_installation_access.sql`. No grants are seeded. Its rollback requires explicit review and refuses populated tables. The table is service-role-only with forced RLS; application-layer grant checks remain necessary because the trusted backend bypasses RLS.
+- Gateway routing already covers the new endpoint. Added `Cache-Control: no-store` at the canonical gateway boundary because upstream cache headers were not forwarded. A failing HTTP proxy test demonstrated the omission before the fix.
+- Eight inventory HTTP checks pass. Full wallet regression passes 80 files / 557 tests; root regression and all application builds pass. The build chain still emits a Node 24 engine warning from its Corepack launcher; it is not evidence of an entirely Node 22 build chain.
+- Migration hygiene passes (171 migrations). Live restore connection failed twice with SQLSTATE `XX000`; no database changes were attempted. Local Docker database execution is unavailable because its engine is stopped. Schema application, rollback execution and real RLS verification remain unverified.
+- Remaining internal work still includes telemetry persistence/checkpoints, ingestion workers, installation-scoped resource migration, scoped consumers, atomic credential rotation and financial dispatch/reconciliation. These cannot be represented as external-only blockers.
+
+### Installation inventory deployment and recovery
+
+Apply the new migration through the existing reviewed migration process before deploying the new route. Verify actor ownership before provisioning grants; there is no automatic global staff access. Missing migration or malformed storage responses return sanitized 503 errors. No grants returns an empty inventory. Do not activate SparkMeter based on this read-only endpoint.
+
+Restore target connectivity must be recovered before database verification. Recheck the project's status and the dashboard-provided connection details for `OEM_RESTORE_POOLER_DB_URL`, without changing production connection variables. The observed `XX000` code does not establish a specific root cause. Retain populated grant tables during code rollback; the SQL rollback intentionally rejects populated state.
+
+### Earlier checkpoint
 
 - Official authenticated Koios documentation access was recovered by refreshing an expired CSRF login session. The owner does not need to supply documentation already captured in `SPARKMETER_KOIOS_V2_VERIFIED_CONTRACT.md`.
 - Live organization/site/freshness queries succeeded. Ten Nova sites were discovered; four returned freshness timestamps. AJEGUNLE freshness was null. Documented live queries and a historical query for 2026-09-27 returned successful empty pages. No physical meter state was established.
@@ -76,7 +91,7 @@ Protected-preview smoke is separately blocked: none of `VERCEL_PROTECTION_BYPASS
 
 - Keep SparkMeter installations draft until runtime tenant authority, collision-safe storage, ingestion, reconciliation and deployed verification are complete.
 - Deploy this batch through the existing reviewed branch/CI workflow only; do not interpret successful builds as installation certification.
-- No database migration is introduced here. Reverting this batch is a code rollback and must not remove imported customer/meter records.
+- The earlier correction batch introduced no migration. The latest inventory batch adds the grant migration described above. Reverting code must not remove imported customer/meter records or populated grant tables.
 - Inventory read failures occur before import mutation. Retry the operator command after the upstream failure is resolved. Existing batch transactions roll back the failing batch; earlier committed batches remain and reruns use existing conflict checks.
 - Do not broaden this legacy importer to another installation or tenant until its OEM-wide resource identity is migrated and exercised against a real test database.
 - Production monitoring, atomic checkpoints, replay, dead-letter handling and scoped UI remain implementation work, not deployed features.

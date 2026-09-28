@@ -2094,3 +2094,11 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Authenticated organization/site requests returned ACOB and ten Nova sites. Four sites returned freshness timestamps, while AJEGUNLE was null. Subsequent live and same-day historical queries returned HTTP 200 with empty data. No nonempty reading fixture or physical relay state was observed.
 - Installation credential loading now consumes a versioned AES-GCM keyring. New envelopes authenticate installation ID and version; legacy decryption remains compatible. Tampering, key mismatch, cross-installation copying and version mismatch are tested. Rotation preparation is implemented; atomic stored credential rotation remains pending.
 - Full Node 22.23.2 wallet regression passed 79 files and 549 tests. Wallet build/typecheck and focused credential lint passed. Full wallet lint now executes and reports 997 existing violations; no lint rule was bypassed. No production configuration, stored credential, migration, financial write or installation activation changed.
+
+### 23.51 Installation inventory authority (2026-09-28)
+
+- Registered a staff installation inventory route using explicit service-managed actor grants, active tenant checks, a bounded storage request and sanitized error responses. Staff role alone is insufficient. This is read authority, not provider write authority.
+- Added an expand-only access-grant migration and guarded empty-table rollback. Neither was executed against a database. Two restore connection attempts failed with SQLSTATE `XX000`; the local Docker engine is unavailable.
+- The existing gateway already routes all `/api/v1/` calls. A red/green HTTP regression fixed omitted cache protection at this gateway; canonical responses now include `Cache-Control: no-store`.
+- Eight inventory tests and full wallet regression (80 files, 557 tests) passed. Root regression and all application builds passed. Migration hygiene reports 171 migrations. The build launcher still reports Node 24 engine warnings; no all-Node-22 build claim is made.
+- No credentials, tenant grants, provider balances, deployed configuration or production activation were changed. Ingestion, collision-safe resource storage, checkpoint/replay, scoped UI, atomic rotation and financial execution remain incomplete.

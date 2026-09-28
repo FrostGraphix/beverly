@@ -51,6 +51,9 @@ Keep write safety strict.
 
 ## Backend
 
+- `backend/wallet/src/routes/oem.ts` exposes staff installation inventory through `/api/v1/oem/installations`. Explicit service-managed actor grants and active tenant status scope every query; staff roles alone do not grant installation access. This inventory route does not enable provider dispatch.
+- `supabase/migrations/20260927120000_oem_actor_installation_access.sql` owns service-managed actor-to-installation grants. No ownership grants are inferred or seeded. Its rollback requires review and an empty grant table.
+
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
 - `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
 - `backend/wallet/src/adapters/sparkmeter-v1.ts` owns documented Koios v1 payment translation, dual-header authentication, and fail-closed response normalization. It requires an explicit customer mapping and verified settlement currency before building requests.
@@ -69,6 +72,7 @@ Keep write safety strict.
 - OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.
+- Canonical gateway responses set `Cache-Control: no-store`, including installation inventory and wallet errors.
 - `backend/wallet/` owns canonical wallet writes.
 - `backend/wallet/src/contracts/route-policy.ts` owns canonical mutation policy, money-write flags, cache exclusion, and developer-only route classification.
 - `api/wallet-route-contract.cjs` owns the legacy gateway's explicit canonical-money proxy contract.
