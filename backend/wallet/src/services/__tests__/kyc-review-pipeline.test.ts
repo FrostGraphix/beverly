@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rpc = vi.fn();
+const notifyOperationalStaff = vi.fn();
 let documents: any[] = [];
 let queryCalls: Array<{ table: string; method: string; value?: unknown }> = [];
 
@@ -15,6 +16,7 @@ class Query {
     order() { return this; }
     limit() { return this; }
     gt() { return this; }
+    maybeSingle() { return this; }
     then(resolve: (value: any) => any) {
         return Promise.resolve({ data: this.table === 'kyc_documents' ? documents : [], error: null }).then(resolve);
     }
@@ -29,6 +31,7 @@ vi.mock('../../db/supabase.js', () => ({
 }));
 vi.mock('../notifications.js', () => ({ notifyKycUpdate: vi.fn(), sendNotification: vi.fn() }));
 vi.mock('../file-scan.js', () => ({ runMalwareScan: vi.fn(async () => ({ ok: true, mode: 'disabled' })) }));
+vi.mock('../operational-notifications.js', () => ({ notifyOperationalStaff }));
 
 describe('KYC review evidence rules', () => {
     beforeEach(() => {
@@ -36,6 +39,8 @@ describe('KYC review evidence rules', () => {
         queryCalls = [];
         rpc.mockReset();
         rpc.mockResolvedValue({ data: { id: 'review-1', status: 'pending' }, error: null });
+        notifyOperationalStaff.mockReset();
+        notifyOperationalStaff.mockResolvedValue(1);
     });
 
     it('recognizes only matching file signatures', async () => {
@@ -57,6 +62,7 @@ describe('KYC review evidence rules', () => {
             submittedBy: 'user-1', submission: {}, documentIds: ['doc-1', 'doc-2'],
         })).rejects.toMatchObject({ code: 'documents_required' });
         expect(rpc).not.toHaveBeenCalled();
+        expect(notifyOperationalStaff).not.toHaveBeenCalled();
     });
 
     it('rejects Tier 2 without address evidence', async () => {
@@ -89,6 +95,39 @@ describe('KYC review evidence rules', () => {
             p_requested_tier: 2,
             p_submission: expect.objectContaining({ document_ids: ['doc-1', 'doc-2', 'doc-3'] }),
         }));
+        expect(notifyOperationalStaff).toHaveBeenCalledWith(expect.objectContaining({
+            permission: 'wallet.kyc.view',
+            type: 'kyc_review',
+            path: '/kyc-reviews',
+            dedupeKey: 'kyc.review.submitted.review-1',
+        }));
+    });
+
+    it('alerts reviewers again after a new KYC resubmission', async () => {
+        const { submitKycReview } = await import('../kyc-reviews.js');
+        documents = [
+            { id: 'doc-1', doc_type: 'national_id', uploaded_at: '2026-09-09T00:00:00Z', review_request_id: null },
+            { id: 'doc-2', doc_type: 'selfie', uploaded_at: '2026-09-09T00:00:00Z', review_request_id: null },
+        ];
+        rpc
+            .mockResolvedValueOnce({ data: { id: 'review-1', status: 'pending' }, error: null })
+            .mockResolvedValueOnce({ data: { id: 'review-2', status: 'pending' }, error: null });
+
+        await submitKycReview({
+            subjectType: 'customer', subjectId: 'customer-1', requestedTier: 1,
+            submittedBy: 'user-1', submission: {}, documentIds: ['doc-1', 'doc-2'],
+        });
+        await submitKycReview({
+            subjectType: 'customer', subjectId: 'customer-1', requestedTier: 1,
+            submittedBy: 'user-1', submission: {}, documentIds: ['doc-1', 'doc-2'],
+        });
+
+        expect(notifyOperationalStaff).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            dedupeKey: 'kyc.review.submitted.review-1',
+        }));
+        expect(notifyOperationalStaff).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            dedupeKey: 'kyc.review.submitted.review-2',
+        }));
     });
 
     it('sends unscanned evidence to manual review without granting KYC approval', async () => {
@@ -107,6 +146,7 @@ describe('KYC review evidence rules', () => {
             p_subject_type: 'customer', p_requested_tier: 1,
         }));
         expect(rpc).not.toHaveBeenCalledWith('review_kyc_tier_request', expect.anything());
+        expect(notifyOperationalStaff).toHaveBeenCalledOnce();
     });
 
     it('scopes review pagination before rows are selected', async () => {

@@ -469,10 +469,10 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
 
             // In-app + email notification (SMS handled above by token SMS system)
             notifyTokenPurchased(input.customerId, {
+                purchaseOrderId: po.id,
                 meterId: meter.meterId,
                 units: preview.units,
                 amountMinor: preview.grossAmountMinor,
-                token: tokenRes.token,
             }).catch(() => undefined);
 
             return {

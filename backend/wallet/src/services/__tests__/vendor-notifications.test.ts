@@ -37,4 +37,18 @@ describe('vendor device notification', () => {
         await expect(notifyVendor(input)).rejects.toThrow('database unavailable');
         expect(sendWebPush).not.toHaveBeenCalled();
     });
+
+    it('delivers funding alerts with the deployed legacy inbox schema', async () => {
+        const query = {
+            upsert: vi.fn((row: any) => {
+                if (row.message !== row.body) throw new Error('null value in column "message"');
+                return query;
+            }),
+            select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'notification-1' }, error: null }),
+        };
+        from.mockReturnValue(query);
+        sendWebPush.mockResolvedValue({ sent: 1, failed: 0 });
+        await expect(notifyVendor(input)).resolves.toBe(true);
+    });
 });

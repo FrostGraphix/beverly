@@ -73,6 +73,9 @@ export async function notifyOperationalStaff(input: OperationalNotificationInput
         type: input.type,
         title: input.title,
         body: input.body,
+        // Legacy production schemas retain this column. Keeping it in sync
+        // ensures operational inbox alerts survive partial schema rollouts.
+        message: input.body,
         metadata: { ...input.metadata, path: input.path },
         dedupe_key: input.dedupeKey,
         read: false,

@@ -46,6 +46,7 @@ export interface NotificationPayload {
     subject?: string;
     /** Structured data attached to in-app notification for deep-linking */
     metadata?: Record<string, unknown>;
+    dedupeKey?: string;
 }
 
 interface CustomerRow {
@@ -112,7 +113,8 @@ export async function sendNotification(
 ): Promise<void> {
     // Inbox parity is synchronous: once the business action completes, the
     // customer's in-app notification no longer depends on a running worker.
-    await writeInAppForCustomer(customerId, payload);
+    const inserted = await writeInAppForCustomer(customerId, payload);
+    if (inserted === false) return;
     try {
         await notificationsQueue.add('deliver', { customerId, payload, inAppWritten: true }, {
             jobId: `notification:${customerId}:${payload.type}:${Date.now()}`,
@@ -122,7 +124,7 @@ export async function sendNotification(
             removeOnFail: 500,
         });
     } catch (error) {
-        if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') throw error;
+        console.warn('[notifications] queue unavailable, delivering directly:', error);
         await deliverNotification(customerId, payload, { includeInApp: false });
     }
 }
@@ -151,42 +153,51 @@ export async function deliverNotification(
     ]);
 }
 
-async function writeInAppForCustomer(customerId: string, payload: NotificationPayload): Promise<void> {
+async function writeInAppForCustomer(customerId: string, payload: NotificationPayload): Promise<boolean | null> {
     const { data: customer } = await adminClient
         .from('customers')
         .select('id, phone, email, full_name, notification_preferences')
         .eq('id', customerId)
         .maybeSingle();
-    if (!customer) return;
+    if (!customer) return null;
     const cu = customer as CustomerRow;
-    await writeInApp(cu, payload, cu.notification_preferences as PreferencesShape | null);
+    return writeInApp(cu, payload, cu.notification_preferences as PreferencesShape | null);
 }
 
 // ── In-app inbox ──────────────────────────────────────────────────────────────
 
-async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
+async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<boolean | null> {
     // Ownership decisions change access and are always recorded in the inbox.
-    if (payload.type !== 'meter_link_update' && !prefEnabled(prefs, 'in_app', payload.type)) return;
+    if (payload.type !== 'meter_link_update' && !prefEnabled(prefs, 'in_app', payload.type)) return null;
     try {
-        const { data, error } = await adminClient.from('notifications').insert({
+        const row = {
             customer_id: cu.id,
             recipient_type: 'customer',
             recipient_id: cu.id,
             type:        payload.type,
             title:       payload.title,
             body:        payload.body,
+            message:     payload.body,
             metadata:    payload.metadata ?? {},
+            dedupe_key: payload.dedupeKey ?? null,
             read:        false,
-        }).select('id').single();
+        };
+        const query = payload.dedupeKey
+            ? adminClient.from('notifications').upsert(row, { onConflict: 'recipient_type,recipient_id,dedupe_key', ignoreDuplicates: true })
+            : adminClient.from('notifications').insert(row);
+        const { data, error } = await query.select('id').maybeSingle();
         if (error) throw error;
+        if (!data) return false;
         await sendWebPush('customer', cu.id, {
             title: payload.title,
             body: payload.body,
             url: typeof payload.metadata?.path === 'string' ? payload.metadata.path : '/notifications',
             tag: `notification:${data.id}`,
         }, 'customer').catch((pushError) => console.error('[notifications] device delivery failed:', pushError));
+        return true;
     } catch (err) {
         console.error('[notifications] in-app write failed:', err);
+        throw err;
     }
 }
 
@@ -289,15 +300,16 @@ async function sendEmailNotification(cu: CustomerRow, payload: NotificationPaylo
 // ── Convenience helpers (pre-composed for each event type) ────────────────────
 
 export function notifyTokenPurchased(customerId: string, opts: {
-    meterId: string; units?: number | null; amountMinor: number; token: string;
+    purchaseOrderId: string; meterId: string; units?: number | null; amountMinor: number;
 }): Promise<void> {
     const units = opts.units ? ` · ${opts.units.toFixed(4)} kWh` : '';
     const amount = `₦${(opts.amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
     return sendNotification(customerId, {
         type:  'token_purchased',
-        title: 'Token purchased',
-        body:  `Your ${amount} token for meter ${opts.meterId}${units} is ready. Token: ${opts.token}`,
-        metadata: { meterId: opts.meterId, amountMinor: opts.amountMinor, token: opts.token },
+        title: 'Meter recharge completed',
+        body:  `Your ${amount} recharge for meter ${opts.meterId}${units} is complete. View your receipt for the token.`,
+        metadata: { purchaseOrderId: opts.purchaseOrderId, meterId: opts.meterId, amountMinor: opts.amountMinor, path: '/receipts' },
+        dedupeKey: `token.purchase.${opts.purchaseOrderId}`,
     });
 }
 
@@ -310,6 +322,7 @@ export function notifyWalletFunded(customerId: string, opts: {
         title: 'Wallet funded',
         body:  `${amount} has been added to your Beverly wallet.`,
         metadata: { amountMinor: opts.amountMinor, reference: opts.reference },
+        dedupeKey: `wallet.funded.${opts.reference}`,
     });
 }
 
