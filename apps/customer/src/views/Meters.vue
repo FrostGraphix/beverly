@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell.vue';
 import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
+import { shortDate } from '../lib/format';
 
 interface Meter {
     id: string;
@@ -13,6 +14,15 @@ interface Meter {
     station_id?: string | null;
     status?: 'pending' | 'approved' | 'rejected' | null;
     rejection_reason?: string | null;
+}
+
+interface MeterBalance {
+    meterId: string;
+    stationId: string | null;
+    balanceKwh: number | null;
+    status: 'available' | 'unavailable';
+    readingDate: string | null;
+    reportedAt: string | null;
 }
 
 type MeterLinkEventType = 'submitted' | 'approved' | 'rejected' | 'unlinked';
@@ -43,6 +53,9 @@ function statusBadgeClass(status?: string | null) {
 
 const meters = ref<Meter[]>([]);
 const loading = ref(false);
+const balances = ref<Record<string, MeterBalance>>({});
+const balancesLoading = ref(false);
+const balancesError = ref('');
 const confirm = ref<string | null>(null);
 const deleting = ref(false);
 const history = ref<MeterLinkHistoryEvent[]>([]);
@@ -82,6 +95,29 @@ async function loadMeters() {
     } catch { /* noop */ } finally { loading.value = false; }
 }
 
+async function loadMeterBalances() {
+    balancesLoading.value = true;
+    balancesError.value = '';
+    try {
+        const response = await api.get<{ balances: MeterBalance[] }>('/api/v1/customer/meters/balances');
+        balances.value = Object.fromEntries((response.balances ?? []).map((balance) => [balance.meterId, balance]));
+    } catch {
+        balances.value = {};
+        balancesError.value = 'Last reported credit is temporarily unavailable. Try again.';
+    } finally {
+        balancesLoading.value = false;
+    }
+}
+
+function meterBalance(meterId: string): MeterBalance | undefined {
+    return balances.value[meterId];
+}
+
+function formatBalance(value: number | null | undefined): string {
+    if (value === null || value === undefined) return 'Unavailable';
+    return `${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
+}
+
 async function loadHistory() {
     historyLoading.value = true;
     historyError.value = '';
@@ -94,7 +130,7 @@ async function loadHistory() {
 }
 
 onMounted(() => {
-    void Promise.all([loadMeters(), loadHistory(), loadPrices()]);
+    void Promise.all([loadMeters(), loadMeterBalances(), loadHistory(), loadPrices()]);
 });
 
 async function unlink(id: string) {
@@ -151,6 +187,9 @@ function formatHistoryDate(value: string) {
         <router-link to="/consumption" class="bw-btn" style="text-decoration:none; white-space:nowrap">
           Consumption
         </router-link>
+        <button class="bw-btn" type="button" :disabled="balancesLoading" @click="loadMeterBalances">
+          {{ balancesLoading ? 'Refreshing…' : 'Refresh balances' }}
+        </button>
         <router-link to="/onboard-meter" class="bw-btn primary" style="text-decoration:none; white-space:nowrap">
           + Add meter
         </router-link>
@@ -181,6 +220,8 @@ function formatHistoryDate(value: string) {
         </router-link>
       </div>
     </section>
+
+    <p v-if="balancesError" class="bw-alert danger" role="alert">{{ balancesError }}</p>
 
     <div v-if="loading" class="bw-muted" style="text-align:center; padding: var(--s-8); font-size: var(--t-sm)">Loading...</div>
 
@@ -219,6 +260,15 @@ function formatHistoryDate(value: string) {
           <p v-if="meter.status === 'rejected' && meter.rejection_reason" class="bw-muted" style="font-size: var(--t-xs); margin-top:4px">
             {{ meter.rejection_reason }}
           </p>
+          <div v-if="meter.status === 'approved'" class="meter-balance" role="status">
+            <span>Last reported credit</span>
+            <strong>{{ formatBalance(meterBalance(meter.meter_id)?.balanceKwh) }}</strong>
+            <small v-if="meterBalance(meter.meter_id)?.status === 'available'">
+              Reported {{ shortDate(meterBalance(meter.meter_id)?.reportedAt) }}
+            </small>
+            <small v-else-if="balancesError">Balance unavailable. Try again.</small>
+            <small v-else>Awaiting a meter reading.</small>
+          </div>
         </div>
         <div class="bw-row meter-card-actions">
           <router-link v-if="meter.status === 'approved'" :to="{ name: 'buy-token', query: { meter: meter.meter_id } }"
@@ -302,6 +352,19 @@ function formatHistoryDate(value: string) {
 .meter-page-actions > a { min-width: 0; }
 .meter-card-copy { flex: 1; min-width: 0; }
 .meter-card-actions { gap: var(--s-2); flex-shrink: 0; }
+.meter-balance {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px var(--s-2);
+    margin-top: var(--s-3);
+    padding-top: var(--s-3);
+    border-top: 1px solid var(--border);
+    font-size: var(--t-xs);
+}
+.meter-balance > span,
+.meter-balance > small { color: var(--text-muted); }
+.meter-balance > strong { color: var(--brand); font-variant-numeric: tabular-nums; }
+.meter-balance > small { grid-column: 1 / -1; }
 .meter-install-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

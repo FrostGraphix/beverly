@@ -20,6 +20,7 @@
  *   POST   /kyc/tier2/nin
  *
  *   GET    /meters
+ *   GET    /meters/balances
  *   POST   /meters
  *   DELETE /meters/:id
  *
@@ -99,6 +100,7 @@ import {
 } from '../services/customer-vend-pin.js';
 import { vendorPasswordError } from '@beverly/tokens/password-policy';
 import { replaceCustomerPassword, CustomerPasswordChangeError } from '../services/customer-password-change.js';
+import { CustomerMeterBalanceError, getCustomerMeterBalances } from '../services/customer-meter-balance.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
@@ -696,6 +698,27 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/meters', { preHandler: fastify.requireCustomer() }, async (req) => {
         const meters = await listCustomerMeters(req.actor!.customerId!);
         return { meters };
+    });
+
+    fastify.get('/meters/balances', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const query = z.object({
+            meter_id: z.string().trim().min(3).max(64).regex(/^[A-Z0-9_-]+$/i).optional(),
+        }).safeParse(req.query ?? {});
+        if (!query.success) {
+            return reply.code(400).send({ error: 'invalid_meter_id', message: 'Enter a valid meter number.' });
+        }
+        try {
+            const balances = await getCustomerMeterBalances(
+                req.actor!.customerId!,
+                query.data.meter_id?.toUpperCase(),
+            );
+            return { balances };
+        } catch (error) {
+            if (error instanceof CustomerMeterBalanceError) {
+                return reply.code(503).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     fastify.get('/vend-pin/status', { preHandler: fastify.requireCustomer() }, async (req) => {
