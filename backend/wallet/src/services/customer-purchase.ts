@@ -13,7 +13,7 @@ import {
     lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus, assertEnergyVendReady,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
-import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner, getOrCreateOwnerKycWallet } from './wallets.js';
 import { logAction } from './audit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
 import { ledgerKey, hashIdempotency } from './idempotency.js';
@@ -39,9 +39,8 @@ export class CustomerPurchaseError extends Error {
 }
 
 /**
- * Meters a customer may link, keyed by kyc_tier. Mirrors the existing
- * money-cap tiering in customer-kyc.ts (Tier 0 read-only, Tier 1/2 raise
- * wallet spend caps) so verification level gates both spend and meter count.
+ * Meters a customer may link, keyed by KYC tier. Monetary limits come from
+ * the configurable KYC policy; this separate inventory control is unchanged.
  */
 const METER_CAP_BY_KYC_TIER: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
 
@@ -701,7 +700,7 @@ export async function initiateCustomerFunding(input: CustomerFundingInput): Prom
     }
 
     const email = normalizeCustomerPaymentEmail(input.customerEmail, 'wallet top-up');
-    const wallet = await getOrCreateWallet('customer', input.customerId);
+    const wallet = await getOrCreateOwnerKycWallet('customer', input.customerId);
     try {
         assertWalletCanTransact(wallet, 'receive funding');
     } catch (error: any) {

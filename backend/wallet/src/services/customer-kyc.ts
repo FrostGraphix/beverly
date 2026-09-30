@@ -1,13 +1,11 @@
 /**
  * Customer KYC service.
  *
- * Tier 0  → registered with basic profile information
+ * Tier 0  → registered account with the configured daily limit
  * Tier 1+ → evidence-backed verification approved by authorised staff
  *
- * Tier caps (enforced in routes via requireKycTier):
- *   Tier 0: read-only, no purchases
- *   Tier 1: purchases up to ₦50,000/day
- *   Tier 2: purchases up to ₦200,000/day
+ * Monetary limits are loaded from kyc_tier_settings. Routes require Tier 0
+ * for ordinary activity; the ledger applies the active cap atomically.
  */
 import { adminClient } from '../db/supabase.js';
 

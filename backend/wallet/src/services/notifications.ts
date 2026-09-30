@@ -21,6 +21,7 @@ import { isFlagEnabled } from './feature-flags.js';
 import { env }       from '../config/env.js';
 import { notificationsQueue } from '../queue/index.js';
 import { sendWebPush } from './push-notifications.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -254,8 +255,7 @@ function buildEmailContent(cu: CustomerRow, payload: NotificationPayload): Email
                 reason: typeof md.reason === 'string' ? md.reason : undefined,
             });
         case 'kyc_update': {
-            const tier = Number(md.tier ?? 0);
-            return kycUpdateEmail({ fullName, tierLabel: tier === 1 ? 'Tier 1 (₦50k/day)' : 'Tier 2 (₦200k/day)' });
+            return kycUpdateEmail({ fullName, tierLabel: String(md.tierLabel ?? `Tier ${Number(md.tier ?? 0)}`) });
         }
         case 'dispute_update':
             return disputeUpdateEmail({ fullName, message: payload.body });
@@ -326,15 +326,19 @@ export function notifyWalletFunded(customerId: string, opts: {
     });
 }
 
-export function notifyKycUpdate(customerId: string, opts: {
+export async function notifyKycUpdate(customerId: string, opts: {
     tier: number;
 }): Promise<void> {
-    const tierLabel = opts.tier === 1 ? 'Tier 1 (₦50k/day)' : 'Tier 2 (₦200k/day)';
-    return sendNotification(customerId, {
+    const policy = await getKycTierPolicy();
+    const dailyLimitMinor = effectiveTierLimit(opts.tier === 1 ? 1 : opts.tier === 2 ? 2 : 0, policy);
+    const tierLabel = dailyLimitMinor === null
+        ? `Tier ${opts.tier} (no daily cap)`
+        : `Tier ${opts.tier} (up to ${formatNaira(dailyLimitMinor)} daily)`;
+    await sendNotification(customerId, {
         type:  'kyc_update',
         title: 'KYC verified',
-        body:  `Your identity has been verified to ${tierLabel}. You can now buy tokens and fund your wallet.`,
-        metadata: { tier: opts.tier },
+        body:  `Your identity has been verified to ${tierLabel}. You can now use your updated account limit.`,
+        metadata: { tier: opts.tier, tierLabel },
     });
 }
 

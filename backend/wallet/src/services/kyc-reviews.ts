@@ -3,6 +3,7 @@ import { notifyKycUpdate, sendNotification } from './notifications.js';
 import { notifyVendor } from './vendor-notifications.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
 import { runMalwareScan } from './file-scan.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 const KYC_BUCKET = 'wallet-kyc-documents';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -293,12 +294,16 @@ export async function decideKycReview(input: {
         }
     } else {
         try {
+            const requestedTier = Number((review as any).requested_tier);
+            const policy = input.decision === 'approved' ? await getKycTierPolicy() : null;
+            const dailyLimit = policy ? effectiveTierLimit(requestedTier === 1 ? 1 : 2, policy) : null;
+            const limitLabel = dailyLimit === null ? 'no daily cap' : `up to ₦${(dailyLimit / 100).toLocaleString('en-NG')} daily`;
             await notifyVendor({
                 vendorOrganizationId: (review as any).vendor_organization_id,
                 type: 'kyc_update',
                 title: input.decision === 'approved' ? 'KYC tier approved' : 'KYC needs changes',
                 body: input.decision === 'approved'
-                    ? `Your business is now verified at Tier ${(review as any).requested_tier}.`
+                    ? `Your business is now verified at Tier ${requestedTier}: ${limitLabel}.`
                     : `Your KYC review needs changes. ${input.note.trim()}`,
                 path: '/kyc',
                 dedupeKey: `kyc.review.${input.requestId}.${input.decision}`,
@@ -316,7 +321,11 @@ export async function currentKycState(subjectType: KycSubjectType, subjectId: st
     const column = ownerColumn(subjectType);
     const [{ data: review }, { data: documents }] = await Promise.all([
         adminClient.from('kyc_review_requests').select('*').eq(column, subjectId).order('submitted_at', { ascending: false }).limit(1).maybeSingle(),
-        adminClient.from('kyc_documents').select('id, doc_type, kyc_tier, mime_type, size_bytes, status, uploaded_at, rejection_note, created_at').eq(column, subjectId).order('created_at', { ascending: false }),
+        adminClient.from('kyc_documents').select('id, doc_type, kyc_tier, mime_type, size_bytes, status, uploaded_at, review_request_id, rejection_note, created_at').eq(column, subjectId).order('created_at', { ascending: false }),
     ]);
-    return { ...subject, review: review ?? null, documents: documents ?? [] };
+    return {
+        ...subject,
+        review: review ?? null,
+        documents: documents ?? [],
+    };
 }

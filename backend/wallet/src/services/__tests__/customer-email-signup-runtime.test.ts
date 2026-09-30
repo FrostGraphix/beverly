@@ -68,7 +68,7 @@ class Query {
 const createUser = vi.fn();
 const deleteUser = vi.fn();
 const updateUserById = vi.fn();
-const getOrCreateWallet = vi.fn();
+const getOrCreateKycManagedWallet = vi.fn();
 const sendEmailVerification = vi.fn();
 const sendEmail = vi.fn();
 
@@ -78,7 +78,7 @@ vi.mock('../../db/supabase.js', () => ({
         auth: { admin: { createUser, deleteUser, updateUserById } },
     },
 }));
-vi.mock('../wallets.js', () => ({ getOrCreateWallet }));
+vi.mock('../wallets.js', () => ({ getOrCreateKycManagedWallet }));
 vi.mock('../audit.js', () => ({ logAction: vi.fn(async () => undefined) }));
 vi.mock('../feature-flags.js', () => ({ isFlagEnabled: vi.fn(async () => false) }));
 vi.mock('../customer-email-otp.js', () => ({ sendEmailVerification }));
@@ -109,7 +109,7 @@ describe('customer email signup runtime workflow', () => {
         createUser.mockResolvedValue({ data: { user: { id: 'auth-new' } }, error: null });
         deleteUser.mockResolvedValue({ error: null });
         updateUserById.mockResolvedValue({ data: { user: { id: 'auth-phone' } }, error: null });
-        getOrCreateWallet.mockResolvedValue({ id: 'wallet-new' });
+        getOrCreateKycManagedWallet.mockResolvedValue({ id: 'wallet-new' });
         vi.stubGlobal('fetch', vi.fn(async () => {
             events.push('password-token');
             return new Response(JSON.stringify({
@@ -149,7 +149,7 @@ describe('customer email signup runtime workflow', () => {
             customer: { id: 'customer-existing', email_verified_at: null },
             isNew: false,
         });
-        expect(getOrCreateWallet).toHaveBeenCalledWith('customer', 'customer-existing', expect.any(Object));
+        expect(getOrCreateKycManagedWallet).toHaveBeenCalledWith('customer', 'customer-existing', 0);
         expect(createUser).not.toHaveBeenCalled();
     });
 
@@ -195,7 +195,7 @@ describe('customer email signup runtime workflow', () => {
             isNew: false,
         });
         expect(createUser).not.toHaveBeenCalled();
-        expect(getOrCreateWallet).toHaveBeenCalledWith('customer', 'customer-phone', expect.any(Object));
+        expect(getOrCreateKycManagedWallet).toHaveBeenCalledWith('customer', 'customer-phone', 0);
     });
 
     it('converts a controlled phone account into the requested email account', async () => {

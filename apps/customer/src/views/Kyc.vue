@@ -1,746 +1,320 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import Stepper from '../components/Stepper.vue';
 import { api } from '../lib/api';
+import { safeAuthRedirect } from '../lib/auth-flow';
 import { useAuthStore } from '../stores/auth';
 
-const auth   = useAuthStore();
+type DocumentType = 'national_id' | 'voters_card' | 'passport' | 'drivers_license' | 'selfie' | 'utility_bill' | 'bank_statement';
+
+interface KycDocument {
+  id: string;
+  doc_type: DocumentType;
+  kyc_tier: number;
+  uploaded_at: string | null;
+  review_request_id?: string | null;
+}
+
+interface KycState {
+  kyc_tier: number;
+  kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected';
+  review: { status?: string; requested_tier?: number; reviewer_note?: string | null } | null;
+  documents: KycDocument[];
+  policy: { tier0DailyLimitMinor?: number | null; tier1DailyLimitMinor?: number | null; tier2DailyLimitMinor?: number | null } | null;
+}
+
+const auth = useAuthStore();
+const route = useRoute();
 const router = useRouter();
-const tier   = ref(auth.kycTier);
-const kycStatus = ref(auth.customer?.kyc_status ?? 'unverified');
-const latestReview = ref<any>(null);
-const basicInfoComplete = ref(Boolean((auth.customer as any)?.kyc_data?.basic_info?.completed_at));
-
-// ── Draft persistence ─────────────────────────────────────────────
-const DRAFT_KEY   = 'beverly.kyc.t1.draft';
-const draftSaved  = ref(false);    // shows "saved" flash
-const draftExists = ref(false);    // true when a draft was restored on mount
-
-interface T1Draft {
-    fullName: string; dob: string;
-    address: string; state: string; lga: string;
-    step: number;
-}
-
-function saveDraft() {
-    const draft: T1Draft = {
-        fullName: fullName.value, dob: dob.value,
-        address: address.value, state: state.value, lga: lga.value,
-        step: t1Index.value,
-    };
-    try {
-        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-        draftSaved.value = true;
-        setTimeout(() => { draftSaved.value = false; }, 2000);
-    } catch { /* storage unavailable */ }
-}
-
-function clearDraft() {
-    try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
-    draftExists.value = false;
-}
-
-function saveAndLeave() {
-    saveDraft();
-    void router.push('/');
-}
-
-// ── Tier 0 basic information ─────────────────────────────────────
-const T1_STEPS = [
-    { key: 'identity', label: 'Identity' },
-    { key: 'address',  label: 'Address' },
-    { key: 'confirm',  label: 'Confirm' },
-];
-const t1Index = ref(0);
-
-const fullName = ref(auth.customer?.full_name ?? '');
-const dob      = ref('');
-const address  = ref('');
-const state    = ref('');
-const lga      = ref('');
-
-const t1Errors = ref<Record<string, string>>({});
-const loading1 = ref(false);
-const error1   = ref<string | null>(null);
-
-// Auto-save draft whenever any field changes
-watch([fullName, dob, address, state, lga, t1Index], () => {
-    // Only auto-save once something meaningful is entered
-    if (fullName.value || dob.value || address.value) {
-        try {
-            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
-                fullName: fullName.value, dob: dob.value,
-                address: address.value, state: state.value, lga: lga.value,
-                step: t1Index.value,
-            }));
-        } catch { /* noop */ }
-    }
-});
-
-// ── Tier 2 ────────────────────────────────────────────────────────
-const loading2     = ref(false);
-const error2       = ref<string | null>(null);
-const tier2Skipped = ref(false);
+const state = ref<KycState | null>(null);
+const loading = ref(true);
+const error = ref('');
+const notice = ref('');
+const progress = ref('');
+const submitting = ref(false);
 const identityFile = ref<File | null>(null);
-const identityDocumentType = ref<'national_id' | 'voters_card' | 'passport' | 'drivers_license'>('national_id');
 const selfieFile = ref<File | null>(null);
 const addressFile = ref<File | null>(null);
+const identityDocumentType = ref<'national_id' | 'voters_card' | 'passport' | 'drivers_license'>('national_id');
 const addressDocumentType = ref<'utility_bill' | 'bank_statement'>('utility_bill');
-const uploadProgress = ref('');
 
-const nigerianStates = [
-    'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno',
-    'Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','FCT','Gombe','Imo',
-    'Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa',
-    'Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba',
-    'Yobe','Zamfara',
-];
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const identityTypes = new Set<DocumentType>(['national_id', 'voters_card', 'passport', 'drivers_license']);
+const addressTypes = new Set<DocumentType>(['utility_bill', 'bank_statement']);
 
-const dobMax = computed(() =>
-    new Date(Date.now() - 18 * 365.25 * 24 * 3600 * 1000).toISOString().slice(0, 10)
-);
-
-function tierComplete(level: number): boolean {
-    return level === 0 ? basicInfoComplete.value : tier.value >= level;
-}
-
-// ── On mount: restore draft ───────────────────────────────────────
-async function loadKycState() {
-    try {
-        const state = await api.get<any>('/api/v1/customer/kyc/status');
-        tier.value = Number(state.kyc_tier ?? 0);
-        kycStatus.value = state.kyc_status ?? 'unverified';
-        latestReview.value = state.review ?? null;
-        basicInfoComplete.value = Boolean(state.kyc_data?.basic_info?.completed_at);
-    } catch { /* profile remains authoritative */ }
-}
-
-onMounted(() => {
-    void loadKycState();
-    if (basicInfoComplete.value) return;
-    try {
-        const raw = sessionStorage.getItem(DRAFT_KEY);
-        if (!raw) return;
-        const draft: T1Draft = JSON.parse(raw);
-        if (draft.fullName || draft.dob || draft.address) {
-            fullName.value  = draft.fullName ?? '';
-            dob.value       = draft.dob ?? '';
-            address.value   = draft.address ?? '';
-            state.value     = draft.state ?? '';
-            lga.value       = draft.lga ?? '';
-            t1Index.value   = draft.step ?? 0;
-            draftExists.value = true;
-        }
-    } catch { /* malformed draft — ignore */ }
+const tier = computed(() => Number(state.value?.kyc_tier ?? auth.kycTier ?? 0));
+const requestedTier = computed<1 | 2>(() => tier.value === 0 ? 1 : 2);
+const policy = computed(() => state.value?.policy ?? null);
+const pending = computed(() => state.value?.kyc_status === 'pending' || state.value?.review?.status === 'pending');
+const changesRequested = computed(() => state.value?.kyc_status === 'rejected' || state.value?.review?.status === 'rejected');
+const reviewNote = computed(() => String(state.value?.review?.reviewer_note ?? '').trim());
+const needsAddress = computed(() => requestedTier.value === 2);
+const upgradeRequested = computed(() => {
+  const target = String(route.query.upgrade ?? route.query.reason ?? '').toLowerCase();
+  return target === `tier${requestedTier.value}` || target === `tier_${requestedTier.value}`;
 });
+const reusableDocuments = computed(() => (state.value?.documents ?? []).filter((document) => (
+  document.kyc_tier === requestedTier.value && Boolean(document.uploaded_at) && !document.review_request_id
+)));
+const savedIdentity = computed(() => reusableDocuments.value.find((document) => identityTypes.has(document.doc_type)) ?? null);
+const savedSelfie = computed(() => reusableDocuments.value.find((document) => document.doc_type === 'selfie') ?? null);
+const savedAddress = computed(() => reusableDocuments.value.find((document) => addressTypes.has(document.doc_type)) ?? null);
+const selectedFileCount = computed(() => [identityFile.value, selfieFile.value, ...(needsAddress.value ? [addressFile.value] : [])].filter(Boolean).length);
+const hasIdentity = computed(() => Boolean(savedIdentity.value || identityFile.value));
+const hasSelfie = computed(() => Boolean(savedSelfie.value || selfieFile.value));
+const hasAddress = computed(() => Boolean(savedAddress.value || addressFile.value));
+const canSubmit = computed(() => hasIdentity.value && hasSelfie.value && (!needsAddress.value || hasAddress.value));
 
-// ── Validation ────────────────────────────────────────────────────
-function validateT1Step(i: number): boolean {
-    t1Errors.value = {};
-    const errs: Record<string, string> = {};
-    if (i === 0) {
-        if (!fullName.value.trim() || fullName.value.trim().split(' ').filter(Boolean).length < 2)
-            errs.fullName = 'Enter your full legal name (first and last).';
-        if (!dob.value) errs.dob = 'Date of birth is required.';
-        else if (new Date(dob.value) > new Date(dobMax.value)) errs.dob = 'You must be 18 or older.';
-    }
-    if (i === 1) {
-        if (!address.value.trim() || address.value.trim().length < 5)
-            errs.address = 'Enter your residential address.';
-        if (!state.value) errs.state = 'Select your state.';
-        if (!lga.value.trim()) errs.lga = 'Enter your LGA.';
-    }
-    t1Errors.value = errs;
-    return Object.keys(errs).length === 0;
+function tierLimitLabel(level: number) {
+  const cap = level === 0 ? policy.value?.tier0DailyLimitMinor
+    : level === 1 ? policy.value?.tier1DailyLimitMinor
+      : policy.value?.tier2DailyLimitMinor;
+  if (cap === null || cap === undefined) return 'No daily cap';
+  return `Up to ₦${(Number(cap) / 100).toLocaleString('en-NG')} daily`;
 }
 
-function next() {
-    if (validateT1Step(t1Index.value))
-        t1Index.value = Math.min(T1_STEPS.length - 1, t1Index.value + 1);
-}
-function prev() {
-    error1.value = null;
-    t1Errors.value = {};
-    t1Index.value = Math.max(0, t1Index.value - 1);
-}
-
-async function submitBasicInfo() {
-    if (!validateT1Step(0) || !validateT1Step(1)) return;
-    loading1.value = true;
-    error1.value = null;
-    try {
-        const r = await api.post<{ kyc_tier: number; kyc_status: string; basic_info: { completedAt: string } }>('/api/v1/customer/kyc/basic-info', {
-            full_name:    fullName.value.trim(),
-            date_of_birth: dob.value,
-            address:      address.value.trim(),
-            state:        state.value.trim(),
-            lga:          lga.value.trim(),
-        });
-        tier.value = r.kyc_tier;
-        kycStatus.value = r.kyc_status as 'unverified' | 'pending' | 'verified' | 'rejected';
-        basicInfoComplete.value = true;
-        if (auth.customer) {
-            auth.customer.kyc_tier = r.kyc_tier;
-            auth.customer.kyc_status = r.kyc_status as any;
-        }
-        clearDraft();
-        t1Index.value = 0;
-    } catch (e: any) {
-        error1.value = e?.message ?? 'Verification failed. Please check your details and try again.';
-    } finally { loading1.value = false; }
+function selectFile(slot: 'identity' | 'selfie' | 'address', event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  const allowed = slot === 'selfie' ? IMAGE_TYPES : DOCUMENT_TYPES;
+  error.value = '';
+  if (file && !allowed.has(file.type)) {
+    error.value = slot === 'selfie' ? 'Use a JPEG, PNG, or WebP image.' : 'Use JPEG, PNG, WebP, or PDF files.';
+    input.value = '';
+    return;
+  }
+  if (file && file.size > MAX_FILE_BYTES) {
+    error.value = 'Each document must be 10 MB or smaller.';
+    input.value = '';
+    return;
+  }
+  if (slot === 'identity') identityFile.value = file;
+  if (slot === 'selfie') selfieFile.value = file;
+  if (slot === 'address') addressFile.value = file;
 }
 
-async function uploadKycFile(file: File, documentType: 'national_id' | 'voters_card' | 'passport' | 'drivers_license' | 'selfie' | 'utility_bill' | 'bank_statement', requestedTier: 1 | 2): Promise<string> {
-    const created = await api.post<{ documentId: string; uploadUrl: string }>('/api/v1/customer/kyc/documents/upload-url', {
-        document_type: documentType,
-        requested_tier: requestedTier,
-        mime_type: file.type,
-        size_bytes: file.size,
-    });
-    const uploaded = await fetch(created.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-    if (!uploaded.ok) throw new Error('Secure document upload failed.');
-    await api.post(`/api/v1/customer/kyc/documents/${created.documentId}/activate`);
-    return created.documentId;
+async function load() {
+  loading.value = true;
+  error.value = '';
+  try {
+    state.value = await api.get<KycState>('/api/v1/customer/kyc/status');
+  } catch (cause: any) {
+    error.value = cause?.message ?? 'Your verification status could not be loaded.';
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function upload(file: File, documentType: DocumentType): Promise<string> {
+  const created = await api.post<{ documentId: string; uploadUrl: string }>('/api/v1/customer/kyc/documents/upload-url', {
+    document_type: documentType,
+    requested_tier: requestedTier.value,
+    mime_type: file.type,
+    size_bytes: file.size,
+  });
+  const result = await fetch(created.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+  if (!result.ok) throw new Error('Secure document upload failed.');
+  await api.post(`/api/v1/customer/kyc/documents/${created.documentId}/activate`);
+  return created.documentId;
+}
+
+async function persistSelectedDocuments(): Promise<string[]> {
+  const documentIds = reusableDocuments.value.map((document) => document.id);
+  if (identityFile.value) {
+    progress.value = 'Saving identity document…';
+    documentIds.push(await upload(identityFile.value, identityDocumentType.value));
+  }
+  if (selfieFile.value) {
+    progress.value = 'Saving selfie…';
+    documentIds.push(await upload(selfieFile.value, 'selfie'));
+  }
+  if (addressFile.value) {
+    progress.value = 'Saving address evidence…';
+    documentIds.push(await upload(addressFile.value, addressDocumentType.value));
+  }
+  return [...new Set(documentIds)];
+}
+
+function clearSelectedFiles() {
+  identityFile.value = null;
+  selfieFile.value = null;
+  addressFile.value = null;
+}
+
+async function saveForLater() {
+  if (!selectedFileCount.value) {
+    error.value = 'Choose one or more files before saving.';
+    return;
+  }
+  submitting.value = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    await persistSelectedDocuments();
+    clearSelectedFiles();
+    await load();
+    notice.value = 'Documents saved securely. You can continue later from this account.';
+  } catch (cause: any) {
+    error.value = cause?.message ?? 'Documents could not be saved.';
+  } finally {
+    progress.value = '';
+    submitting.value = false;
+  }
 }
 
 async function submitEvidence() {
-    const requestedTier = (tier.value + 1) as 1 | 2;
-    if (!identityFile.value || !selfieFile.value || (requestedTier === 2 && !addressFile.value)) {
-        error2.value = requestedTier === 2
-            ? 'Identity, selfie, and address evidence are required.'
-            : 'Identity document and selfie are required.';
-        return;
-    }
-    loading2.value = true;
-    error2.value = null;
-    try {
-        uploadProgress.value = 'Uploading identity document…';
-        const identityId = await uploadKycFile(identityFile.value, identityDocumentType.value, requestedTier);
-        uploadProgress.value = 'Uploading selfie…';
-        const selfieId = await uploadKycFile(selfieFile.value, 'selfie', requestedTier);
-        const documentIds = [identityId, selfieId];
-        if (requestedTier === 2 && addressFile.value) {
-            uploadProgress.value = 'Uploading address evidence…';
-            documentIds.push(await uploadKycFile(addressFile.value, addressDocumentType.value, requestedTier));
-        }
-        uploadProgress.value = 'Submitting review…';
-        const result = await api.post<{ review: any }>(`/api/v1/customer/kyc/tier${requestedTier}/submit`, { document_ids: documentIds });
-        latestReview.value = result.review;
-        kycStatus.value = 'pending';
-        await auth.refreshProfile();
-    } catch (e: any) {
-        error2.value = e?.message ?? 'KYC submission failed.';
-    } finally {
-        loading2.value = false;
-        uploadProgress.value = '';
-    }
+  if (!canSubmit.value) {
+    error.value = needsAddress.value ? 'Identity, selfie, and address evidence are required.' : 'Identity document and selfie are required.';
+    return;
+  }
+  submitting.value = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const documentIds = await persistSelectedDocuments();
+    progress.value = 'Submitting review…';
+    const result = await api.post<{ review: KycState['review'] }>(`/api/v1/customer/kyc/tier${requestedTier.value}/submit`, { document_ids: documentIds });
+    clearSelectedFiles();
+    state.value = state.value ? { ...state.value, kyc_status: 'pending', review: result.review } : state.value;
+    await auth.refreshProfile();
+  } catch (cause: any) {
+    error.value = cause?.message ?? 'KYC submission failed.';
+  } finally {
+    progress.value = '';
+    submitting.value = false;
+  }
 }
 
-function skipTier2() {
-    tier2Skipped.value = true;
-    void router.push('/profile');
+function requestUpgrade() {
+  void router.replace({ name: 'kyc', query: { ...route.query, upgrade: `tier${requestedTier.value}` } });
 }
+
+function cancelUpgrade() {
+  const { upgrade, reason, ...remaining } = route.query;
+  void router.replace({ name: 'kyc', query: remaining });
+}
+
+function continueWallet() {
+  void router.push(safeAuthRedirect(route.query.redirect));
+}
+
+onMounted(load);
 </script>
 
 <template>
   <AppShell>
-    <!-- Header -->
-    <div style="margin-bottom: var(--s-4)">
-      <p class="bw-page-title">Verify identity</p>
-      <p class="bw-page-sub">Unlock token purchases and higher daily limits</p>
-    </div>
-
-    <!-- Tier progress indicators -->
-    <div class="tier-row">
-      <div v-for="n in [0, 1, 2]" :key="n" :class="['bw-kyc-tier', tierComplete(n) ? `tier-active` : 'tier-pending']">
-        <span class="tier-check" v-if="tierComplete(n)">✓</span>
-        Tier {{ n }}
-        <span class="tier-desc">
-          {{ n === 0 ? 'Basic' : n === 1 ? 'Identity' : 'Enhanced' }}
-        </span>
-      </div>
-    </div>
-
-    <!-- ─ Draft restored banner ───────────────────────────────────── -->
-    <transition name="fade">
-      <div v-if="draftExists && !basicInfoComplete" class="draft-banner">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Your previous progress has been restored — continue from where you left off.</span>
-        <button class="draft-clear" @click="clearDraft(); fullName=''; dob=''; address=''; state=''; lga=''; t1Index=0">
-          Start over
-        </button>
-      </div>
-    </transition>
-
-    <!-- Draft saved flash -->
-    <transition name="fade">
-      <div v-if="draftSaved" class="draft-saved-toast">
-        ✓ Progress saved — you can continue later from this device
-      </div>
-    </transition>
-
-    <!-- ─ TIER 0: basic information ──────────────────────────────── -->
-    <div v-if="!basicInfoComplete" class="bw-card">
-      <div class="card-head">
-        <div>
-          <p class="card-title">Tier 0 — Basic details</p>
-          <p class="card-sub">Save your profile. Approval is not required.</p>
-        </div>
-      </div>
-
-      <Stepper :steps="T1_STEPS" :current-index="t1Index" />
-
-      <!-- Step 0: Identity -->
-      <form v-if="t1Index === 0" class="step-pane" @submit.prevent="next">
-        <div>
-          <label class="bw-label">Full legal name</label>
-          <input
-            class="bw-input"
-            :class="{ 'has-error': t1Errors.fullName }"
-            v-model="fullName"
-            placeholder="First Last name"
-            autocomplete="name"
-          />
-          <p v-if="t1Errors.fullName" class="field-error">{{ t1Errors.fullName }}</p>
-        </div>
-
-        <div>
-          <label class="bw-label">Date of birth</label>
-          <input
-            class="bw-input"
-            :class="{ 'has-error': t1Errors.dob }"
-            v-model="dob"
-            type="date"
-            :max="dobMax"
-          />
-          <p v-if="t1Errors.dob" class="field-error">{{ t1Errors.dob }}</p>
-          <p v-else class="field-hint">You must be at least 18 years old.</p>
-        </div>
-
-        <button class="bw-btn primary lg full" type="submit">Continue →</button>
-        <button type="button" class="later-link" @click="saveAndLeave">
-          Save progress &amp; finish later
-        </button>
-      </form>
-
-      <!-- Step 1: Address -->
-      <form v-if="t1Index === 1" class="step-pane" @submit.prevent="next">
-        <div>
-          <label class="bw-label">Residential address</label>
-          <input
-            class="bw-input"
-            :class="{ 'has-error': t1Errors.address }"
-            v-model="address"
-            placeholder="12 Example Street, Area"
-            autocomplete="street-address"
-          />
-          <p v-if="t1Errors.address" class="field-error">{{ t1Errors.address }}</p>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label class="bw-label">State</label>
-            <select class="bw-input" :class="{ 'has-error': t1Errors.state }" v-model="state">
-              <option value="">Select…</option>
-              <option v-for="s in nigerianStates" :key="s" :value="s">{{ s }}</option>
-            </select>
-            <p v-if="t1Errors.state" class="field-error">{{ t1Errors.state }}</p>
-          </div>
-          <div class="col">
-            <label class="bw-label">LGA</label>
-            <input
-              class="bw-input"
-              :class="{ 'has-error': t1Errors.lga }"
-              v-model="lga"
-              placeholder="Ikeja"
-            />
-            <p v-if="t1Errors.lga" class="field-error">{{ t1Errors.lga }}</p>
-          </div>
-        </div>
-
-        <div class="nav-row">
-          <button type="button" class="bw-btn" @click="prev">← Back</button>
-          <button type="submit" class="bw-btn primary" style="flex:2">Continue →</button>
-        </div>
-        <button type="button" class="later-link" @click="saveAndLeave">
-          Save progress &amp; finish later
-        </button>
-      </form>
-
-      <!-- Step 2: Confirm & submit -->
-      <div v-if="t1Index === 2" class="step-pane">
-        <div class="review-card">
-          <div class="review-row">
-            <span class="review-key">Full name</span>
-            <span class="review-val">{{ fullName }}</span>
-          </div>
-          <div class="review-row">
-            <span class="review-key">Date of birth</span>
-            <span class="review-val">{{ dob }}</span>
-          </div>
-          <div class="review-row">
-            <span class="review-key">Address</span>
-            <span class="review-val">{{ address }}</span>
-          </div>
-          <div class="review-row">
-            <span class="review-key">State / LGA</span>
-            <span class="review-val">{{ state }} · {{ lga }}</span>
-          </div>
-        </div>
-
-        <p class="legal-note">
-          By submitting, you confirm this information is accurate. False information may cause
-          account restrictions or regulatory review.
-        </p>
-
-        <div v-if="error1" class="bw-alert danger">{{ error1 }}</div>
-
-        <div class="nav-row">
-          <button type="button" class="bw-btn" :disabled="loading1" @click="prev">← Back</button>
-          <button class="bw-btn primary" style="flex:2" :disabled="loading1" @click="submitBasicInfo">
-            {{ loading1 ? 'Saving…' : 'Save basic information' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="kycStatus === 'pending'" class="bw-card pending-card" role="status">
-      <span class="pending-dot"></span>
+    <header class="kyc-hero">
       <div>
-        <p class="card-title">Review in progress</p>
-        <p class="card-sub">Your Tier {{ latestReview?.requested_tier ?? tier + 1 }} request is awaiting Beverly approval.</p>
+        <p class="eyebrow">Account verification</p>
+        <h1>Verification, when you need it</h1>
+        <p>Start using your wallet now. Upgrade only for higher limits.</p>
       </div>
-      <button class="bw-btn" type="button" @click="loadKycState">Refresh status</button>
-    </div>
+      <button class="bw-btn" type="button" :disabled="loading || submitting" @click="load">Refresh</button>
+    </header>
 
-    <div v-if="kycStatus === 'rejected' && latestReview?.reviewer_note" class="bw-alert danger" role="alert">
-      Changes requested: {{ latestReview.reviewer_note }}
-    </div>
+    <section v-if="!loading && state" class="tier-grid" aria-label="Verification tiers">
+      <article v-for="level in [0, 1, 2]" :key="level" :class="['tier-card', { active: tier >= level }]">
+        <span>Tier {{ level }}</span>
+        <strong>{{ level === 0 ? 'Wallet ready' : level === 1 ? 'Identity verified' : 'Enhanced review' }}</strong>
+        <small>{{ level <= tier ? tierLimitLabel(level) : level === tier + 1 ? tierLimitLabel(level) : 'Available later' }}</small>
+      </article>
+    </section>
 
-    <!-- ─ TIER 1 DONE → Tier 2 prompt ────────────────────────────── -->
-    <div v-if="tier === 1" class="tier1-done-banner">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      <div>
-        <strong>Tier 1 complete!</strong> You can now buy tokens up to ₦50,000/day.
-      </div>
-    </div>
+    <section v-if="loading" class="bw-card status-card" role="status">Loading verification status…</section>
+    <section v-else-if="!state" class="bw-card status-card" role="alert">
+      <div><h2>Status unavailable</h2><p>{{ error || 'Your verification status could not be loaded.' }}</p></div>
+      <button class="bw-btn" type="button" @click="load">Retry</button>
+    </section>
 
-    <!-- ─ TIER 1+: manual evidence review ─────────────────────────── -->
-    <div v-if="basicInfoComplete && tier < 2 && !tier2Skipped && kycStatus !== 'pending'" class="bw-card">
-      <div class="card-head">
+    <template v-else>
+      <div v-if="error" class="bw-alert danger" role="alert">{{ error }}</div>
+      <div v-if="notice" class="bw-alert success" role="status">{{ notice }}</div>
+
+      <section v-if="pending" class="bw-card status-card" role="status">
+        <span class="status-dot"></span>
+        <div><h2>Review in progress</h2><p>Beverly is reviewing your Tier {{ state.review?.requested_tier ?? requestedTier }} evidence.</p></div>
+        <button class="bw-btn" type="button" @click="load">Refresh status</button>
+      </section>
+
+      <section v-else-if="tier >= 2" class="bw-card status-card complete-card">
+        <span class="complete-mark">✓</span>
+        <div><h2>Enhanced verification complete</h2><p>Tier 2 is active. {{ tierLimitLabel(2) }}.</p></div>
+        <button class="bw-btn primary" type="button" @click="continueWallet">Continue</button>
+      </section>
+
+      <section v-else-if="!upgradeRequested" class="bw-card ready-card">
+        <span class="ready-mark">✓</span>
         <div>
-          <p class="card-title">Tier {{ tier + 1 }} — {{ tier === 0 ? 'NIN identity review' : 'Enhanced identity review' }}</p>
-          <p class="card-sub">Every tier upgrade requires Beverly approval.</p>
+          <p class="eyebrow">Tier {{ tier }}</p>
+          <h2>{{ changesRequested ? 'Changes requested' : 'Your wallet is ready' }}</h2>
+          <p>{{ changesRequested ? reviewNote || 'Review the feedback, then submit new evidence.' : `${tierLimitLabel(tier)}. No identity documents are needed until you request a higher limit.` }}</p>
         </div>
-        <span v-if="tier >= 1" class="optional-badge">Optional</span>
-      </div>
-
-      <form class="step-pane" @submit.prevent="submitEvidence">
-        <div class="upload-grid">
-          <label class="upload-field">
-            <span class="bw-label">Government identity</span>
-            <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type">
-              <option value="national_id">NIN slip</option>
-              <option value="voters_card">Voter card</option>
-              <option value="passport">Passport</option>
-              <option value="drivers_license">Driver's licence</option>
-            </select>
-          <input
-              type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
-              @change="identityFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
-          />
-            <small>{{ identityFile?.name || 'NIN slip, passport, licence, or voter card.' }}</small>
-          </label>
-          <label class="upload-field">
-            <span class="bw-label">Current selfie</span>
-            <input
-              type="file" accept="image/jpeg,image/png,image/webp"
-              @change="selfieFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
-            />
-            <small>{{ selfieFile?.name || 'Clear face photo. No filters.' }}</small>
-          </label>
-          <label v-if="tier === 1" class="upload-field">
-            <span class="bw-label">Address evidence</span>
-            <select v-model="addressDocumentType" class="bw-input">
-              <option value="utility_bill">Utility bill</option>
-              <option value="bank_statement">Bank statement</option>
-            </select>
-            <input
-              type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
-              @change="addressFile = ($event.target as HTMLInputElement).files?.[0] ?? null"
-            />
-            <small>{{ addressFile?.name || 'Recent proof matching your address.' }}</small>
-          </label>
+        <div class="ready-actions">
+          <button class="bw-btn primary" type="button" @click="changesRequested ? requestUpgrade() : continueWallet()">{{ changesRequested ? 'Review changes' : 'Continue to wallet' }}</button>
+          <button v-if="!changesRequested" class="text-button" type="button" @click="requestUpgrade">Need a higher limit?</button>
         </div>
+      </section>
 
-        <p class="field-hint">Files are private. Maximum 10 MB each.</p>
-        <div v-if="error2" class="bw-alert danger" role="alert">{{ error2 }}</div>
-        <div v-if="uploadProgress" class="bw-alert info" role="status" aria-live="polite">{{ uploadProgress }}</div>
+      <section v-else class="bw-card submission-card">
+        <div class="section-head">
+          <div><p class="eyebrow">Optional upgrade</p><h2>Request Tier {{ requestedTier }}</h2></div>
+          <span class="bw-badge warn">Beverly review</span>
+        </div>
+        <p class="instructions">{{ needsAddress ? 'Provide identity, a current selfie, and recent address evidence.' : 'Provide identity and a current selfie. Address evidence starts at Tier 2.' }}</p>
+        <p class="review-disclosure">Incomplete or rejected evidence can lead to account restrictions or regulatory review. Beverly will explain the next step.</p>
+        <p v-if="changesRequested" class="review-note" role="alert"><strong>Changes requested:</strong> {{ reviewNote || 'Use clearer, current evidence.' }}</p>
 
-        <button
-          class="bw-btn primary lg full"
-          type="submit"
-          :disabled="loading2 || !identityFile || !selfieFile || (tier === 1 && !addressFile)"
-        >
-          {{ loading2 ? 'Submitting…' : `Submit Tier ${tier + 1} review` }}
-        </button>
-      </form>
-
-      <!-- Skip / finish later -->
-      <div v-if="tier >= 1" class="tier2-skip">
-        <button type="button" class="later-link" @click="skipTier2">
-          Not now — I'll verify later
-        </button>
-        <p class="skip-note">
-          You can complete Tier 2 any time from your <router-link to="/profile" class="skip-link">Profile</router-link>.
-        </p>
-      </div>
-    </div>
-
-    <!-- ─ TIER 2 skipped → gentle reminder card ───────────────────── -->
-    <div v-if="tier2Skipped && tier < 2" class="reminder-card">
-      <div class="reminder-icon">⏰</div>
-      <div>
-        <p class="reminder-title">Reminder set!</p>
-        <p class="reminder-sub">
-          Finish Tier 2 any time from your <router-link to="/profile" class="skip-link">Profile</router-link> to unlock ₦200k/day purchases.
-        </p>
-      </div>
-      <router-link to="/" class="bw-btn primary" style="text-decoration:none; white-space:nowrap">
-        Go home
-      </router-link>
-    </div>
-
-    <!-- ─ DONE ───────────────────────────────────────────────────── -->
-    <div v-if="tier >= 2" class="bw-card done-card">
-      <div class="done-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-      </div>
-      <p class="bw-page-title done-title">Fully verified!</p>
-      <p class="bw-muted done-sub">You've reached Tier 2. Enjoy up to ₦200,000/day on token purchases.</p>
-      <router-link to="/buy-token" class="bw-btn primary done-cta">Buy tokens now</router-link>
-    </div>
+        <form @submit.prevent="submitEvidence">
+          <div class="upload-grid">
+            <label class="upload-field">
+              <strong>Government identity</strong><span>NIN slip, passport, licence, or voter card.</span>
+              <template v-if="savedIdentity"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
+              <template v-else>
+                <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type" :disabled="submitting"><option value="national_id">NIN slip</option><option value="voters_card">Voter card</option><option value="passport">Passport</option><option value="drivers_license">Driver's licence</option></select>
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Government identity file" :disabled="submitting" @change="selectFile('identity', $event)" />
+                <small>{{ identityFile ? `Selected: ${identityFile.name}` : 'Choose a file' }}</small>
+              </template>
+            </label>
+            <label class="upload-field">
+              <strong>Current selfie</strong><span>Use a clear photo. Avoid filters.</span>
+              <template v-if="savedSelfie"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
+              <template v-else>
+                <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Current selfie file" :disabled="submitting" @change="selectFile('selfie', $event)" />
+                <small>{{ selfieFile ? `Selected: ${selfieFile.name}` : 'Choose a file' }}</small>
+              </template>
+            </label>
+            <label v-if="needsAddress" class="upload-field">
+              <strong>Address evidence</strong><span>Use a recent utility bill or bank statement.</span>
+              <template v-if="savedAddress"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
+              <template v-else>
+                <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting"><option value="utility_bill">Utility bill</option><option value="bank_statement">Bank statement</option></select>
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Address evidence file" :disabled="submitting" @change="selectFile('address', $event)" />
+                <small>{{ addressFile ? `Selected: ${addressFile.name}` : 'Choose a file' }}</small>
+              </template>
+            </label>
+          </div>
+          <p class="selection-summary" role="status" aria-live="polite">{{ [savedIdentity || identityFile, savedSelfie || selfieFile, ...(needsAddress ? [savedAddress || addressFile] : [])].filter(Boolean).length }} of {{ needsAddress ? 3 : 2 }} required files ready.</p>
+          <p class="privacy">Private storage. File validated. Maximum 10 MB.</p>
+          <div v-if="progress" class="bw-alert info" role="status" aria-live="polite">{{ progress }}</div>
+          <div class="form-actions">
+            <button class="bw-btn primary" type="submit" :disabled="submitting || !canSubmit">{{ submitting ? 'Submitting…' : `Submit Tier ${requestedTier} review` }}</button>
+            <button v-if="selectedFileCount" class="bw-btn" type="button" :disabled="submitting" @click="saveForLater">Save and finish later</button>
+            <button class="text-button" type="button" :disabled="submitting" @click="cancelUpgrade">Not now</button>
+          </div>
+        </form>
+      </section>
+    </template>
   </AppShell>
 </template>
 
 <style scoped>
-/* Tier indicators */
-.tier-row {
-  display: flex;
-  gap: var(--s-2);
-  margin-bottom: var(--s-4);
-}
-.bw-kyc-tier {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  padding: var(--s-2) var(--s-1);
-  border-radius: var(--r-md);
-  font-size: var(--t-xs);
-  font-weight: 700;
-  gap: 2px;
-  border: 1px solid;
-  transition: all 0.2s;
-}
-.tier-active  { background: oklch(70% 0.19 145 / 0.12); border-color: oklch(70% 0.19 145 / 0.35); color: var(--brand); }
-.tier-pending { background: var(--surface-2); border-color: var(--border); color: var(--text-muted); }
-.tier-check   { font-size: 10px; }
-.tier-desc    { font-size: 9px; font-weight: 500; opacity: 0.8; }
-
-/* Draft restored banner */
-.draft-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-3) var(--s-4);
-  background: oklch(72% 0.13 220 / 0.10);
-  border: 1px solid oklch(72% 0.13 220 / 0.25);
-  border-radius: var(--r-md);
-  font-size: var(--t-sm);
-  color: var(--info, #0ea5e9);
-  margin-bottom: var(--s-3);
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-.draft-banner span { flex: 1; min-width: 0; }
-.draft-clear {
-  background: none; border: none; cursor: pointer;
-  font-size: var(--t-xs); color: inherit; opacity: 0.7;
-  text-decoration: underline; white-space: nowrap; padding: 0;
-}
-.draft-clear:hover { opacity: 1; }
-
-/* Draft saved toast */
-.draft-saved-toast {
-  position: fixed;
-  bottom: 90px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--brand);
-  color: var(--brand);
-  border-radius: var(--r-full);
-  padding: var(--s-2) var(--s-4);
-  font-size: var(--t-xs);
-  font-weight: 600;
-  z-index: 100;
-  box-shadow: 0 4px 20px oklch(0% 0 0 / 0.20);
-  white-space: nowrap;
-}
-
-/* Cards */
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--s-3);
-  margin-bottom: var(--s-4);
-}
-.card-title { font-weight: 700; margin: 0 0 var(--s-1); }
-.card-sub   { color: var(--text-muted); font-size: var(--t-sm); margin: 0; }
-
-.optional-badge {
-  font-size: var(--t-xs);
-  font-weight: 700;
-  background: oklch(78% 0.16 75 / 0.15);
-  color: var(--warn, #d97706);
-  border: 1px solid oklch(78% 0.16 75 / 0.30);
-  border-radius: var(--r-full);
-  padding: 2px 10px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Steps */
-.step-pane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-4);
-  animation: fadeIn 0.25s var(--ease-out);
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
-.col { display: flex; flex-direction: column; }
-
-.field-hint  { font-size: var(--t-xs); color: var(--text-muted); margin: 6px 0 0; }
-.field-error { font-size: var(--t-xs); color: var(--danger); margin: 4px 0 0; font-weight: 500; }
-.has-error { border-color: var(--danger) !important; }
-
-.review-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: var(--s-4);
-  display: flex; flex-direction: column; gap: var(--s-3);
-}
-.review-row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: var(--t-sm); gap: var(--s-3);
-}
-.review-key { color: var(--text-muted); }
-.review-val { color: var(--text); font-weight: 600; text-align: right; word-break: break-word; }
-
-.legal-note {
-  font-size: var(--t-xs); color: var(--text-muted);
-  line-height: 1.6; margin: 0; padding: var(--s-2) 0;
-}
-
-.nav-row { display: flex; gap: var(--s-2); }
-.nav-row .bw-btn { flex: 1; justify-content: center; }
-.full { width: 100%; justify-content: center; }
-.status-retry { margin-top: var(--s-2); color: inherit; }
-
-/* Save for later link */
-.later-link {
-  background: none; border: none; cursor: pointer;
-  color: var(--text-muted); font-size: var(--t-xs);
-  text-align: center; text-decoration: underline;
-  padding: 0; width: 100%;
-  transition: color 0.15s;
-}
-.later-link:hover { color: var(--text); }
-
-/* Tier 1 done banner */
-.tier1-done-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  background: oklch(70% 0.19 145 / 0.10);
-  border: 1px solid oklch(70% 0.19 145 / 0.25);
-  border-radius: var(--r-md);
-  font-size: var(--t-sm);
-  color: var(--brand);
-  margin-bottom: var(--s-3);
-}
-.pending-card { display:flex; align-items:center; gap:var(--s-3); margin-bottom:var(--s-3); border-color:oklch(from var(--warn) l c h / .35); }
-.pending-card > div { flex:1; }
-.pending-dot { width:10px; height:10px; flex:0 0 auto; border-radius:50%; background:var(--warn); box-shadow:0 0 0 5px oklch(from var(--warn) l c h / .12); }
-.upload-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--s-3); }
-.upload-field { display:flex; flex-direction:column; gap:8px; padding:var(--s-3); border:1px dashed var(--border); border-radius:var(--r-md); background:var(--surface-2); cursor:pointer; }
-.upload-field input { width:100%; color:var(--text-muted); }
-.upload-field small { color:var(--text-muted); overflow-wrap:anywhere; }
-
-/* Tier 2 skip section */
-.tier2-skip {
-  border-top: 1px dashed var(--border);
-  margin-top: var(--s-4);
-  padding-top: var(--s-4);
-  text-align: center;
-}
-.skip-note { font-size: var(--t-xs); color: var(--text-muted); margin: var(--s-2) 0 0; }
-.skip-link { color: var(--brand); text-decoration: underline; }
-
-/* Reminder card */
-.reminder-card {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-4) var(--s-5);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  box-shadow: var(--glass-shine), var(--glass-shadow-card);
-  border-radius: var(--r-xl);
-  margin-top: var(--s-3);
-  flex-wrap: wrap;
-}
-.reminder-icon { font-size: 28px; flex-shrink: 0; }
-.reminder-title { font-weight: 700; margin: 0 0 4px; }
-.reminder-sub   { font-size: var(--t-sm); color: var(--text-muted); margin: 0; }
-
-/* Done state */
-.done-card { text-align: center; padding: var(--s-8); }
-.done-icon {
-  width: 56px; height: 56px; border-radius: 50%;
-  background: oklch(70% 0.19 145 / 0.15);
-  display: grid; place-items: center;
-  margin: 0 auto var(--s-4);
-}
-.done-title { margin-bottom: var(--s-2); }
-.done-sub   { font-size: var(--t-sm); margin-bottom: var(--s-5); }
-.done-cta   { text-decoration: none; display: inline-flex; }
-
-/* Fade transition */
-.fade-enter-active, .fade-leave-active { transition: all 0.25s var(--ease-out); }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-4px); }
-
-@media (max-width: 380px) {
-  .row { grid-template-columns: 1fr; }
-  .upload-grid { grid-template-columns: 1fr; }
-  .pending-card { align-items:flex-start; flex-wrap:wrap; }
-  .tier-row { flex-wrap: wrap; }
-}
+.kyc-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s-4);margin-bottom:var(--s-4)}.kyc-hero h1{margin:0;font-size:var(--t-2xl)}.kyc-hero p{margin:4px 0 0;color:var(--text-muted)}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:10px!important;font-weight:800;color:var(--brand)!important}
+.tier-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3);margin-bottom:var(--s-4)}.tier-card{display:flex;flex-direction:column;gap:6px;padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);opacity:.62}.tier-card.active{opacity:1;border-color:oklch(from var(--brand) l c h/.35);background:oklch(from var(--brand) l c h/.06)}.tier-card span{color:var(--text-muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.tier-card small{color:var(--text-muted)}.tier-card.active small{color:var(--brand)}
+.status-card,.ready-card{display:flex;align-items:center;gap:var(--s-4)}.status-card>div,.ready-card>div{flex:1}.status-card h2,.ready-card h2{margin:0 0 4px}.status-card p,.ready-card p{margin:0;color:var(--text-muted)}.status-dot{width:12px;height:12px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 6px oklch(from var(--warn) l c h/.13)}.complete-mark,.ready-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:var(--brand);background:oklch(from var(--brand) l c h/.12);font-weight:900;font-size:20px}.ready-card{align-items:flex-start}.ready-actions{display:flex;flex-direction:column;align-items:flex-end;gap:var(--s-2);flex:0 0 auto!important}.text-button{padding:0;border:0;background:transparent;color:var(--brand);font:inherit;font-size:var(--t-sm);font-weight:700;cursor:pointer}.text-button:disabled{opacity:.55;cursor:not-allowed}
+.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-3)}.section-head h2{margin:4px 0 0}.instructions{color:var(--text-muted);max-width:680px}.review-disclosure{margin:var(--s-2) 0;color:var(--text-muted);font-size:var(--t-xs)}.review-note{padding:var(--s-3);border-left:3px solid var(--warn);background:oklch(from var(--warn) l c h/.09);border-radius:var(--r-sm);color:var(--text-muted)}.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--s-3);margin:var(--s-4) 0}.upload-field{display:flex;flex-direction:column;gap:8px;padding:var(--s-4);border:1px dashed var(--border);border-radius:var(--r-lg);background:var(--surface-2);cursor:pointer}.upload-field span,.upload-field small,.privacy{color:var(--text-muted)}.upload-field input{width:100%;color:var(--text-muted)}.upload-field small{overflow-wrap:anywhere}.saved-file{color:var(--brand)!important;font-weight:700}.selection-summary{margin:0 0 4px;color:var(--text);font-size:var(--t-sm);font-weight:700}.privacy{font-size:var(--t-xs);margin:0 0 var(--s-3)}.form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}.form-actions .bw-btn.primary{flex:1}.form-actions .bw-btn{min-height:44px}
+@media(max-width:640px){.tier-grid{grid-template-columns:1fr}.upload-grid{grid-template-columns:1fr}.status-card,.ready-card{align-items:flex-start;flex-wrap:wrap}.status-card .bw-btn,.ready-actions{width:100%;align-items:stretch}.kyc-hero{align-items:flex-start;flex-direction:column}.kyc-hero>.bw-btn{width:100%}.form-actions>*{width:100%}.form-actions .bw-btn.primary{flex:auto}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>

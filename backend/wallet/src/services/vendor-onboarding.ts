@@ -7,7 +7,7 @@
  *   freezeVendor / unfreeze  → wallet status + audit.
  */
 import { adminClient } from '../db/supabase.js';
-import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
+import { getOrCreateKycManagedWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
 import { logAction, logSecurityEvent } from './audit.js';
 import { sendEmail } from '../adapters/resend.js';
 import { vendorOnboardingEmail } from '../emails/templates.js';
@@ -16,6 +16,7 @@ import { env } from '../config/env.js';
 import crypto from 'node:crypto';
 import { generateTemporaryPassword } from './temporary-password.js';
 import { resolveVendorPortalUrl } from './vendor-portal-url.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 export class OnboardingError extends Error {
     public statusCode: number;
@@ -50,7 +51,6 @@ export interface CreateVendorInput {
     primaryUserEmail: string;
     primaryUserFullName: string;
     primaryUserPhone?: string;
-    dailyLimitMinor?: number;
     createdByStaffId: string;
     sourceApplicationId?: string;
     provisioningKey?: string;
@@ -66,6 +66,8 @@ export interface CreateVendorResult {
 }
 
 export async function createVendorOrganization(input: CreateVendorInput): Promise<CreateVendorResult> {
+    const policy = await getKycTierPolicy();
+    const tierZeroDailyLimit = effectiveTierLimit(0, policy);
     const requestedStations = [...new Set([
         input.stationId,
         ...(input.operatingStations ?? []),
@@ -163,7 +165,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             station_id: primaryStation,
             operating_stations: [primaryStation],
             station_ids_json: [primaryStation],
-            daily_limit_minor: input.dailyLimitMinor ?? 1000000000,
+            daily_limit_minor: tierZeroDailyLimit,
             approved_by: input.createdByStaffId,
             status: 'pending',
             provisioning_status: 'pending',
@@ -222,9 +224,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         );
         vendorUserId = (vu as { id: string }).id;
 
-        const wallet = await getOrCreateWallet('vendor', organizationId, {
-            dailyCapMinor: input.dailyLimitMinor ?? 1000000000,
-        });
+        const wallet = await getOrCreateKycManagedWallet('vendor', organizationId, 0);
         walletId = wallet.id;
 
         await logAction({

@@ -44,6 +44,7 @@ import {
     recordOemQuotaFailure,
 } from './oem-quota-circuit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
+import { assertVendorKycReadyForVending, VendorKycGateError } from './vendor-kyc-gate.js';
 
 export class VendingError extends Error {
     constructor(
@@ -179,6 +180,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         assertEnergyVendReady();
     } catch (error) {
         if (error instanceof TokenEngineError) throw new VendingError(error.message, error.code);
+        throw error;
+    }
+
+    try {
+        await assertVendorKycReadyForVending(input.vendorOrganizationId);
+    } catch (error) {
+        if (error instanceof VendorKycGateError) {
+            throw new VendingError(error.message, error.code, { status: error.status });
+        }
         throw error;
     }
 

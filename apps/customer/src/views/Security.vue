@@ -97,11 +97,11 @@ async function requestOtpLink() {
         </span>
       </div>
       <p class="bw-muted" style="font-size: var(--t-xs); margin: var(--s-2) 0 0">
-        {{ auth.kycTier === 0 ? 'Verify your identity to start buying tokens.' :
-           auth.kycTier === 1 ? 'Complete enhanced review to unlock Tier 2 (₦200k/day).' :
+        {{ auth.kycTier === 0 ? 'Verify your identity when you need a higher daily limit.' :
+           auth.kycTier === 1 ? 'Complete enhanced review when you need the next daily limit.' :
            'You\'re fully verified. Highest limits unlocked.' }}
       </p>
-      <router-link v-if="auth.kycTier < 2" to="/kyc"
+      <router-link v-if="auth.kycTier < 2" :to="{ name: 'kyc', query: { upgrade: `tier${auth.kycTier + 1}` } }"
                    class="bw-btn primary" style="text-decoration:none; display:inline-flex; margin-top: var(--s-3)">
         {{ auth.kycTier === 0 ? 'Verify identity' : 'Upgrade to Tier 2' }}
       </router-link>

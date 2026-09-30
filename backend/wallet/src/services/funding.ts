@@ -9,7 +9,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { type LedgerEntry } from './ledger.js';
-import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner, getOrCreateOwnerKycWallet, type Wallet } from './wallets.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
@@ -377,7 +377,7 @@ async function canonicalFundingWallet(funding: FundingRequest): Promise<Wallet> 
     const ownerType = funding.owner_type ?? (funding.customer_id ? 'customer' : 'vendor');
     const ownerId = ownerType === 'customer' ? funding.customer_id : funding.vendor_organization_id;
     if (!ownerId) throw new FundingError('funding request owner is missing', 'owner_missing');
-    return getOrCreateWallet(ownerType, ownerId);
+    return getOrCreateOwnerKycWallet(ownerType, ownerId);
 }
 
 async function findFundingCredit(fundingId: string): Promise<LedgerEntry | null> {
