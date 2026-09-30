@@ -9,7 +9,7 @@ const admin = read('apps/admin/src/views/KycReviews.vue');
 const customer = read('apps/customer/src/views/Kyc.vue');
 const vendor = read('apps/vendor/src/views/Kyc.vue');
 const adminRoutes = read('backend/wallet/src/routes/admin.ts');
-const reviewMigration = read('supabase/migrations/20260909120000_kyc_tier_review_pipeline.sql');
+const policyMigration = read('supabase/migrations/20260929100000_configurable_kyc_tier_policy.sql');
 const hardening = read('supabase/migrations/20260909133000_kyc_production_hardening.sql');
 
 assert.match(admin, /hasRequiredEvidence\(row\)/, 'admin approvals must use evidence-type validation');
@@ -39,9 +39,10 @@ assert.match(adminRoutes, /customerIds: \[\.\.\.owners\.customers\]/, 'review pa
 assert.match(adminRoutes, /vendorIds: \[\.\.\.owners\.vendors\]/, 'review pagination must receive vendor station scope');
 assert.match(adminRoutes, /enforceResourceStation\(req, reply\)/, 'individual review resources must enforce station scope');
 
-assert.match(reviewMigration, /when 1 then 5000000 when 2 then 20000000/, 'daily wallet limits must follow approved tiers');
-assert.match(reviewMigration, /when 1 then 100000000 when 2 then 400000000/, 'monthly wallet limits must follow approved tiers');
-assert.match(reviewMigration, /where id = p_request_id for update/, 'review decisions must lock their request');
-assert.match(reviewMigration, /kyc_review_already_decided/, 'review decisions must reject replay');
+assert.match(policyMigration, /create table if not exists public\.kyc_tier_settings/, 'limits must have one settings source');
+assert.match(policyMigration, /values \(true, 20000000, 70000000, null\)/, 'policy defaults must match the approved tiers');
+assert.match(policyMigration, /fn_apply_kyc_wallet_policy/, 'approved reviews must apply the live policy');
+assert.match(policyMigration, /where id = p_request_id for update/, 'review decisions must lock their request');
+assert.match(policyMigration, /kyc_review_already_decided/, 'review decisions must reject replay');
 
 console.log('KYC production-readiness contract passed.');

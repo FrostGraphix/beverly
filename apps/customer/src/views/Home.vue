@@ -13,6 +13,8 @@ import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 const auth    = useAuthStore();
 const wallet  = ref<any>(null);
 const ledger  = ref<any[]>([]);
+const meterBalances = ref<any[]>([]);
+const meterBalancesUnavailable = ref(false);
 const loading = ref(false);
 const showFilters = ref(false);
 const searchQuery = ref('');
@@ -23,12 +25,61 @@ const viewMode = ref<'grid' | 'table'>(
 );
 const customerName = computed(() => auth.customer?.full_name?.split(' ')[0] || 'there');
 
+async function loadMeterBalances() {
+    meterBalancesUnavailable.value = false;
+    try {
+        const [meterResponse, balanceResponse] = await Promise.all([
+            api.get<{ meters: any[] }>('/api/v1/customer/meters'),
+            api.get<{ balances: any[] }>('/api/v1/customer/meters/balances'),
+        ]);
+        const balances = new Map((balanceResponse.balances ?? []).map((balance) => [String(balance.meterId), balance]));
+        meterBalances.value = (meterResponse.meters ?? []).map((link) => {
+            const meterId = String(link.meter_id ?? link.meterId ?? '');
+            const balance = balances.get(meterId);
+            if (String(link.status ?? '').toLowerCase() !== 'approved') {
+                return { meterId, nickname: link.nickname ?? null, status: 'pending' };
+            }
+            return {
+                meterId,
+                nickname: link.nickname ?? null,
+                status: balance?.status ?? 'unavailable',
+                remainingKwh: balance?.balanceKwh ?? null,
+                reportedAt: balance?.reportedAt ?? null,
+                readingDate: balance?.readingDate ?? null,
+            };
+        });
+    } catch {
+        meterBalances.value = [];
+        meterBalancesUnavailable.value = true;
+    }
+}
+
+const primaryMeterBalance = computed(() => meterBalances.value.find((meter) => meter.status === 'available')
+    ?? meterBalances.value.find((meter) => meter.status === 'unavailable')
+    ?? meterBalances.value[0]
+    ?? null);
+
+function kwh(value: unknown): string {
+    const numeric = Number(value);
+    return Number.isFinite(numeric)
+        ? `${numeric.toLocaleString('en-NG', { maximumFractionDigits: 2 })} kWh`
+        : 'Unavailable';
+}
+
+function reportTime(value: unknown): string {
+    const date = new Date(String(value ?? ''));
+    return Number.isNaN(date.getTime())
+        ? 'Time unavailable'
+        : date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 onMounted(async () => {
     loading.value = true;
     try {
         const [w, l] = await Promise.all([
             api.get<any>('/api/v1/customer/wallet'),
             api.get<{ entries: any[] }>('/api/v1/customer/wallet/ledger?limit=10'),
+            loadMeterBalances(),
         ]);
         wallet.value = w;
         ledger.value = l.entries;
@@ -98,6 +149,27 @@ const ledgerExportColumns: WalletExportColumn<any>[] = [
         Available {{ naira(wallet?.available_minor) }}
         <span v-if="(wallet?.holds_minor ?? 0) > 0"> · {{ naira(wallet?.holds_minor) }} on hold</span>
       </p>
+      <section v-if="meterBalancesUnavailable" class="meter-balance-line" role="status">
+        <div><span>Meter balance</span><strong>Unavailable</strong><small>Refresh to check again.</small></div>
+        <button class="text-action" type="button" @click="loadMeterBalances">Refresh</button>
+      </section>
+      <section v-else-if="!primaryMeterBalance" class="meter-balance-line">
+        <div><span>Meter balance</span><strong>No meter connected</strong><small>Link an approved meter to see its reported balance.</small></div>
+        <router-link to="/onboard-meter" class="text-action">Add meter</router-link>
+      </section>
+      <section v-else-if="primaryMeterBalance.status === 'pending'" class="meter-balance-line">
+        <div><span>Meter balance</span><strong>Meter link pending</strong><small>Balance appears after Beverly approves the link.</small></div>
+        <router-link to="/meters" class="text-action">View meters</router-link>
+      </section>
+      <section v-else class="meter-balance-line">
+        <div>
+          <span>Meter balance</span>
+          <strong>{{ primaryMeterBalance.status === 'available' ? kwh(primaryMeterBalance.remainingKwh) : 'Unavailable' }}</strong>
+          <small v-if="primaryMeterBalance.status === 'available'">{{ primaryMeterBalance.nickname || primaryMeterBalance.meterId }} · Reported {{ reportTime(primaryMeterBalance.reportedAt) }}<template v-if="primaryMeterBalance.refreshedAt"> · Data refreshed {{ reportTime(primaryMeterBalance.refreshedAt) }}</template></small>
+          <small v-else>{{ primaryMeterBalance.nickname || primaryMeterBalance.meterId }} · No reported balance yet.</small>
+        </div>
+        <button class="text-action" type="button" @click="loadMeterBalances">Refresh report</button>
+      </section>
       <div class="bw-row" style="gap: var(--s-2)">
         <router-link to="/buy-token" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
           Buy Token
@@ -287,6 +359,8 @@ const ledgerExportColumns: WalletExportColumn<any>[] = [
   overflow: hidden;
   pointer-events: none;
 }
+.meter-balance-line{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);margin:0 0 var(--s-4);padding:var(--s-3);border:1px solid var(--glass-border);border-radius:var(--r-md);background:oklch(100% 0 0/.035)}.meter-balance-line>div{display:grid;gap:2px;min-width:0}.meter-balance-line span{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)}.meter-balance-line strong{font-size:var(--t-lg);color:var(--text)}.meter-balance-line small{color:var(--text-muted);font-size:var(--t-xs);overflow-wrap:anywhere}.text-action{border:0;background:transparent;padding:4px 0;color:var(--brand);font:inherit;font-size:var(--t-sm);font-weight:800;text-decoration:none;white-space:nowrap;cursor:pointer}
+@media(max-width:480px){.meter-balance-line{align-items:flex-start;flex-direction:column}.text-action{padding-top:var(--s-1)}}
 .customer-balance-skeleton .bw-skeleton,
 .customer-ledger-skeleton .bw-skeleton {
   display: block;

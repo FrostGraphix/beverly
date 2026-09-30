@@ -12,6 +12,7 @@ import type { Actor } from '../plugins/auth.js';
 import { adminClient } from '../db/supabase.js';
 import { checkAcobotIntentPermission } from './acobot-rbac.js';
 import { listFaqs } from './support.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 export interface DetectedIntents {
     // Wallet Admin Intents
@@ -223,14 +224,14 @@ export async function buildAcobotContext(
                         .select('id', { count: 'exact', head: true })
                         .eq('customer_id', actor.customerId);
 
-                    const limitByTier: Record<number, string> = {
-                        0: '₦50,000 per purchase / Max 1 meter',
-                        1: '₦100,000 per purchase / Max 5 meters',
-                        2: '₦200,000 per purchase / Max 10 meters',
-                    };
-
                     const tierLevel = customerData.kyc_tier ?? 0;
                     const balanceMajor = ((customerData.wallet_balance_minor ?? 0) / 100).toFixed(2);
+                    let limitLabel = 'Current limit unavailable';
+                    try {
+                        const policy = await getKycTierPolicy();
+                        const dailyLimit = effectiveTierLimit(tierLevel === 1 ? 1 : tierLevel === 2 ? 2 : 0, policy);
+                        limitLabel = dailyLimit === null ? 'No configured daily debit cap' : `Up to ₦${(dailyLimit / 100).toLocaleString('en-NG')} daily`;
+                    } catch { /* keep assistance available if the policy store is temporarily unavailable */ }
 
                     contextSections.push(
                         `[LIVE CUSTOMER PROFILE & KYC CONTEXT]\n` +
@@ -240,7 +241,7 @@ export async function buildAcobotContext(
                         `- Account Status: ${String(customerData.status).toUpperCase()}\n` +
                         `- KYC Tier: Tier ${tierLevel} (${tierLevel === 0 ? 'Basic profile' : tierLevel === 1 ? 'Identity approved' : 'Enhanced identity approved'})\n` +
                         `- KYC Verification Status: ${String(customerData.kyc_status ?? 'unverified').toUpperCase()}\n` +
-                        `- Vending Limit: ${limitByTier[tierLevel] ?? limitByTier[0]}\n` +
+                        `- Daily wallet limit: ${limitLabel}\n` +
                         `- Wallet Balance: ₦${balanceMajor}\n` +
                         `- Linked Meters Count: ${meterCount ?? 0}`
                     );

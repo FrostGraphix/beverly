@@ -109,7 +109,7 @@ async function submitPhonePassword() {
         if (r.customer?.email && !r.customer?.email_verified_at) {
             await router.replace('/verify-email');
         } else {
-            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+            await router.replace('/');
         }
     } catch (e: any) {
         handleError(e);
@@ -183,7 +183,7 @@ async function submitEmail() {
         if (!r.customer?.email_verified_at) {
             await router.replace('/verify-email');
         } else {
-            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+            await router.replace('/');
         }
     } catch (e: any) {
         handleError(e);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -8,12 +8,17 @@ const meterCount = ref(0);
 const purchaseCount = ref(0);
 const loading = ref(true);
 const dismissed = ref(false);
+const celebrationSeen = ref(false);
+const showCelebration = ref(false);
 
-const DISMISS_KEY = 'beverly.onboarding.dismissed';
+const storageScope = computed(() => auth.customer?.id ?? 'anonymous');
+const dismissKey = computed(() => `beverly.customer.${storageScope.value}.onboarding.dismissed`);
+const celebrationKey = computed(() => `beverly.customer.${storageScope.value}.onboarding.complete-seen`);
 
 onMounted(async () => {
     try {
-        dismissed.value = localStorage.getItem(DISMISS_KEY) === '1';
+        dismissed.value = localStorage.getItem(dismissKey.value) === '1';
+        celebrationSeen.value = localStorage.getItem(celebrationKey.value) === '1';
     } catch { /* noop */ }
 
     try {
@@ -33,8 +38,8 @@ const steps = computed(() => {
     return [
         {
             key: 'kyc',
-            label: 'Verify your identity',
-            description: 'Tier 1 unlocks token purchases up to ₦50,000/day',
+            label: 'Raise your account limit',
+            description: 'Identity verification unlocks the next configured limit',
             done: kycDone,
             to: '/kyc',
             icon: '🆔',
@@ -46,7 +51,7 @@ const steps = computed(() => {
             done: meterCount.value > 0,
             to: '/onboard-meter',
             icon: '⚡',
-            locked: !kycDone,
+            locked: false,
         },
         {
             key: 'purchase',
@@ -55,7 +60,7 @@ const steps = computed(() => {
             done: purchaseCount.value > 0,
             to: '/buy-token',
             icon: '🎟️',
-            locked: !kycDone || meterCount.value === 0,
+            locked: meterCount.value === 0,
         },
     ];
 });
@@ -65,9 +70,18 @@ const totalSteps = computed(() => steps.value.length);
 const allDone = computed(() => completedCount.value === totalSteps.value);
 const percent = computed(() => Math.round((completedCount.value / totalSteps.value) * 100));
 
+watch([allDone, loading], ([complete, isLoading]) => {
+    if (isLoading) return;
+    if (!complete || dismissed.value || celebrationSeen.value) return;
+    celebrationSeen.value = true;
+    showCelebration.value = true;
+    try { localStorage.setItem(celebrationKey.value, '1'); } catch { /* noop */ }
+}, { immediate: true });
+
 function dismiss() {
     dismissed.value = true;
-    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* noop */ }
+    showCelebration.value = false;
+    try { localStorage.setItem(dismissKey.value, '1'); } catch { /* noop */ }
 }
 </script>
 
@@ -120,7 +134,7 @@ function dismiss() {
 
   <!-- All done celebration (brief, dismissable) -->
   <Transition name="slide">
-    <div v-if="!loading && allDone && !dismissed" class="onboarding-celebrate">
+    <div v-if="!loading && allDone && !dismissed && showCelebration" class="onboarding-celebrate">
       <div class="celebrate-icon">🎉</div>
       <div class="celebrate-text">
         <p class="celebrate-title">You're all set!</p>

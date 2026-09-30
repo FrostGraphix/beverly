@@ -27,4 +27,12 @@ describe('vendor vend failure presentation', () => {
             action: 'No wallet debit occurred. Retry after one minute.',
         });
     });
+
+    it('blocks vending until Tier 1 is approved', () => {
+        expect(presentVendorVendFailure('vendor_kyc_tier_required')).toEqual({
+            showPopup: false,
+            blockConfirmation: true,
+            action: 'Complete Tier 1 verification. Beverly approval unlocks vending.',
+        });
+    });
 });

@@ -9,7 +9,7 @@ import { vendorPasswordError } from '@beverly/tokens/password-policy';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
 import { resolveFundingCallbackUrl } from '../config/funding-callbacks.js';
-import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
+import { findWalletByOwner, getOrCreateKycManagedWallet } from '../services/wallets.js';
 import { getBalance, getEntries, getActivitySummary } from '../services/ledger.js';
 import {
     initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, removeBankFundingProof, FundingError,
@@ -73,6 +73,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
+import { getKycTierPolicy, KycTierPolicyError } from '../services/kyc-tier-policy.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import { assertOemVendAvailable, OemQuotaCircuitError } from '../services/oem-quota-circuit.js';
 
@@ -330,15 +331,21 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/kyc/status', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         try {
-            return await currentKycState('vendor', req.actor!.vendorOrganizationId!);
+            const [state, policy] = await Promise.all([
+                currentKycState('vendor', req.actor!.vendorOrganizationId!),
+                getKycTierPolicy(),
+            ]);
+            return { ...state, policy };
         } catch (error) {
             if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            if (error instanceof KycTierPolicyError) return reply.code(503).send({ error: error.code, message: error.message });
             throw error;
         }
     });
 
     fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const body = z.object({
+            requested_tier: z.union([z.literal(1), z.literal(2)]),
             document_type: z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie']),
             mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
             size_bytes: z.number().int().min(1).max(10 * 1024 * 1024),
@@ -346,11 +353,31 @@ const route: FastifyPluginAsync = async (fastify) => {
         }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_document', message: body.error.message });
         try {
+            const current = await currentKycState('vendor', req.actor!.vendorOrganizationId!);
+            if (body.data.requested_tier !== Number(current.kyc_tier ?? 0) + 1) {
+                return reply.code(409).send({ error: 'tier_not_sequential', message: 'Complete KYC tiers in order.' });
+            }
             return await createKycUpload({
-                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: 2,
+                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: body.data.requested_tier,
                 documentType: body.data.document_type, mimeType: body.data.mime_type,
                 sizeBytes: body.data.size_bytes, expiresAt: body.data.expires_at,
             });
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
+        try {
+            const review = await submitKycReview({
+                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: 1,
+                submittedBy: req.actor!.userId, submission: { method: 'manual_document_review', identity_basis: 'government_id_and_selfie' },
+                documentIds: body.data.document_ids,
+            });
+            return { ok: true, review };
         } catch (error) {
             if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
             throw error;
@@ -966,7 +993,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── wallet summary ──
     fastify.get('/wallet', { preHandler: fastify.requireVendor() }, async (req) => {
         const orgId = req.actor!.vendorOrganizationId!;
-        const wallet = await getOrCreateWallet('vendor', orgId, { dailyCapMinor: 500_000_000 });
+        const wallet = await getOrCreateKycManagedWallet('vendor', orgId, 0);
         const balance = await getBalance(wallet.id);
         let activity = { todayVendedMinor: 0, todayVendedCount: 0, todayFundedMinor: 0, totalFundedMinor: 0, totalReversedMinor: 0 };
         try {
@@ -1495,7 +1522,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     : error.code === 'oem_insufficient_quota' ? 422
                     : error.code === 'oem_quota_circuit_unavailable' ? 503
                     : error.code === 'wallet_missing' ? 404
-                    : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' ? 403
+                    : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' || error.code === 'vendor_kyc_tier_required' || error.code === 'vendor_not_approved' ? 403
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
                     : 422;
                 return reply.code(status).send({

@@ -86,6 +86,8 @@ async function verifyCustomer(browser, base) {
 
   const page = await context.newPage();
   await page.goto(`${base}/kyc`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Changes requested" }).waitFor();
+  await page.getByRole("button", { name: "Review changes" }).click();
   await page.getByText("Changes requested: Upload clearer evidence.").waitFor();
   const selector = page.getByLabel("Identity document type");
   assert.deepEqual(await selector.locator("option").evaluateAll((items) => items.map((item) => item.value)), identityTypes);
@@ -161,7 +163,7 @@ async function verifyVendor(browser, base) {
   await page.getByRole("button", { name: "Retry" }).click();
   await page.getByRole("heading", { name: "Request Tier 2" }).waitFor();
   await page.getByRole("alert").filter({ hasText: "Use a newer utility bill." }).waitFor();
-  await page.getByText("0 of 3 required files selected.").waitFor({ timeout: 1_000 });
+  await page.getByText("0 of 3 required files ready.").waitFor({ timeout: 1_000 });
   await page.setViewportSize({ width: 517, height: 900 });
   await page.waitForTimeout(350);
   const badgeSizing = await page.locator(".section-head .bw-badge").evaluate((element) => ({
@@ -169,7 +171,7 @@ async function verifyVendor(browser, base) {
     scrollWidth: element.scrollWidth,
   }));
   assert.ok(badgeSizing.scrollWidth <= badgeSizing.clientWidth, "mobile review badge must remain readable");
-  const pageTitleBox = await page.getByRole("heading", { name: "KYC verification" }).boundingBox();
+  const pageTitleBox = await page.getByRole("heading", { name: "Set up your business" }).boundingBox();
   const refreshBox = await page.getByRole("button", { name: "Refresh", exact: true }).boundingBox();
   assert.ok(pageTitleBox && refreshBox && refreshBox.y >= pageTitleBox.y + pageTitleBox.height, "mobile refresh action must stack below the page heading");
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -192,7 +194,7 @@ async function verifyVendor(browser, base) {
   await fields.nth(0).locator('input[type="file"]').setInputFiles({ name: "licence.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") });
   await fields.nth(1).locator('input[type="file"]').setInputFiles({ name: "selfie.jpg", mimeType: "image/jpeg", buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) });
   await fields.nth(2).locator('input[type="file"]').setInputFiles({ name: "utility.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") });
-  await page.getByText("3 of 3 required files selected.").waitFor({ timeout: 1_000 });
+  await page.getByText("3 of 3 required files ready.").waitFor({ timeout: 1_000 });
   await page.getByRole("button", { name: "Submit Tier 2 review" }).click();
   await page.getByText("Tier 2 review submitted.").waitFor();
   assert.deepEqual(uploadRequests.map((item) => item.document_type), ["drivers_license", "selfie", "utility_bill"]);

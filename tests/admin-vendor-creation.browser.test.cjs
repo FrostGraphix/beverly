@@ -83,7 +83,7 @@ async function completeVendorForm(page) {
   await page.getByText("Vendor creation could not be completed. Retry once. Contact support if it continues.").waitFor();
   assert.equal(await page.getByText(/violates check constraint/).count(), 0, "database details must stay hidden");
   assert.equal(createRequest.body.stationId, "TUNGA");
-  assert.equal(createRequest.body.dailyLimitMinor, 1000000000);
+  assert.equal(Object.hasOwn(createRequest.body, "dailyLimitMinor"), false, "vendor creation must use the live KYC policy");
   assert.ok(createRequest.key, "vendor creation must carry an idempotency key");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "mobile layout must not overflow");
 

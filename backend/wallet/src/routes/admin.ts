@@ -50,6 +50,7 @@ import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
 import { CUSTOM_ROLE_RESTRICTED_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
+import { getKycTierPolicy, KycTierPolicyError, updateKycTierPolicy } from '../services/kyc-tier-policy.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
 import { generateTemporaryPassword } from '../services/temporary-password.js';
 function csvEscape(v: unknown): string {
@@ -519,6 +520,9 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /kyc/documents/:id/url': 'wallet.kyc.view',
     'POST /kyc/reviews/:id/approve': 'wallet.kyc.review',
     'POST /kyc/reviews/:id/reject': 'wallet.kyc.review',
+    'GET /kyc/settings': 'wallet.kyc.view',
+    'PUT /kyc/settings': 'wallet.kyc.settings.manage',
+    'GET /kyc/settings/history': 'wallet.kyc.view',
     'DELETE /customers/:id': 'wallet.funding.approve',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
     'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
@@ -1719,7 +1723,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             primaryUserEmail: z.string().email(),
             primaryUserFullName: z.string().min(2),
             primaryUserPhone: z.string().optional(),
-            dailyLimitMinor: z.number().int().min(100000).optional(),
             sourceApplicationId: z.string().uuid().optional(),
         }).refine((value) => {
             const stations = [...new Set([value.stationId, ...(value.operatingStations ?? [])].filter(Boolean))];
@@ -2693,6 +2696,67 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/kyc/reviews/:id/approve', async (req, reply) => decideReview(req, reply, 'approved'));
     fastify.post('/kyc/reviews/:id/reject', async (req, reply) => decideReview(req, reply, 'rejected'));
+
+    fastify.get('/kyc/settings', async (_req, reply) => {
+        try {
+            return { policy: await getKycTierPolicy() };
+        } catch (error) {
+            if (error instanceof KycTierPolicyError) return reply.code(503).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.get('/kyc/settings/history', async (_req, reply) => {
+        const { data, error } = await adminClient
+            .from('kyc_tier_policy_history')
+            .select('id, actor_user_id, created_at, before_json, after_json, reason')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (error) return reply.code(503).send({ error: 'kyc_policy_history_unavailable', message: 'KYC settings history is unavailable.' });
+        return {
+            history: (data ?? []).map((entry: any) => ({
+                id: entry.id,
+                actor_user_id: entry.actor_user_id,
+                created_at: entry.created_at,
+                before: entry.before_json,
+                after: entry.after_json,
+                metadata: { reason: entry.reason },
+            })),
+        };
+    });
+
+    fastify.put('/kyc/settings', async (req, reply) => {
+        const parsed = z.object({
+            tier0DailyLimitMinor: z.number().int().positive(),
+            tier1DailyLimitMinor: z.number().int().positive(),
+            tier2DailyLimitMinor: z.number().int().positive().nullable(),
+            expectedVersion: z.number().int().positive(),
+            reason: z.string().trim().min(4).max(500),
+        }).safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_kyc_policy', message: parsed.error.message });
+        try {
+            const before = await getKycTierPolicy();
+            const policy = await updateKycTierPolicy({ ...parsed.data, updatedBy: req.actor!.userId });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'kyc.policy.updated',
+                targetType: 'kyc_tier_settings',
+                targetId: 'default',
+                before: { ...before },
+                after: { ...policy },
+                metadata: { reason: parsed.data.reason },
+            });
+            return { ok: true, policy };
+        } catch (error) {
+            if (error instanceof KycTierPolicyError) {
+                const status = error.code === 'policy_conflict' ? 409 : error.code === 'invalid_policy' ? 422 : 503;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
 
     // List customers with wallet balance + filters.
     fastify.get('/customers', async (req, reply) => {

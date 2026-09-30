@@ -56,7 +56,7 @@ vi.mock('../../emails/templates.js', () => ({
     vendorOnboardingEmail: vi.fn(() => ({ subject: 'Invite', html: '<p>Invite</p>', text: 'Invite' })),
 }));
 vi.mock('../wallets.js', () => ({
-    getOrCreateWallet: vi.fn(),
+    getOrCreateKycManagedWallet: vi.fn(),
     setOwnerWalletStatus: vi.fn(),
     WalletStateError: class extends Error {},
 }));
