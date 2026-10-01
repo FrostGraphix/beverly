@@ -4,7 +4,7 @@ Status: **Canonical Operating Manual**
 
 Repository: `FrostGraphix/beverly`
 
-Target Node Engine: `Node 22.x`
+Target Node Engine: `Node 24.x`
 
 Package Manager: `pnpm 10.28.0`
 
@@ -116,7 +116,7 @@ The root file [ARCHITECTURE.md](file:///c:/Users/ACOB/Desktop/VS%20Code/Beverly/
 
 ### 3.1 Prerequisites
 
-- **Node.js**: Version `22.x` (Use `nvm use` or verify with `npm run node:verify`).
+- **Node.js**: Version `24.x` (the local and CI pin is `24.13.1`; use `nvm use` or verify with `npm run node:verify`).
 - **pnpm**: Version `10.28.0` (Managed via `corepack`).
 
 ### 3.2 Environment Provisioning
@@ -162,7 +162,7 @@ The project maintains a multi-layered testing matrix. **Release is blocked if an
 +----------------------+-----------------------------------+------------------------+
 | Gate Category        | Execution Command                 | Primary Target         |
 +----------------------+-----------------------------------+------------------------+
-| 1. Node & Tooling    | `npm run node:verify`             | Engine 22.x Compliance |
+| 1. Node & Tooling    | `npm run node:verify`             | Engine 24.x Compliance |
 | 2. Static Typecheck  | `npm run typecheck`               | TypeScript & JSDoc     |
 | 3. Core Build        | `npm run build`                   | SPA & Wallet Backend   |
 | 4. Security & Audit  | `npm run security:check`          | Env & Hardening        |
@@ -386,16 +386,17 @@ This section documents real historical and potential failure modes, their verifi
 
 ---
 
-### Issue 5: Node.js Runtime Version Mismatch (`Node 24` vs `Node 22`)
+### Issue 5: Node.js Runtime Version Mismatch
 - **Category**: Runtime / Configuration
-- **Symptom**: `npm run node:verify` fails or unexpected `ExperimentalWarning` deprecation messages occur.
-- **Root Cause**: Developer machine running Node `24.x` while `.nvmrc`, `package.json`, and CI environments enforce `Node 22.x`.
+- **Symptom**: terminal `node` and `corepack pnpm` can resolve different Node majors, producing inconsistent installs and builds.
+- **Root Cause**: multiple standalone Node installations on Windows, with Corepack launched from a different installation than `node`.
 - **Implemented Fix**:
-  - Added strict engine enforcement check script `tools/node-version-check.cjs`.
-  - Added explicit `--disable-warning=ExperimentalWarning` flag to npm package scripts.
+  - Beverly uses Node `24.x`; `.nvmrc`, `.node-version`, Volta, CI, and Vercel preflight agree on the approved local/CI release `24.13.1`.
+  - Vercel receives the `24.x` engine contract and Corepack is enabled so pnpm remains `10.28.0`.
+  - Installs fail early when a non-Node-24 runtime is active.
 - **Diagnostic & Resolution Process**:
   1. Check active Node version: `node -v`.
-  2. Switch to Node 22 via NVM: `nvm use 22`.
+  2. Switch to the approved Node 24 release via NVM: `nvm use 24.13.1`.
   3. Validate runtime posture: `npm run node:verify`.
 
 ---
@@ -473,7 +474,7 @@ To immediately lock down live mutations system-wide:
 
 Prior to approving the removal of a production release block, **every item on this checklist must be verified**:
 
-- [ ] **Node Version**: Active environment is running Node `22.x`.
+- [ ] **Node Version**: Active environment is running Node `24.x`.
 - [ ] **Build Gate**: `npm run build` completes with exit code 0.
 - [ ] **Typecheck Gate**: `npm run typecheck` passes cleanly without errors.
 - [ ] **Test Gate**: `npm test` passes 100% of unit and integration tests.
