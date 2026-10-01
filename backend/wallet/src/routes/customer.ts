@@ -454,7 +454,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/me', { preHandler: fastify.requireCustomer({ allowUnverified: true }) }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, auth_provider, email_verified_at, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, login_voice_enabled, kyc_tier, kyc_status, kyc_data, status, auth_provider, email_verified_at, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
@@ -468,16 +468,20 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'email')) {
             return reply.code(400).send({ error: 'email_change_forbidden', message: 'Registration email cannot be changed.' });
         }
-        const { full_name } = req.body as { full_name?: string };
+        const { full_name, login_voice_enabled } = req.body as { full_name?: string; login_voice_enabled?: boolean };
         const updates: Record<string, unknown> = {};
         if (full_name !== undefined) updates.full_name = full_name.trim();
+        if (login_voice_enabled !== undefined) {
+            if (typeof login_voice_enabled !== 'boolean') return reply.code(400).send({ error: 'invalid_login_voice_enabled' });
+            updates.login_voice_enabled = login_voice_enabled;
+        }
         if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
 
         const { data, error } = await adminClient
             .from('customers')
             .update(updates)
             .eq('id', req.actor!.customerId!)
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, login_voice_enabled, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return shapeCustomerProfile(data);

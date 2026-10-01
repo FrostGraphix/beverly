@@ -29,7 +29,7 @@ function reply(route, body) {
 }
 
 function customer() {
-  return { id: "customer-1", full_name: "Ada Customer", email: "ada@example.test", kyc_tier: 1, kyc_status: "verified", status: "active", email_verified_at: "2026-09-30T10:00:00.000Z" };
+  return { id: "customer-1", full_name: "Ada Customer", email: "ada@example.test", kyc_tier: 0, kyc_status: "unverified", status: "active", email_verified_at: "2026-09-30T10:00:00.000Z" };
 }
 
 (async () => {
@@ -79,6 +79,7 @@ function customer() {
     await meterPage.getByText("12.5 kWh").waitFor({ timeout: 5_000 });
     await meterPage.getByText("Reported").waitFor({ timeout: 5_000 });
     await meterPage.getByText("You're all set!").waitFor({ timeout: 5_000 });
+    assert.equal(await meterPage.getByText("Raise your account limit").count(), 0, "optional KYC must not block onboarding completion");
     await meterPage.reload({ waitUntil: "domcontentloaded" });
     assert.equal(await meterPage.getByText("You're all set!").count(), 0, "completion celebration must show once per customer");
     await meterContext.close();

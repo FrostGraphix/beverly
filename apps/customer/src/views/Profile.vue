@@ -48,6 +48,18 @@ const saved    = ref(false);
 const uploading = ref(false);
 const cropOpen = ref(false);
 const cropFile = ref<File | null>(null);
+const voiceSaving = ref(false);
+const loginVoiceEnabled = computed(() => auth.customer?.login_voice_enabled !== false);
+
+async function setLoginVoice(enabled: boolean) {
+    if (!auth.customer || voiceSaving.value) return;
+    const previous = auth.customer.login_voice_enabled !== false;
+    auth.customer.login_voice_enabled = enabled;
+    voiceSaving.value = true; error.value = null;
+    try { await api.patch('/api/v1/customer/me', { login_voice_enabled: enabled }); }
+    catch (e: any) { auth.customer.login_voice_enabled = previous; error.value = e?.message ?? 'Login voice preference could not be saved.'; }
+    finally { voiceSaving.value = false; }
+}
 
 function fallback(value: string | null | undefined): string {
     return value?.trim() || '-';
@@ -290,6 +302,10 @@ async function doSignOut() {
 
     <!-- Actions -->
     <div class="bw-card">
+      <div class="bw-row" style="gap:var(--s-3); margin-bottom:var(--s-3)">
+        <div style="flex:1"><p style="font-weight:700; margin:0">Login voice</p><p class="bw-muted" style="font-size:var(--t-xs); margin:4px 0 0">Play a voice greeting when you sign in.</p></div>
+        <button class="bw-switch" type="button" role="switch" :aria-checked="loginVoiceEnabled" aria-label="Login voice" :disabled="voiceSaving" @click="setLoginVoice(!loginVoiceEnabled)"><span /></button>
+      </div>
       <div class="bw-stack" style="gap: var(--s-2)">
         <router-link v-if="auth.customer?.auth_provider === 'email_password' || auth.customer?.auth_provider === 'phone_password'" to="/password-change" class="bw-btn primary" style="text-decoration:none; justify-content:flex-start">
           Change password

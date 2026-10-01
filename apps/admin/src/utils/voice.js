@@ -1,5 +1,9 @@
 let loginAudio = null;
 let unlocked = false;
+let lastPlayedAt = 0;
+function loginVoiceEnabled() {
+  try { const raw = sessionStorage.getItem('beverly.staff.user') ?? localStorage.getItem('beverly.staff.user'); return !raw || JSON.parse(raw).login_voice_enabled !== false; } catch { return true; }
+}
 
 function getAudio() {
   if (!loginAudio) {
@@ -31,13 +35,15 @@ if (typeof window !== 'undefined') {
 }
 
 export function playLoginVoice() {
+  if (loginVoiceEnabled !== false && !loginVoiceEnabled()) return;
+  if (Date.now() - lastPlayedAt < 3_000) return;
   try {
     const audio = getAudio();
     audio.muted = false;
     audio.currentTime = 0;
     const p = audio.play();
     if (p !== undefined) {
-      p.catch(e => console.warn('Play failed', e));
+      p.then(() => { lastPlayedAt = Date.now(); }).catch(() => {});
     }
   } catch (e) {}
 }

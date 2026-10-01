@@ -1,5 +1,16 @@
 let loginAudio = null;
 let unlocked = false;
+let lastPlayedAt = 0;
+
+function loginVoiceEnabled() {
+  try {
+    for (const key of ['beverly.customer.profile', 'beverly.customer.user']) {
+      const raw = sessionStorage.getItem(key) ?? localStorage.getItem(key);
+      if (raw && JSON.parse(raw).login_voice_enabled === false) return false;
+    }
+  } catch { /* a missing or malformed preference must never break sign-in */ }
+  return true;
+}
 
 function getAudio() {
   if (!loginAudio) {
@@ -31,13 +42,15 @@ if (typeof window !== 'undefined') {
 }
 
 export function playLoginVoice() {
+  if (loginVoiceEnabled !== false && !loginVoiceEnabled()) return;
+  if (Date.now() - lastPlayedAt < 3_000) return;
   try {
     const audio = getAudio();
     audio.muted = false;
     audio.currentTime = 0;
     const p = audio.play();
     if (p !== undefined) {
-      p.catch(e => console.warn('Play failed', e));
+      p.then(() => { lastPlayedAt = Date.now(); }).catch(() => {});
     }
   } catch (e) {}
 }

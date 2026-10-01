@@ -102,6 +102,12 @@ export async function postEntry(input: PostEntryInput): Promise<LedgerEntry> {
         if (/wallet not found/i.test(error.message)) {
             throw new LedgerError(error.message, 'wallet_not_found');
         }
+        if (/daily debit cap exceeded/i.test(error.message)) {
+            throw new LedgerError(error.message, 'daily_debit_cap_exceeded');
+        }
+        if (/monthly debit cap exceeded/i.test(error.message)) {
+            throw new LedgerError(error.message, 'monthly_debit_cap_exceeded');
+        }
         throw new LedgerError(error.message, 'ledger_error');
     }
 
@@ -200,6 +206,12 @@ export async function createHold(input: HoldInput): Promise<Hold> {
         const message = error.message ?? 'Could not create hold.';
         if (/insufficient available balance/i.test(message)) {
             throw new LedgerError(message, 'insufficient_balance');
+        }
+        if (/daily debit cap exceeded/i.test(message)) {
+            throw new LedgerError(message, 'daily_debit_cap_exceeded');
+        }
+        if (/monthly debit cap exceeded/i.test(message)) {
+            throw new LedgerError(message, 'monthly_debit_cap_exceeded');
         }
         if (/wallet (not found|is not active)/i.test(message)) {
             throw new LedgerError(message, 'wallet_inactive');

@@ -100,8 +100,8 @@ onMounted(load);
     <section v-if="loading" class="bw-card empty">Loading KYC policy…</section>
     <form v-else class="bw-card settings-card" @submit.prevent="save">
       <div class="intro">
-        <strong>Applies to new accounts.</strong>
-        <span>Approved upgrades update policy-managed wallets. Staff-set exception caps remain unchanged.</span>
+        <strong>Applies to new and policy-managed accounts.</strong>
+        <span>Existing policy-managed wallets update automatically. Staff-set exception caps remain unchanged.</span>
       </div>
 
       <div class="tier-grid">

@@ -10,6 +10,7 @@ export interface VendorUserProfile {
     phone: string | null;
     email: string | null;
     profile_picture_url: string | null;
+    login_voice_enabled?: boolean;
     mfa_enrolled: boolean;
     mfa_verified: boolean;
     password_reset_required: boolean;

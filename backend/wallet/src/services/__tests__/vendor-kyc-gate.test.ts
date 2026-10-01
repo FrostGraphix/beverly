@@ -17,11 +17,17 @@ vi.mock('../../db/supabase.js', () => ({
 describe('vendor KYC vending gate', () => {
     beforeEach(() => { result = { data: null, error: null }; });
 
-    it('blocks Tier 0 vendors before any vend starts', async () => {
+    it('allows an approved Tier 0 vendor to vend within policy limits', async () => {
         result = { data: { status: 'approved', kyc_tier: 0, kyc_status: 'unverified' }, error: null };
         const { assertVendorKycReadyForVending } = await import('../vendor-kyc-gate.js');
+        await expect(assertVendorKycReadyForVending('vendor-1')).resolves.toBeUndefined();
+    });
+
+    it('blocks vendors whose organization has not been approved', async () => {
+        result = { data: { status: 'pending', kyc_tier: 0, kyc_status: 'unverified' }, error: null };
+        const { assertVendorKycReadyForVending } = await import('../vendor-kyc-gate.js');
         await expect(assertVendorKycReadyForVending('vendor-1')).rejects.toMatchObject({
-            code: 'vendor_kyc_tier_required', status: 403,
+            code: 'vendor_not_approved', status: 403,
         });
     });
 

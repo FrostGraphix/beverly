@@ -237,7 +237,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bw-balance-hero::before { animation: none; }
+  .bw-balance-hero::before,
+  .bw-token-shimmer,
+  .bw-card-shimmer::before { animation: none !important; }
 }
 
 /* Shimmering Text Effect */
@@ -470,3 +472,10 @@
   color: var(--text-2);
   margin: 4px 0 0;
 }
+
+.bw-switch { width:44px; height:24px; border-radius:999px; border:1px solid var(--border); background:var(--surface-3); padding:2px; cursor:pointer; flex:0 0 auto; }
+.bw-switch span { display:block; width:18px; height:18px; border-radius:50%; background:var(--text-muted); transition:transform .18s ease, background .18s ease; }
+.bw-switch[aria-checked="true"] { background:var(--brand); border-color:var(--brand); }
+.bw-switch[aria-checked="true"] span { transform:translateX(18px); background:white; }
+.bw-switch:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+.bw-switch:disabled { opacity:.55; cursor:wait; }

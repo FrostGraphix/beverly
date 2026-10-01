@@ -18,6 +18,7 @@ const progress = ref('');
 const error = ref('');
 const notice = ref('');
 const fileError = ref('');
+const upgradeStarted = ref(false);
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
@@ -180,7 +181,7 @@ onMounted(load);
       <div>
         <p class="eyebrow">Business identity</p>
         <h1>Set up your business</h1>
-        <p>Tier 1 approval unlocks vending. Higher limits stay optional.</p>
+        <p>Your approved business can vend at Tier 0. Verify only when you need a higher limit.</p>
       </div>
       <button class="bw-btn" :disabled="loading || submitting" @click="load">Refresh</button>
     </header>
@@ -193,7 +194,7 @@ onMounted(load);
       <div>
         <p class="business-summary-kicker">Business details saved</p>
         <h2>{{ businessName }}</h2>
-        <p>Submit Tier 1 now. Beverly approval unlocks vending.</p>
+        <p>Your Tier 0 wallet is ready. Higher limits remain optional.</p>
       </div>
     </section>
 
@@ -223,9 +224,17 @@ onMounted(load);
     <section v-else-if="tier >= 2" class="bw-card complete-card">
       <span class="complete-mark">✓</span><div><h2>Enhanced KYC complete</h2><p>Your vendor account reached Tier 2.</p></div>
     </section>
+    <section v-else-if="tier === 0 && !upgradeStarted && !changesRequested" class="bw-card complete-card">
+      <span class="complete-mark">✓</span>
+      <div>
+        <h2>Your vendor wallet is ready</h2>
+        <p>Vend within your configured Tier 0 limit. Verify your identity only when you need a higher limit.</p>
+      </div>
+      <button class="bw-btn primary" type="button" @click="upgradeStarted = true">Raise my limit</button>
+    </section>
     <section v-else class="bw-card submission-card">
       <div class="section-head"><div><span>Next verification</span><h2>Request Tier {{ requestedTier }}</h2></div><span class="bw-badge warn">Beverly review</span></div>
-      <p class="instructions">{{ needsAddress ? 'Provide identity, a current selfie, and recent business address evidence.' : 'Provide identity and a current selfie. Beverly approval unlocks vending after Tier 1.' }}</p>
+      <p class="instructions">{{ needsAddress ? 'Provide identity, a current selfie, and recent business address evidence.' : 'Provide identity and a current selfie to raise your configured daily limit.' }}</p>
       <form @submit.prevent="submit">
         <div class="upload-grid">
           <label class="upload-field">
