@@ -6,6 +6,7 @@ do $guard$ begin
   if exists(select 1 from public.oem_inventory_customers) or exists(select 1 from public.oem_inventory_meters)
     then raise exception 'Retain populated OEM inventory'; end if;
 end $guard$;
+delete from public.oem_sync_cursors where cursor_type = 'inventory_snapshot';
 drop function public.get_authorized_oem_inventory_reconciliation(uuid,uuid);
 drop function public.list_authorized_oem_inventory_meters(uuid,uuid,uuid,integer);
 drop function public.apply_oem_inventory_snapshot(uuid,jsonb,jsonb);

@@ -352,12 +352,19 @@ async function applyScopedPlan(client, plan, target) {
   return summary;
 }
 
+function resolveImportMode(argumentsList) {
+  const legacy = argumentsList.includes("--legacy");
+  const scoped = argumentsList.includes("--scoped");
+  if (legacy && scoped) throw new Error("--legacy and --scoped are mutually exclusive");
+  return legacy ? "legacy" : "scoped";
+}
+
 /** @returns {Promise<void>} */
 async function main() {
   process.loadEnvFile(".env");
   const argumentsList = process.argv.slice(2);
   const apply = argumentsList.includes("--apply");
-  const scoped = argumentsList.includes("--scoped");
+  const mode = resolveImportMode(argumentsList);
   const target = resolveImportTarget(argumentsList);
   const connectionString = resolveImportConnectionString(target, process.env);
   const caResponse = await fetch(SUPABASE_CA_URL);
@@ -371,14 +378,14 @@ async function main() {
     await assertImportInstallation(client, target);
     const customers = await fetchSparkMeterCustomers();
     const plan = buildSparkMeterSandboxImportPlan({ installationId: target.installationId, manufacturerId: target.manufacturerId, customers });
-    const reconciliation = apply ? (scoped ? await applyScopedPlan(client, plan, target) : await applyPlan(client, plan, target)) : null;
-    console.log(JSON.stringify({ apply, scoped, environment: target.environment, customers: plan.customers.length, meters: plan.meters.length, mappings: plan.mappings.length, skippedWithoutMeters: plan.skippedWithoutMeters, reconciliation }));
+    const reconciliation = apply ? (mode === "scoped" ? await applyScopedPlan(client, plan, target) : await applyPlan(client, plan, target)) : null;
+    console.log(JSON.stringify({ apply, mode, environment: target.environment, customers: plan.customers.length, meters: plan.meters.length, mappings: plan.mappings.length, skippedWithoutMeters: plan.skippedWithoutMeters, reconciliation }));
   } finally {
     await client.end().catch(() => undefined);
   }
 }
 
-module.exports = { applyScopedPlan, buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers, resolveImportConnectionString, resolveImportTarget };
+module.exports = { applyScopedPlan, buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers, resolveImportConnectionString, resolveImportMode, resolveImportTarget };
 
 if (require.main === module) {
   main().catch((error) => {

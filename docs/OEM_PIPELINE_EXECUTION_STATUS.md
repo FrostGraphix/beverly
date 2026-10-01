@@ -1,16 +1,21 @@
 # OEM pipeline execution status
 
-Status: **Incomplete**. Updated 2026-09-28.
+Status: **Incomplete**. Updated 2026-10-01.
 
 ## Latest checkpoint
 
 - Tenant authority now requires two independent server-managed records: active tenant membership and active installation access. Both checks execute inside each database read. Staff role, browser parameters and installation grants alone cannot establish membership.
 - Added installation-scoped customer and meter storage. `apply_oem_inventory_snapshot` validates complete identities, duplicate external IDs, duplicate serials, customer links and ownership changes before mutation. One installation lock serializes snapshots. Missing rows become stale; nothing is deleted. Legacy Calinmeter tables remain untouched.
-- The SparkMeter importer keeps its legacy behavior by default. Explicit `--scoped --apply` uses the single atomic snapshot RPC. The existing metered-only plan still excludes the 39 meterless customers. No live import ran during this checkpoint.
+- The SparkMeter importer now defaults to installation-scoped storage. Legacy OEM-wide storage requires explicit `--legacy --apply`. The existing metered-only plan still excludes the 39 meterless customers. No live import ran during this checkpoint.
 - Downstream meter and reconciliation endpoints use database-enforced tenant membership plus installation grants. They return sanitized meter metadata and snapshot evidence without customer contact data. The Wallet Admin OEM console consumes these endpoints.
-- Node 22 wallet verification passes 80 files and 564 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for the changed wallet route and tests. Full repository lint still has 997 pre-existing violations.
+- Node 22 wallet verification passes 80 files and 566 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for changed wallet files. Full repository lint still has 997 pre-existing violations.
 - Database gates P1 and P5 require an explicit database URL and verify the official Supabase certificate chain. P5's embedded password fallback was removed. A security regression protects both boundaries.
 - Restore target connection remains unavailable with SQLSTATE `XX000` from the provider. The configured restore pooler identity matches the known restore project, but no specific cause is established. No migration, membership, grant or inventory row was applied.
+- The repeatable audit now follows `OEM_MASTER_AUDIT_PROMPT.md`. Credential rotation persists ciphertext and version through one service-role-only compare-and-swap, records the responsible actor, and rejects concurrent changes. No credential row was rotated.
+- Inventory snapshots now reject null and empty complete-snapshot payloads before locking or mutation. Malformed upstream results cannot mark an installation's entire inventory stale.
+- Two tracked operator scripts were hardened. The Calinmeter credential synchronizer requires explicit apply intent and environment credentials, sanitizes failures, and exits nonzero. The historical reconciliation script now verifies Supabase TLS.
+- Vercel now routes `/api/v1/oem/*` into the wallet backend before its legacy fallback. Caller-provided `x-oem-id` no longer selects manufacturer credentials; only an internal request field can select OEM configuration.
+- The credential inspection utility selects metadata only. Inventory rollback removes its snapshot cursor. Existing meter serial swaps release unique keys inside the serialized snapshot transaction.
 
 ### Deployment gate
 
@@ -46,10 +51,10 @@ Supply `OEM_INSTALLATION_ENCRYPTION_KEYS` as a secret JSON object mapping versio
 ## Evidence-backed gaps
 
 - `packages/oem-contracts/index.d.ts` defines stations, meters and vending contracts, but not a complete reading/event ingestion contract.
-- `backend/wallet/src/services/oem-installations.ts` and `oem-installation-credentials.ts` are isolated authorization/credential building blocks. Runtime integration must be traced before claiming tenant isolation.
+- Installation authorization, credential loading and atomic rotation are implemented building blocks. No executed database rotation proves live rotation yet.
 - `backend/wallet/src/adapters/sparkmeter-v1.ts` builds payment requests; it is not a deployed provider dispatcher. Its credit assessment has no runtime consumer. Prior claims that it actively blocks writes or prevents negative credit were overstated.
 - `tools/import-sparkmeter-sandbox.cjs` is an operator import, not a scheduler or incremental telemetry pipeline. Pagination was unbounded and malformed meter collections were treated as meterless customers.
-- Imported legacy customers/meters use OEM-wide keys. Multiple installations of one provider need collision-safe storage before general multi-tenant rollout.
+- Legacy imports retain OEM-wide keys for compatibility. The explicit scoped path uses installation-bound identities; database execution remains unverified.
 - The current customer API proves account metadata and balances, not physical meter connectivity or offline cutoff. Firmware enforcement and current relay telemetry remain unverified.
 - Production canary dispatch, reconciliation, authenticated preview smoke and real provider write certification remain incomplete. Existing draft gates must remain enforced.
 
@@ -108,4 +113,4 @@ Protected-preview smoke is separately blocked: none of `VERCEL_PROTECTION_BYPASS
 - The earlier correction batch introduced no migration. The latest inventory batch adds the grant migration described above. Reverting code must not remove imported customer/meter records or populated grant tables.
 - Inventory read failures occur before import mutation. Retry the operator command after the upstream failure is resolved. Existing batch transactions roll back the failing batch; earlier committed batches remain and reruns use existing conflict checks.
 - Do not broaden this legacy importer to another installation or tenant until its OEM-wide resource identity is migrated and exercised against a real test database.
-- Production monitoring, atomic checkpoints, replay, dead-letter handling and scoped UI remain implementation work, not deployed features.
+- Scoped inventory checkpoints and UI are implemented. Telemetry monitoring, replay, quarantine handling and deployed database verification remain incomplete.

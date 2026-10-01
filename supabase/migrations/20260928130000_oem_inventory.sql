@@ -40,8 +40,12 @@ declare
   v_now timestamptz := now(); v_customer_count integer; v_meter_count integer;
   v_stale_customers integer; v_stale_meters integer; v_installation_id uuid; v_checksum text;
 begin
-  if jsonb_typeof(p_customers) <> 'array' or jsonb_typeof(p_meters) <> 'array' then
+  if p_customers is null or p_meters is null
+    or jsonb_typeof(p_customers) <> 'array' or jsonb_typeof(p_meters) <> 'array' then
     raise exception 'inventory payloads must be arrays';
+  end if;
+  if jsonb_array_length(p_customers) = 0 or jsonb_array_length(p_meters) = 0 then
+    raise exception 'inventory snapshot cannot be empty';
   end if;
   select id into v_installation_id from public.oem_installations
     where id = p_installation_id and status in ('draft','active') for update;
@@ -76,6 +80,10 @@ begin
     select p_installation_id,external_id,code,name,phone,service_area_id,site_id,'active',v_now,v_now from incoming_customers
     on conflict(oem_installation_id,external_id) do update set code=excluded.code,name=excluded.name,
       phone=excluded.phone,service_area_id=excluded.service_area_id,site_id=excluded.site_id,status='active',last_seen_at=v_now,updated_at=v_now;
+  update public.oem_inventory_meters m
+    set serial='__beverly_serial_swap__' || m.id::text, updated_at=v_now
+    from incoming_meters n
+    where m.oem_installation_id=p_installation_id and m.external_id=n.external_id and m.serial<>n.serial;
   insert into public.oem_inventory_meters(oem_installation_id,external_id,customer_external_id,serial,tariff_id,meter_phase,site_id,status,last_seen_at,updated_at)
     select p_installation_id,external_id,customer_external_id,serial,tariff_id,meter_phase,site_id,'active',v_now,v_now from incoming_meters
     on conflict(oem_installation_id,external_id) do update set serial=excluded.serial,tariff_id=excluded.tariff_id,

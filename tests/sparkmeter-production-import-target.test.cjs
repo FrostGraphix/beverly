@@ -1,7 +1,11 @@
 "use strict";
 
 const assert = require("assert");
-const { resolveImportConnectionString, resolveImportTarget } = require("../tools/import-sparkmeter-sandbox.cjs");
+const { resolveImportConnectionString, resolveImportMode, resolveImportTarget } = require("../tools/import-sparkmeter-sandbox.cjs");
+
+assert.strictEqual(resolveImportMode([]), "scoped", "multi-tenant storage must be the default");
+assert.strictEqual(resolveImportMode(["--legacy"]), "legacy", "legacy storage must require explicit selection");
+assert.throws(() => resolveImportMode(["--legacy", "--scoped"]), /mutually exclusive/i);
 
 const sandboxTarget = resolveImportTarget([]);
 assert.strictEqual(sandboxTarget.environment, "sandbox");

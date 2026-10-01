@@ -24,12 +24,18 @@ assert(sql.includes("function public.get_authorized_oem_inventory_reconciliation
 assert(sql.includes("join public.oem_tenant_memberships"), "downstream reads require tenant membership");
 assert(sql.includes("join public.oem_actor_installation_access"), "downstream reads require installation grants");
 assert(sql.includes("for update"), "installation snapshots must serialize");
+assert(sql.includes("p_customers is null or p_meters is null"), "null snapshots must fail closed");
+assert(sql.includes("jsonb_array_length(p_customers) = 0"), "empty customer snapshots must fail closed");
+assert(sql.includes("jsonb_array_length(p_meters) = 0"), "empty meter snapshots must fail closed");
 assert(sql.includes("status = 'stale'"), "missing resources must become stale");
 assert(sql.includes("unique (oem_installation_id, external_id)"), "external identity must be installation scoped");
 assert(sql.includes("unique (oem_installation_id, serial)"), "serial identity must be installation scoped");
+assert(sql.includes("'__beverly_serial_swap__' || m.id::text"), "existing serial swaps must release unique keys atomically");
+assert(sql.includes("meter ownership change requires review"), "meter ownership changes must fail closed");
 assert(!sql.includes("delete from public.oem_inventory"), "snapshot reconciliation cannot delete inventory");
 assert(!sql.includes("insert into public.tenants"), "ownership cannot be inferred");
 assert(rollback.includes("manual rollback review required"), "rollback must be guarded");
+assert(rollback.includes("delete from public.oem_sync_cursors"), "rollback must remove its inventory cursor");
 assert(membership.includes("primary key (tenant_id, auth_user_id)"), "memberships must be tenant scoped");
 assert(membership.includes("force row level security"), "memberships require forced RLS");
 assert(!membership.includes("insert into public.oem_tenant_memberships"), "membership cannot be inferred");

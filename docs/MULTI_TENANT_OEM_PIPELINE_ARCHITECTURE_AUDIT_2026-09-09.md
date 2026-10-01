@@ -2112,3 +2112,21 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - Local Node 22 wallet regression passed 80 files and 564 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds passed. Inventory migration, importer and console contracts passed. Targeted lint passed; full lint retains 997 pre-existing violations.
 - Database gates P1 and P5 reject missing explicit configuration and certificate-verify Supabase. P5's embedded password fallback and both disabled TLS configurations were removed. Their security regression passes.
 - Vercel preview deployment `dpl_DJY79EwBBti6DMpGuW5GwGanXr6v` reached `READY` for commit `f337a85c`. Protected root, health and readiness requests still returned authentication redirects, including temporary-share attempts. Production remains blocked by unapplied migrations, absent explicit membership/grant provisioning, unavailable restore verification and unresolved SparkMeter financial retry semantics.
+
+### 23.53 Master audit remediation (2026-10-01)
+
+- Added `OEM_MASTER_AUDIT_PROMPT.md` as the repeatable evidence, test, security and completion contract. It separates local evidence from live verification and prohibits production activation during audits.
+- Added service-role-only atomic credential rotation. The database compares the installation, old envelope and old version before updating ciphertext, version and actor attribution together. Concurrent changes fail closed. No stored credential was rotated.
+- Complete inventory snapshots now reject null or empty customer and meter arrays before mutation. Malformed upstream responses cannot stale every stored resource.
+- Removed a tracked Calinmeter operator password and mandatory endpoint defaults. The mutating synchronizer now requires `--apply`, explicit environment credentials, bounded requests, sanitized errors and nonzero failure exit. Calinmeter runtime behavior was not changed.
+- Removed disabled TLS verification from the tracked historical reconciliation audit. It now uses the official Supabase CA with hostname verification.
+- Node 22 OEM contracts, security regression, root regression, wallet regression and all six builds pass. Wallet reports 80 files and 566 tests. Migration hygiene passes with 174 migrations. Targeted credential lint passes. The restore pooler still returns SQLSTATE `XX000`; the derived direct host does not resolve. No migration or production write was attempted.
+
+### 23.54 Independent audit corrections (2026-10-01)
+
+- Three read-only audits reviewed runtime reachability, database recovery and security boundaries. They found unreachable deployed OEM routes, caller-controlled legacy OEM credential selection, secret-bearing credential diagnostics, unsafe legacy import defaults, stale rollback evidence and meter-serial swap collisions.
+- Red/green contracts now require the OEM Vercel rewrite before the legacy fallback, ignore caller `x-oem-id` values, expose credential metadata only, default SparkMeter imports to installation-scoped storage, remove inventory cursors during guarded rollback and free known meter serial changes atomically before upsert.
+- Empty complete snapshots remain rejected deliberately. An operator cannot stale all inventory using an empty upstream response. A legitimate zero-inventory transition therefore requires a future explicit reviewed mechanism; it is not inferred automatically.
+- Credential rollback must retain every encryption key version referenced by stored rows. Dropping the rotation RPC does not re-encrypt rotated credentials. Runbooks must keep older and newer key versions until a verified reverse rotation completes.
+- The endpoint validator still has no legacy registry caller. Production financial dispatch, scheduled inventory synchronization and authoritative SparkMeter ambiguous-write semantics remain unresolved. No speculative dispatcher, schedule or provider retry behavior was added.
+- No migration, credential rotation, provider mutation or production activation occurred.
