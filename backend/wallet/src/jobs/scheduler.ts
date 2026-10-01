@@ -23,8 +23,35 @@ import {
 } from '../services/payment-status.js';
 import { fulfillSuccessfulPaystackTransaction, markUnsuccessfulPaystackTransaction } from '../services/payment-transactions.js';
 
+export async function sweepApprovedFundingCredits(): Promise<{
+    checked: number;
+    repaired: number;
+    missingLedger: number;
+    staleWallet: number;
+    blockedInactive: number;
+    duplicateCredits: number;
+    gatewayMissing: number;
+}> {
+    const { data, error } = await adminClient.rpc('fn_reconcile_approved_funding_credits', {
+        p_limit: 250,
+    });
+    if (error) throw new Error(error.message);
+    const result = data as {
+        checked: number;
+        repaired: number;
+        missingLedger: number;
+        staleWallet: number;
+        blockedInactive: number;
+        duplicateCredits: number;
+        gatewayMissing: number;
+    };
+    console.info(`[JOB:funding-credits] checked=${result.checked} repaired=${result.repaired} blocked=${result.blockedInactive} stale=${result.staleWallet} duplicate=${result.duplicateCredits} gatewayMissing=${result.gatewayMissing}`);
+    return result;
+}
+
 // ── Hold expiry sweeper ────────────────────────────────────────────────────────
 export async function sweepExpiredHolds(): Promise<void> {
+    await reconcileGeneratedHoldOrders();
     // Holds older than 30 min with no capture → release
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: stale } = await adminClient
@@ -86,14 +113,28 @@ export async function reconcileGeneratedHoldOrders(): Promise<void> {
                     idempotencyKey: ledgerKey('purchase', 'capture', po.id, 'reconcile-auto'),
                     memo: `Auto Reconcile · ${po.meter_id}`,
                     createdBy: po.created_by ?? 'system',
-                }).catch(() => undefined);
+                });
             }
-            await adminClient.from('purchase_orders').update({
+            const { error: updateError } = await adminClient.from('purchase_orders').update({
                 status: 'delivered',
                 delivery_state: po.delivery_state || 'token_generated',
             }).eq('id', po.id);
+            if (updateError) throw updateError;
             count++;
-        } catch { /* noop */ }
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : 'purchase_recovery_failed';
+            await adminClient.from('operations_exceptions').upsert([{
+                exception_key: `purchase-recovery:${po.id}`,
+                category: 'purchase_recovery_failed',
+                target_type: 'purchase_order',
+                target_id: po.id,
+                severity: 'critical',
+                status: 'open',
+                details: { meter_id: po.meter_id, hold_id: po.hold_id, error: detail.slice(0, 500) },
+                updated_at: new Date().toISOString(),
+            }], { onConflict: 'exception_key' });
+            console.error(`[JOB:hold-reconcile] ${po.id} failed:`, error);
+        }
     }
     if (count > 0) {
         console.info(`[JOB:hold-reconcile] auto-fulfilled ${count} hold_active orders with generated tokens`);

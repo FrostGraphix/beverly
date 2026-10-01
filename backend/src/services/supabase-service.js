@@ -72,7 +72,9 @@ async function supabaseFetch(url, { timeoutMs, retryable = false, ...options } =
     signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs(timeoutMs))
   });
   try {
-    return await attempt();
+    const response = await attempt();
+    if (retryable && [502, 503, 504].includes(response.status)) return await attempt();
+    return response;
   } catch (error) {
     if (retryable && isTransientConnectionError(error)) return await attempt();
     throw error;

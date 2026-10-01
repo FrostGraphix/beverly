@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import Stepper from '../components/Stepper.vue';
@@ -13,7 +13,7 @@ const vendorPortalUrl = new URL('/wallet-vendor/', import.meta.env.VITE_CRM_URL 
 const STEPS = [
     { key: 'business', label: 'Business', description: 'Legal & trading info' },
     { key: 'contact',  label: 'Contact',  description: 'Primary user' },
-    { key: 'limits',   label: 'Limits',   description: 'Spend caps' },
+    { key: 'limits',   label: 'Access',   description: 'Starting KYC tier' },
     { key: 'review',   label: 'Review',   description: 'Confirm details' },
 ];
 
@@ -32,7 +32,6 @@ const form = ref({
     primaryUserFullName: '',
     primaryUserEmail: '',
     primaryUserPhone: '',
-    dailyLimitNaira: 10000000,
     sourceApplicationId: '',
 });
 
@@ -118,15 +117,6 @@ function validateStep(index: number): boolean {
         }
     }
 
-    if (index === 2) {
-        if (!form.value.dailyLimitNaira || form.value.dailyLimitNaira < 1000) {
-            errs.dailyLimitNaira = 'Daily cap must be at least ₦1,000.';
-        }
-        if (form.value.dailyLimitNaira > 100_000_000) {
-            errs.dailyLimitNaira = 'Daily cap above ₦100M needs CTO approval — set lower.';
-        }
-    }
-
     fieldErrors.value = errs;
     return Object.keys(errs).length === 0;
 }
@@ -179,7 +169,6 @@ async function submit() {
             primaryUserFullName: form.value.primaryUserFullName.trim(),
             primaryUserEmail: form.value.primaryUserEmail.trim(),
             primaryUserPhone: form.value.primaryUserPhone.trim() || undefined,
-            dailyLimitMinor: Math.round(form.value.dailyLimitNaira * 100),
             sourceApplicationId: form.value.sourceApplicationId || undefined,
         };
         result.value = await api.post('/api/v1/admin/vendors', payload, { headers: { 'Idempotency-Key': requestKey.value } });
@@ -203,9 +192,6 @@ function createAnother() {
     requestKey.value = crypto.randomUUID();
 }
 
-const dailyLimitFmt = computed(() =>
-    '₦' + form.value.dailyLimitNaira.toLocaleString('en-NG'),
-);
 </script>
 
 <template>
@@ -354,24 +340,11 @@ const dailyLimitFmt = computed(() =>
           </div>
         </section>
 
-        <!-- ── STEP 2: Limits ──────────────────────────────────── -->
+        <!-- ── STEP 2: Starting access ─────────────────────────── -->
         <section v-if="currentIndex === 2" class="step-pane">
-          <div>
-            <label class="bw-label">Daily debit cap (₦) *</label>
-            <input class="bw-input bw-mono" :class="{ 'has-error': fieldErrors.dailyLimitNaira }" type="number" v-model.number="form.dailyLimitNaira" min="1000" step="10000" />
-            <p v-if="fieldErrors.dailyLimitNaira" class="field-error">{{ fieldErrors.dailyLimitNaira }}</p>
-            <p class="field-hint">
-              Vendor cannot vend more than this in a 24-hour rolling window.
-              Currently set to <strong>{{ dailyLimitFmt }}</strong>.
-            </p>
-          </div>
-
-          <div class="limit-presets">
-            <button type="button" class="preset-chip" :class="{ active: form.dailyLimitNaira === 1_000_000 }" @click="form.dailyLimitNaira = 1_000_000">₦1M</button>
-            <button type="button" class="preset-chip" :class="{ active: form.dailyLimitNaira === 5_000_000 }" @click="form.dailyLimitNaira = 5_000_000">₦5M</button>
-            <button type="button" class="preset-chip" :class="{ active: form.dailyLimitNaira === 10_000_000 }" @click="form.dailyLimitNaira = 10_000_000">₦10M</button>
-            <button type="button" class="preset-chip" :class="{ active: form.dailyLimitNaira === 50_000_000 }" @click="form.dailyLimitNaira = 50_000_000">₦50M</button>
-            <button type="button" class="preset-chip" :class="{ active: form.dailyLimitNaira === 100_000_000 }" @click="form.dailyLimitNaira = 100_000_000">₦100M</button>
+          <div class="info-callout">
+            <strong>Tier 0 starts automatically.</strong>
+            Beverly applies the current KYC limit from Compliance settings. The vendor can request an upgrade only when their activity needs it.
           </div>
         </section>
 
@@ -410,11 +383,11 @@ const dailyLimitFmt = computed(() =>
 
             <div class="review-section">
               <div class="review-section-head">
-                <h3>Limits</h3>
-                <button type="button" class="review-edit" @click="goToStep(2)">Edit</button>
+                <h3>Starting access</h3>
+                <button type="button" class="review-edit" @click="goToStep(2)">View</button>
               </div>
               <dl class="review-dl">
-                <dt>Daily cap</dt><dd>{{ dailyLimitFmt }}</dd>
+                <dt>KYC tier</dt><dd>Tier 0 · policy limit applied automatically</dd>
               </dl>
             </div>
           </div>

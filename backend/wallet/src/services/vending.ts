@@ -19,7 +19,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyVendor } from './vendor-notifications.js';
-import { sendNotification } from './notifications.js';
+import { notifyTokenPurchased, sendNotification } from './notifications.js';
 import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
@@ -44,6 +44,7 @@ import {
     recordOemQuotaFailure,
 } from './oem-quota-circuit.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
+import { assertVendorKycReadyForVending, VendorKycGateError } from './vendor-kyc-gate.js';
 
 export class VendingError extends Error {
     constructor(
@@ -179,6 +180,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         assertEnergyVendReady();
     } catch (error) {
         if (error instanceof TokenEngineError) throw new VendingError(error.message, error.code);
+        throw error;
+    }
+
+    try {
+        await assertVendorKycReadyForVending(input.vendorOrganizationId);
+    } catch (error) {
+        if (error instanceof VendorKycGateError) {
+            throw new VendingError(error.message, error.code, { status: error.status });
+        }
         throw error;
     }
 
@@ -445,6 +455,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         dedupeKey: `vending.purchase.${po.id}`,
         metadata: { purchaseOrderId: po.id, meterId: meter.meterId, deliveryState: po.delivery_state },
     }).catch(() => undefined);
+
+    if (meter.customerId) {
+        await notifyTokenPurchased(meter.customerId, {
+            purchaseOrderId: po.id,
+            meterId: meter.meterId,
+            units: preview.units,
+            amountMinor: preview.grossAmountMinor,
+        }).catch(() => undefined);
+    }
 
     return {
         purchaseOrder: po,

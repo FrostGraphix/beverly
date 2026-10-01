@@ -17,7 +17,8 @@ export function safeVendorRedirect(raw: unknown, fallback = '/'): string {
     }
     if (decoded.includes('\\') || /[\u0000-\u001f\u007f]/.test(decoded)) return fallback;
     const url = new URL(value, 'https://vendor.invalid');
-    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+    const portalRelativePath = url.pathname.replace(/^\/(?:wallet-vendor|vendor)(?=\/|$)/i, '') || '/';
+    const pathname = portalRelativePath.replace(/\/+$/, '') || '/';
     if (AUTHENTICATION_PATHS.has(pathname.toLowerCase())) return fallback;
-    return `${url.pathname}${url.search}${url.hash}`;
+    return `${portalRelativePath}${url.search}${url.hash}`;
 }

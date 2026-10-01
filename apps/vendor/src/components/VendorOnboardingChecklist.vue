@@ -38,7 +38,7 @@ const steps = computed(() => {
         {
             key: 'mfa',
             label: 'Enable two-factor auth (MFA)',
-            description: 'Required before you can vend > ₦200,000',
+            description: 'Required before higher-risk actions',
             done: mfaDone,
             to: '/security',
             icon: '🛡️',

@@ -14,6 +14,13 @@ export function presentVendorVendFailure(
     code: unknown,
     details?: unknown,
 ): VendFailurePresentation {
+    if (code === 'vendor_kyc_tier_required') {
+        return {
+            showPopup: false,
+            blockConfirmation: true,
+            action: 'Complete Tier 1 verification. Beverly approval unlocks vending.',
+        };
+    }
     if (code === 'oem_quota_circuit_unavailable') {
         return {
             showPopup: false,

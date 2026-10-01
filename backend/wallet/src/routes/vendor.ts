@@ -9,7 +9,7 @@ import { vendorPasswordError } from '@beverly/tokens/password-policy';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
 import { resolveFundingCallbackUrl } from '../config/funding-callbacks.js';
-import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
+import { findWalletByOwner, getOrCreateKycManagedWallet } from '../services/wallets.js';
 import { getBalance, getEntries, getActivitySummary } from '../services/ledger.js';
 import {
     initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, removeBankFundingProof, FundingError,
@@ -73,6 +73,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
+import { getKycTierPolicy, KycTierPolicyError } from '../services/kyc-tier-policy.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import { assertOemVendAvailable, OemQuotaCircuitError } from '../services/oem-quota-circuit.js';
 
@@ -265,6 +266,7 @@ async function shapeVendorProfile(row: any, mfaVerified: boolean | undefined) {
         phone: row?.phone ?? org?.contact_phone ?? null,
         email: row?.email ?? org?.contact_email ?? null,
         profile_picture_url: row?.profile_picture_url ?? null,
+        login_voice_enabled: row?.login_voice_enabled !== false,
         mfa_enrolled: row?.mfa_enrolled,
         mfa_verified: mfaVerified,
         password_reset_required: row?.password_reset_required,
@@ -298,7 +300,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor!;
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, login_voice_enabled, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
             .eq('id', actor.actorId).single();
         return shapeVendorProfile(vu, actor.mfaVerified);
     });
@@ -310,11 +312,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
             phone: z.string().trim().min(6).max(32).optional(),
+            login_voice_enabled: z.boolean().optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.full_name = body.full_name;
         if (body.phone !== undefined) updates.phone = body.phone;
+        if (body.login_voice_enabled !== undefined) updates.login_voice_enabled = body.login_voice_enabled;
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
@@ -322,7 +326,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('vendor_users')
             .update(updates)
             .eq('id', req.actor!.actorId)
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, login_voice_enabled, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return shapeVendorProfile(data, req.actor?.mfaVerified);
@@ -330,15 +334,21 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/kyc/status', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         try {
-            return await currentKycState('vendor', req.actor!.vendorOrganizationId!);
+            const [state, policy] = await Promise.all([
+                currentKycState('vendor', req.actor!.vendorOrganizationId!),
+                getKycTierPolicy(),
+            ]);
+            return { ...state, policy };
         } catch (error) {
             if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            if (error instanceof KycTierPolicyError) return reply.code(503).send({ error: error.code, message: error.message });
             throw error;
         }
     });
 
     fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const body = z.object({
+            requested_tier: z.union([z.literal(1), z.literal(2)]),
             document_type: z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie']),
             mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
             size_bytes: z.number().int().min(1).max(10 * 1024 * 1024),
@@ -346,11 +356,31 @@ const route: FastifyPluginAsync = async (fastify) => {
         }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_document', message: body.error.message });
         try {
+            const current = await currentKycState('vendor', req.actor!.vendorOrganizationId!);
+            if (body.data.requested_tier !== Number(current.kyc_tier ?? 0) + 1) {
+                return reply.code(409).send({ error: 'tier_not_sequential', message: 'Complete KYC tiers in order.' });
+            }
             return await createKycUpload({
-                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: 2,
+                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: body.data.requested_tier,
                 documentType: body.data.document_type, mimeType: body.data.mime_type,
                 sizeBytes: body.data.size_bytes, expiresAt: body.data.expires_at,
             });
+        } catch (error) {
+            if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
+        try {
+            const review = await submitKycReview({
+                subjectType: 'vendor', subjectId: req.actor!.vendorOrganizationId!, requestedTier: 1,
+                submittedBy: req.actor!.userId, submission: { method: 'manual_document_review', identity_basis: 'government_id_and_selfie' },
+                documentIds: body.data.document_ids,
+            });
+            return { ok: true, review };
         } catch (error) {
             if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message });
             throw error;
@@ -723,12 +753,20 @@ const route: FastifyPluginAsync = async (fastify) => {
         const accessToken = tokData.access_token;
         const userId = tokData.user.id;
 
-        const { data: vu } = await adminClient
+        const { data: vu, error: vendorLookupError } = await adminClient
             .from('vendor_users')
             .select('id, vendor_organization_id, role, full_name, phone, email, email_verified_at, profile_picture_url, mfa_enrolled, password_reset_required, password_changed_at, password_session_id, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
             .eq('auth_user_id', userId)
             .maybeSingle();
+        if (vendorLookupError) {
+            await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
+            return reply.code(503).send({
+                error: 'vendor_directory_unavailable',
+                message: 'Your account could not be loaded. Try again shortly.',
+            });
+        }
         if (!vu) {
+            await adminClient.auth.admin.signOut(userId, 'global').catch(() => undefined);
             return reply.code(403).send({ error: 'not_vendor', message: 'This account is not linked to a vendor.' });
         }
         let confirmedAt = body.email
@@ -958,7 +996,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── wallet summary ──
     fastify.get('/wallet', { preHandler: fastify.requireVendor() }, async (req) => {
         const orgId = req.actor!.vendorOrganizationId!;
-        const wallet = await getOrCreateWallet('vendor', orgId, { dailyCapMinor: 500_000_000 });
+        const wallet = await getOrCreateKycManagedWallet('vendor', orgId, 0);
         const balance = await getBalance(wallet.id);
         let activity = { todayVendedMinor: 0, todayVendedCount: 0, todayFundedMinor: 0, totalFundedMinor: 0, totalReversedMinor: 0 };
         try {
@@ -1487,7 +1525,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     : error.code === 'oem_insufficient_quota' ? 422
                     : error.code === 'oem_quota_circuit_unavailable' ? 503
                     : error.code === 'wallet_missing' ? 404
-                    : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' ? 403
+                    : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' || error.code === 'vendor_kyc_tier_required' || error.code === 'vendor_not_approved' ? 403
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
                     : 422;
                 return reply.code(status).send({

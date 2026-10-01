@@ -23,6 +23,7 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
     { key: 'wallet.meters.approve', label: 'Approve customer meter links', group: 'Customers', risk: 'high' },
     { key: 'wallet.kyc.view', label: 'View customer and vendor KYC', group: 'Compliance', risk: 'high' },
     { key: 'wallet.kyc.review', label: 'Approve or reject KYC tiers', group: 'Compliance', risk: 'critical' },
+    { key: 'wallet.kyc.settings.manage', label: 'Manage KYC tier limits', group: 'Compliance', risk: 'critical' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve customer and vendor funding', group: 'Money', risk: 'critical' },
     { key: 'wallet.vendor_transfers.manage', label: 'Transfer balances between vendor wallets', group: 'Money', risk: 'critical' },
@@ -87,6 +88,7 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
 };
 
 export const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
+export const CUSTOM_ROLE_RESTRICTED_PERMISSIONS = new Set(['dev.console']);
 
 export class PermissionResolutionError extends Error {
     constructor(message = 'Permissions could not be verified.') {

@@ -48,8 +48,9 @@ import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
-import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
+import { CUSTOM_ROLE_RESTRICTED_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
+import { getKycTierPolicy, KycTierPolicyError, updateKycTierPolicy } from '../services/kyc-tier-policy.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
 import { generateTemporaryPassword } from '../services/temporary-password.js';
 function csvEscape(v: unknown): string {
@@ -519,6 +520,9 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /kyc/documents/:id/url': 'wallet.kyc.view',
     'POST /kyc/reviews/:id/approve': 'wallet.kyc.review',
     'POST /kyc/reviews/:id/reject': 'wallet.kyc.review',
+    'GET /kyc/settings': 'wallet.kyc.view',
+    'PUT /kyc/settings': 'wallet.kyc.settings.manage',
+    'GET /kyc/settings/history': 'wallet.kyc.view',
     'DELETE /customers/:id': 'wallet.funding.approve',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
     'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
@@ -850,6 +854,7 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
         station_id: staff?.station_id ?? actor!.stationId ?? null,
         station_ids: staff?.station_ids ?? actor!.stationIds ?? [],
         profile_picture_url: staff?.profile_picture_url ?? null,
+        login_voice_enabled: staff?.login_voice_enabled !== false,
         updated_at: staff?.updated_at ?? null,
         password_reset_required: actor?.passwordResetRequired === true,
     };
@@ -894,7 +899,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         try {
             let staffResult = await adminClient
                 .from('users')
-                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at, password_reset_required')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, login_voice_enabled, updated_at, password_reset_required')
                 .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
                 .maybeSingle();
             if (missingColumn(staffResult?.error, 'station_ids')) {
@@ -1068,17 +1073,19 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
+            login_voice_enabled: z.boolean().optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.user_name = body.full_name;
+        if (body.login_voice_enabled !== undefined) updates.login_voice_enabled = body.login_voice_enabled;
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
 
         const { data: existing } = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
             .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
             .maybeSingle();
 
@@ -1089,7 +1096,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 .from('users')
                 .update(updates)
                 .eq('id', existing.id)
-                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
                 .single();
             data = result.data;
             error = result.error;
@@ -1103,8 +1110,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                     email: req.actor!.email,
                     role_key: req.actor!.role,
                     profile_picture_url: null,
+                    login_voice_enabled: body.login_voice_enabled ?? true,
                 })
-                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
                 .single();
             data = result.data;
             error = result.error;
@@ -1232,6 +1240,16 @@ const route: FastifyPluginAsync = async (fastify) => {
                 details: { permissions: [...new Set(invalid)] },
             });
         }
+        const restricted = roleKey.startsWith('custom-')
+            ? body.permissions.filter((permission) => CUSTOM_ROLE_RESTRICTED_PERMISSIONS.has(permission))
+            : [];
+        if (restricted.length) {
+            return reply.code(400).send({
+                error: 'restricted_permissions',
+                message: 'Custom roles cannot receive system-only permissions.',
+                details: { permissions: [...new Set(restricted)] },
+            });
+        }
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
         const { error: replaceError } = await adminClient.rpc('admin_replace_role_permissions', {
             p_role_key: roleKey,
@@ -1267,30 +1285,39 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = z.object({
             name: z.string().trim().min(2).max(64),
             description: z.string().trim().max(240).optional().default(''),
-            permissions: z.array(z.string()).max(PERMISSION_CATALOG.length).default([]),
+            permissions: z.array(z.string()).min(1).max(PERMISSION_CATALOG.length),
         }).parse(req.body);
         const slug = body.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         const roleKey = `custom-${slug}`;
         if (slug.length < 2) {
             return reply.code(400).send({ error: 'invalid_role_name', message: 'Choose a unique custom role name.' });
         }
-        const { data: existing } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
-        if (existing) return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
-        const selectedPermissions = [...new Set(body.permissions.filter((p) => valid.has(p)))];
-        const { data: role, error: roleError } = await adminClient.from('roles').insert({
-            name: roleKey, role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
-        }).select('role_key, role_name, label, description').single();
-        if (roleError || !role) return reply.code(400).send({ error: 'role_create_failed', message: roleError?.message ?? 'Could not create role.' });
-        if (selectedPermissions.length) {
-            const { error: permissionError } = await adminClient.from('permissions').insert(
-                selectedPermissions.map((route_hash) => ({ role_key: roleKey, route_hash })),
-            );
-            if (permissionError) {
-                await adminClient.from('roles').delete().eq('role_key', roleKey);
-                return reply.code(400).send({ error: 'role_permission_create_failed', message: permissionError.message });
-            }
+        const invalid = body.permissions.filter((permission) => !valid.has(permission));
+        if (invalid.length) {
+            return reply.code(400).send({ error: 'invalid_permissions', message: 'One or more permissions are invalid.', details: { permissions: [...new Set(invalid)] } });
         }
+        const restricted = body.permissions.filter((permission) => CUSTOM_ROLE_RESTRICTED_PERMISSIONS.has(permission));
+        if (restricted.length) {
+            return reply.code(400).send({ error: 'restricted_permissions', message: 'Custom roles cannot receive system-only permissions.', details: { permissions: [...new Set(restricted)] } });
+        }
+        const selectedPermissions = [...new Set(body.permissions)];
+        const { data: result, error: createError } = await adminClient.rpc('admin_create_custom_role', {
+            p_role_key: roleKey,
+            p_role_name: body.name,
+            p_description: body.description,
+            p_permissions: selectedPermissions,
+        });
+        if (createError) {
+            req.log.error({ err: createError, roleKey }, 'Custom role creation failed');
+            return reply.code(500).send({ error: 'role_create_failed', message: 'The role could not be created. No changes were saved.' });
+        }
+        const outcome = result as { status?: string; role?: Record<string, unknown> } | null;
+        if (outcome?.status === 'role_exists') return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        if (outcome?.status !== 'created' || !outcome.role) {
+            return reply.code(400).send({ error: outcome?.status ?? 'role_create_failed', message: 'The role could not be created.' });
+        }
+        const role = outcome.role;
         await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
             action: 'access.role.created', targetType: 'role', targetId: roleKey, after: { name: body.name, permissions: selectedPermissions } });
         return { ok: true, role, permissions: selectedPermissions };
@@ -1313,11 +1340,14 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const roleKey = (req.params as { roleKey: string }).roleKey;
         if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
-        const { count, error: countError } = await adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role_key', roleKey);
-        if (countError) return reply.code(400).send({ error: 'role_usage_check_failed', message: countError.message });
-        if (count) return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
-        const { error } = await adminClient.from('roles').delete().eq('role_key', roleKey);
-        if (error) return reply.code(400).send({ error: 'role_delete_failed', message: error.message });
+        const { data: outcome, error: deleteError } = await adminClient.rpc('admin_delete_custom_role', { p_role_key: roleKey });
+        if (deleteError) {
+            req.log.error({ err: deleteError, roleKey }, 'Custom role deletion failed');
+            return reply.code(500).send({ error: 'role_delete_failed', message: 'The role could not be deleted. No changes were saved.' });
+        }
+        if (outcome === 'role_not_found') return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
+        if (outcome === 'role_in_use') return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
+        if (outcome !== 'deleted') return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
         await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
             action: 'access.role.deleted', targetType: 'role', targetId: roleKey });
         return { ok: true, roleKey };
@@ -1697,7 +1727,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             primaryUserEmail: z.string().email(),
             primaryUserFullName: z.string().min(2),
             primaryUserPhone: z.string().optional(),
-            dailyLimitMinor: z.number().int().min(100000).optional(),
             sourceApplicationId: z.string().uuid().optional(),
         }).refine((value) => {
             const stations = [...new Set([value.stationId, ...(value.operatingStations ?? [])].filter(Boolean))];
@@ -1798,7 +1827,10 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.delete('/vendors/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
-        const schema = z.object({ reason: z.string().trim().max(500).optional() });
+        const schema = z.object({
+            reason: z.string().trim().min(4).max(500),
+            confirmation: z.string().trim().min(1).max(160),
+        });
         const body = schema.parse(req.body ?? {});
         const { data: vendor, error: readError } = await adminClient
             .from('vendor_organizations')
@@ -1810,27 +1842,47 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!vendor || (vendor as any).deleted_at) {
             return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
         }
-
-        let { error } = await adminClient
-            .from('vendor_organizations')
-            .update({
-                status: 'closed',
-                deleted_at: new Date().toISOString(),
-                deleted_by: req.actor!.userId,
-                deletion_reason: body.reason ?? null,
-                updated_at: new Date().toISOString(),
-            })
-            .eq('id', id);
-
-        if (error && String(error.message || '').includes('deleted_at')) {
-            const fallback = await adminClient
-                .from('vendor_organizations')
-                .delete()
-                .eq('id', id);
-            error = fallback.error;
+        if (body.confirmation !== (vendor as any).legal_name) {
+            return reply.code(400).send({ error: 'confirmation_mismatch', message: 'Type the exact vendor name.' });
         }
+
+        const assignedStations = staffStations(req);
+        if (assignedStations && !assignedStations.includes(String((vendor as any).station_id ?? '').toUpperCase())) {
+            return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Vendor is outside your station scope.' });
+        }
+
+        const { data: deletion, error } = await adminClient.rpc('admin_soft_delete_vendor', {
+            p_vendor_id: id,
+            p_deleted_by: req.actor!.userId,
+            p_reason: body.reason,
+        });
         if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
-        return { ok: true, id };
+
+        const authUserIds = Array.isArray((deletion as any)?.authUserIds)
+            ? (deletion as any).authUserIds.filter((value: unknown): value is string => typeof value === 'string')
+            : [];
+        const cleanupFailures: string[] = [];
+        for (const authUserId of authUserIds) {
+            const { error: signOutError } = await adminClient.auth.admin.signOut(authUserId, 'global');
+            if (signOutError) req.log.warn({ err: signOutError, authUserId, vendorId: id }, 'Vendor session revocation failed');
+            const { error: deleteError } = await adminClient.auth.admin.deleteUser(authUserId, true);
+            if (deleteError) {
+                cleanupFailures.push(authUserId);
+                req.log.error({ err: deleteError, authUserId, vendorId: id }, 'Vendor auth deletion failed');
+            }
+        }
+
+        await logAction({
+            ...auditFromRequest(req),
+            action: 'vendor.deleted',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before: vendor as Record<string, unknown>,
+            after: { status: 'closed', deleted: true },
+            metadata: { reason: body.reason, authUsersRemoved: authUserIds.length - cleanupFailures.length, cleanupFailures },
+        });
+
+        return { ok: true, id, authUsersRemoved: authUserIds.length - cleanupFailures.length };
     });
 
     // ── freeze / unfreeze ──
@@ -2194,6 +2246,32 @@ const route: FastifyPluginAsync = async (fastify) => {
         const rows = (scopedOwners ? scopedRows.slice(0, pageSize) : scopedRows) as any[];
         const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
         const withUrls = await attachProofUrls(rows);
+        const approvedIds = rows.filter((row) => row.status === 'approved').map((row) => row.id);
+        const { data: creditRows, error: creditError } = approvedIds.length
+            ? await adminClient.from('wallet_ledger_entries')
+                .select('reference_id, wallet_id, amount_minor, entry_type')
+                .eq('reference_type', 'funding_request')
+                .eq('direction', 'credit')
+                .in('entry_type', ['funding_credit', 'payment_credit'])
+                .in('reference_id', approvedIds)
+            : { data: [], error: null };
+        if (creditError) throw creditError;
+        const creditsByRequest = new Map<string, Array<{ wallet_id: string; amount_minor: number }>>();
+        for (const entry of creditRows ?? []) {
+            const key = String(entry.reference_id);
+            const entries = creditsByRequest.get(key) ?? [];
+            entries.push(entry as { wallet_id: string; amount_minor: number });
+            creditsByRequest.set(key, entries);
+        }
+        const fundingWithCredits = withUrls.map((row) => {
+            if (row.status !== 'approved') return { ...row, credit_state: null };
+            const credits = creditsByRequest.get(row.id) ?? [];
+            const creditState = credits.length === 0 ? 'missing'
+                : credits.length > 1 ? 'duplicate'
+                    : credits[0].wallet_id !== row.wallet_id || Number(credits[0].amount_minor) !== Number(row.amount_minor)
+                        ? 'mismatch' : 'credited';
+            return { ...row, credit_state: creditState };
+        });
         // KPI aggregates (only on first page / no cursor)
         let summary: Record<string, number> | null = null;
         if (!cursor) {
@@ -2214,7 +2292,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 approvedMinor: sumMinor('approved'),
             };
         }
-        return { funding: withUrls, nextCursor, summary };
+        return { funding: fundingWithCredits, nextCursor, summary };
     });
 
     fastify.post('/funding/reconcile-approved', async (req, reply) => {
@@ -2622,6 +2700,67 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/kyc/reviews/:id/approve', async (req, reply) => decideReview(req, reply, 'approved'));
     fastify.post('/kyc/reviews/:id/reject', async (req, reply) => decideReview(req, reply, 'rejected'));
+
+    fastify.get('/kyc/settings', async (_req, reply) => {
+        try {
+            return { policy: await getKycTierPolicy() };
+        } catch (error) {
+            if (error instanceof KycTierPolicyError) return reply.code(503).send({ error: error.code, message: error.message });
+            throw error;
+        }
+    });
+
+    fastify.get('/kyc/settings/history', async (_req, reply) => {
+        const { data, error } = await adminClient
+            .from('kyc_tier_policy_history')
+            .select('id, actor_user_id, created_at, before_json, after_json, reason')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        if (error) return reply.code(503).send({ error: 'kyc_policy_history_unavailable', message: 'KYC settings history is unavailable.' });
+        return {
+            history: (data ?? []).map((entry: any) => ({
+                id: entry.id,
+                actor_user_id: entry.actor_user_id,
+                created_at: entry.created_at,
+                before: entry.before_json,
+                after: entry.after_json,
+                metadata: { reason: entry.reason },
+            })),
+        };
+    });
+
+    fastify.put('/kyc/settings', async (req, reply) => {
+        const parsed = z.object({
+            tier0DailyLimitMinor: z.number().int().positive(),
+            tier1DailyLimitMinor: z.number().int().positive(),
+            tier2DailyLimitMinor: z.number().int().positive().nullable(),
+            expectedVersion: z.number().int().positive(),
+            reason: z.string().trim().min(4).max(500),
+        }).safeParse(req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'invalid_kyc_policy', message: parsed.error.message });
+        try {
+            const before = await getKycTierPolicy();
+            const policy = await updateKycTierPolicy({ ...parsed.data, updatedBy: req.actor!.userId });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'kyc.policy.updated',
+                targetType: 'kyc_tier_settings',
+                targetId: 'default',
+                before: { ...before },
+                after: { ...policy },
+                metadata: { reason: parsed.data.reason },
+            });
+            return { ok: true, policy };
+        } catch (error) {
+            if (error instanceof KycTierPolicyError) {
+                const status = error.code === 'policy_conflict' ? 409 : error.code === 'invalid_policy' ? 422 : 503;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
 
     // List customers with wallet balance + filters.
     fastify.get('/customers', async (req, reply) => {

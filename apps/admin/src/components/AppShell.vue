@@ -153,6 +153,7 @@ const standardNavGroups = computed(() => [
         label: 'Compliance',
         items: [
             { to: '/kyc-reviews', text: 'KYC Reviews', permission: 'wallet.kyc.view', icon: 'kyc' },
+            { to: '/kyc-settings', text: 'KYC Settings', permission: 'wallet.kyc.settings.manage', icon: 'kyc' },
             { to: '/fraud', text: 'Fraud Review', permission: 'wallet.fraud.review', icon: 'fraud' },
             { to: '/audit', text: 'Audit Log', permission: 'wallet.audit.view', icon: 'audit' },
         ],

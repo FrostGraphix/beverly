@@ -61,9 +61,13 @@ vi.mock('../../db/supabase.js', () => ({
     },
 }));
 vi.mock('../wallets.js', () => ({
-    getOrCreateWallet: vi.fn(async () => ({ id: 'wallet-e2e' })),
+    getOrCreateKycManagedWallet: vi.fn(async () => ({ id: 'wallet-e2e' })),
     setOwnerWalletStatus: vi.fn(),
     WalletStateError: class extends Error {},
+}));
+vi.mock('../kyc-tier-policy.js', () => ({
+    getKycTierPolicy: vi.fn(async () => ({ tier0DailyLimitMinor: 20_000_000, tier1DailyLimitMinor: 70_000_000, tier2DailyLimitMinor: null })),
+    effectiveTierLimit: vi.fn(() => 20_000_000),
 }));
 vi.mock('../audit.js', () => ({
     logAction: vi.fn(async () => true),

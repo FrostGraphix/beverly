@@ -42,6 +42,7 @@ interface FundingRow {
     rejection_reason: string | null;
     created_at: string;
     approved_at: string | null;
+    credit_state?: 'credited' | 'missing' | 'duplicate' | 'mismatch' | null;
     vendor_organizations?: VendorOrg | null;
     customers?: { full_name?: string | null; email?: string | null; phone?: string | null } | null;
 }
@@ -119,6 +120,15 @@ function statusLabel(s: string) {
         under_review: 'Under review', initiated: 'Initiated',
         rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled',
     } as Record<string, string>)[s] ?? s;
+}
+
+function creditLabel(state: FundingRow['credit_state']) {
+    return ({
+        credited: 'Wallet credited',
+        missing: 'Credit missing',
+        duplicate: 'Duplicate credit · finance review',
+        mismatch: 'Credit mismatch · finance review',
+    } as Record<string, string>)[state ?? ''] ?? 'Credit status unavailable';
 }
 
 // ── fetch ─────────────────────────────────────────────────────────
@@ -353,6 +363,7 @@ function printFundingReceipt(f: FundingRow) {
                 <span :class="['bw-badge', statusBadge(f.status)]">{{ statusLabel(f.status) }}</span>
                 <div v-if="f.rejection_reason" class="fh-reject">{{ f.rejection_reason }}</div>
                 <div v-if="f.approved_at" class="fh-sub">{{ shortDate(f.approved_at) }}</div>
+                <div v-if="f.status === 'approved'" :class="['fh-sub', f.credit_state === 'credited' ? '' : 'fh-reject']">{{ creditLabel(f.credit_state) }}</div>
               </td>
               <td>
                 <div class="receipt-actions">
@@ -400,6 +411,10 @@ function printFundingReceipt(f: FundingRow) {
           <div class="fh-card-row" v-if="f.rejection_reason">
             <span class="fh-card-lbl">Reason</span>
             <span style="color:var(--danger); font-size:var(--t-xs)">{{ f.rejection_reason }}</span>
+          </div>
+          <div class="fh-card-row" v-if="f.status === 'approved'">
+            <span class="fh-card-lbl">Wallet credit</span>
+            <span :class="f.credit_state === 'credited' ? '' : 'fh-reject'">{{ creditLabel(f.credit_state) }}</span>
           </div>
           <div class="fh-card-row">
             <span class="fh-card-lbl">Receipt</span>

@@ -131,7 +131,7 @@ async function submit() {
         auth.setSession(r.access_token, r.customer, rememberSession);
         playLoginVoice();
         await new Promise((res) => setTimeout(res, 600)); // brief success pause
-        await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+        await router.replace(redirectTarget.value);
     } catch (e: any) {
         if (e instanceof ApiError) {
             if (e.code === 'otp_expired') {

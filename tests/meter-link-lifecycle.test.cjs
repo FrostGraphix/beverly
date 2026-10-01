@@ -36,6 +36,10 @@ assert.match(purchase, /status: 'pending'[\s\S]*reviewed_by: null[\s\S]*reviewed
 assert.match(purchase, /export async function listCustomerMeterLinkHistory/);
 assert.match(purchase, /\.from\('customer_meter_link_history'\)/);
 assert.match(purchase, /\.not\('status', 'eq', 'rejected'\)/);
+assert.match(purchase, /permission: 'wallet\.meters\.approve'/);
+assert.match(purchase, /type: 'meter_approval'/);
+assert.match(purchase, /path: '\/meter-approvals'/);
+assert.match(purchase, /resubmitted' : 'created'/);
 
 assert.match(customerRoutes, /fastify\.get\('\/meters\/history'/);
 assert.match(customerRoutes, /listCustomerMeterLinkHistory/);

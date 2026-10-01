@@ -3,6 +3,7 @@ import { notifyKycUpdate, sendNotification } from './notifications.js';
 import { notifyVendor } from './vendor-notifications.js';
 import { notifyOperationalStaff } from './operational-notifications.js';
 import { runMalwareScan } from './file-scan.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 const KYC_BUCKET = 'wallet-kyc-documents';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -108,16 +109,21 @@ export async function activateKycUpload(input: {
         throw new KycReviewError('File content does not match its type.', 'document_content_mismatch', 422);
     }
     const scan = await runMalwareScan(fileBytes, fileName);
-    if (!scan.ok) {
+    if (!scan.ok && scan.reason === 'infected') {
         await adminClient.storage.from(KYC_BUCKET).remove([path]);
         await adminClient.from('kyc_documents').delete().eq('id', input.documentId);
-        throw new KycReviewError('Document failed security scanning.', 'document_scan_failed', 422);
+        throw new KycReviewError('Security scanning detected a threat. This file cannot be submitted.', 'document_malware_detected', 422);
     }
+    const scanStatus = scan.ok && scan.mode === 'command' ? 'clean' : 'unscanned';
+    const scanReason = scanStatus === 'clean'
+        ? null
+        : scan.ok ? 'scanner_disabled' : scan.scanReason;
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await adminClient.from('kyc_documents')
-        .update({ uploaded_at: uploadedAt }).eq('id', input.documentId).eq(column, input.subjectId);
+        .update({ uploaded_at: uploadedAt, security_scan_status: scanStatus, security_scan_reason: scanReason })
+        .eq('id', input.documentId).eq(column, input.subjectId);
     if (updateError) throw new KycReviewError('Upload activation failed.', 'document_activation_failed', 500);
-    return { id: input.documentId, uploadedAt };
+    return { id: input.documentId, uploadedAt, scanStatus, scanReason };
 }
 
 export async function submitKycReview(input: {
@@ -220,7 +226,7 @@ export async function listKycReviews(input: {
     const [customers, vendors, documents, meters] = await Promise.all([
         pageCustomerIds.length ? adminClient.from('customers').select('id, full_name, email, phone, kyc_tier, kyc_status').in('id', pageCustomerIds) : Promise.resolve({ data: [] as any[] }),
         pageVendorIds.length ? adminClient.from('vendor_organizations').select('id, legal_name, trading_name, contact_email, contact_phone, cac_number, tin, operating_stations, kyc_tier, kyc_status').in('id', pageVendorIds) : Promise.resolve({ data: [] as any[] }),
-        rows.length ? adminClient.from('kyc_documents').select('id, review_request_id, doc_type, mime_type, size_bytes, status, created_at').in('review_request_id', rows.map((r: any) => r.id)) : Promise.resolve({ data: [] as any[] }),
+        rows.length ? adminClient.from('kyc_documents').select('id, review_request_id, doc_type, mime_type, size_bytes, status, security_scan_status, security_scan_reason, created_at').in('review_request_id', rows.map((r: any) => r.id)) : Promise.resolve({ data: [] as any[] }),
         pageCustomerIds.length ? adminClient.from('customer_meters').select('customer_id, station_id').in('customer_id', pageCustomerIds) : Promise.resolve({ data: [] as any[] }),
     ]);
     const stationsByCustomer = new Map<string, string[]>();
@@ -288,12 +294,16 @@ export async function decideKycReview(input: {
         }
     } else {
         try {
+            const requestedTier = Number((review as any).requested_tier);
+            const policy = input.decision === 'approved' ? await getKycTierPolicy() : null;
+            const dailyLimit = policy ? effectiveTierLimit(requestedTier === 1 ? 1 : 2, policy) : null;
+            const limitLabel = dailyLimit === null ? 'no daily cap' : `up to ₦${(dailyLimit / 100).toLocaleString('en-NG')} daily`;
             await notifyVendor({
                 vendorOrganizationId: (review as any).vendor_organization_id,
                 type: 'kyc_update',
                 title: input.decision === 'approved' ? 'KYC tier approved' : 'KYC needs changes',
                 body: input.decision === 'approved'
-                    ? `Your business is now verified at Tier ${(review as any).requested_tier}.`
+                    ? `Your business is now verified at Tier ${requestedTier}: ${limitLabel}.`
                     : `Your KYC review needs changes. ${input.note.trim()}`,
                 path: '/kyc',
                 dedupeKey: `kyc.review.${input.requestId}.${input.decision}`,
@@ -311,7 +321,11 @@ export async function currentKycState(subjectType: KycSubjectType, subjectId: st
     const column = ownerColumn(subjectType);
     const [{ data: review }, { data: documents }] = await Promise.all([
         adminClient.from('kyc_review_requests').select('*').eq(column, subjectId).order('submitted_at', { ascending: false }).limit(1).maybeSingle(),
-        adminClient.from('kyc_documents').select('id, doc_type, kyc_tier, mime_type, size_bytes, status, uploaded_at, rejection_note, created_at').eq(column, subjectId).order('created_at', { ascending: false }),
+        adminClient.from('kyc_documents').select('id, doc_type, kyc_tier, mime_type, size_bytes, status, uploaded_at, review_request_id, rejection_note, created_at').eq(column, subjectId).order('created_at', { ascending: false }),
     ]);
-    return { ...subject, review: review ?? null, documents: documents ?? [] };
+    return {
+        ...subject,
+        review: review ?? null,
+        documents: documents ?? [],
+    };
 }

@@ -7,7 +7,7 @@
  *   freezeVendor / unfreeze  → wallet status + audit.
  */
 import { adminClient } from '../db/supabase.js';
-import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
+import { getOrCreateKycManagedWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
 import { logAction, logSecurityEvent } from './audit.js';
 import { sendEmail } from '../adapters/resend.js';
 import { vendorOnboardingEmail } from '../emails/templates.js';
@@ -15,6 +15,8 @@ import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import crypto from 'node:crypto';
 import { generateTemporaryPassword } from './temporary-password.js';
+import { resolveVendorPortalUrl } from './vendor-portal-url.js';
+import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 
 export class OnboardingError extends Error {
     public statusCode: number;
@@ -49,7 +51,6 @@ export interface CreateVendorInput {
     primaryUserEmail: string;
     primaryUserFullName: string;
     primaryUserPhone?: string;
-    dailyLimitMinor?: number;
     createdByStaffId: string;
     sourceApplicationId?: string;
     provisioningKey?: string;
@@ -65,6 +66,8 @@ export interface CreateVendorResult {
 }
 
 export async function createVendorOrganization(input: CreateVendorInput): Promise<CreateVendorResult> {
+    const policy = await getKycTierPolicy();
+    const tierZeroDailyLimit = effectiveTierLimit(0, policy);
     const requestedStations = [...new Set([
         input.stationId,
         ...(input.operatingStations ?? []),
@@ -162,7 +165,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             station_id: primaryStation,
             operating_stations: [primaryStation],
             station_ids_json: [primaryStation],
-            daily_limit_minor: input.dailyLimitMinor ?? 1000000000,
+            daily_limit_minor: tierZeroDailyLimit,
             approved_by: input.createdByStaffId,
             status: 'pending',
             provisioning_status: 'pending',
@@ -185,7 +188,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             password: tempPwd,
             options: {
                 data: { role: 'vendor', full_name: input.primaryUserFullName, station_id: primaryStation },
-                redirectTo: env.VENDOR_PORTAL_URL,
+                redirectTo: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
             },
         });
         if (authErr || !authUserData.user) {
@@ -221,9 +224,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         );
         vendorUserId = (vu as { id: string }).id;
 
-        const wallet = await getOrCreateWallet('vendor', organizationId, {
-            dailyCapMinor: input.dailyLimitMinor ?? 1000000000,
-        });
+        const wallet = await getOrCreateKycManagedWallet('vendor', organizationId, 0);
         walletId = wallet.id;
 
         await logAction({
@@ -278,7 +279,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
                 legalName: input.legalName,
                 loginEmail: input.primaryUserEmail,
                 temporaryPassword: tempPwd,
-                loginUrl: env.VENDOR_PORTAL_URL,
+                loginUrl: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
                 verificationUrl,
             });
             const delivery = await sendEmail({ to: input.primaryUserEmail, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding' });
@@ -338,7 +339,7 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
     const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'magiclink',
         email: (user as any).email,
-        options: { redirectTo: env.VENDOR_PORTAL_URL },
+        options: { redirectTo: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV) },
     });
     const verificationUrl = link?.properties?.action_link;
     if (linkError || !verificationUrl) throw new OnboardingError('Vendor verification link could not be regenerated.', 'verification_link_failed');
@@ -380,7 +381,7 @@ export async function resendVendorInvitation(vendorOrganizationId: string): Prom
             legalName: (organization as any).legal_name,
             loginEmail: (user as any).email,
             temporaryPassword,
-            loginUrl: env.VENDOR_PORTAL_URL,
+            loginUrl: resolveVendorPortalUrl(env.VENDOR_PORTAL_URL, env.NODE_ENV),
             verificationUrl,
         });
         const delivery = await sendEmail({ to: (user as any).email, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding-resend' });

@@ -3,6 +3,7 @@
  * Provisioning + lookup.  Money operations live in ledger.ts.
  */
 import { adminClient } from '../db/supabase.js';
+import { effectiveTierLimit, getKycTierPolicy, type KycTier } from './kyc-tier-policy.js';
 
 export type OwnerType = 'vendor' | 'customer';
 
@@ -14,6 +15,7 @@ export interface Wallet {
     status: 'active' | 'frozen' | 'closed';
     daily_debit_cap_minor: number | null;
     monthly_debit_cap_minor: number | null;
+    kyc_policy_managed?: boolean;
     created_at: string;
 }
 
@@ -86,6 +88,62 @@ export async function getOrCreateWallet(
         .single();
     if (error) throw new Error(`wallet creation failed: ${error.message}`);
     return data as Wallet;
+}
+
+/**
+ * Creates a wallet governed by the live KYC policy. Existing manual wallet
+ * caps are deliberately left alone; settings only reconcile policy-managed
+ * wallets so staff-approved exceptions are never silently overwritten.
+ */
+export async function getOrCreateKycManagedWallet(
+    ownerType: OwnerType,
+    ownerId: string,
+    tier: KycTier,
+): Promise<Wallet> {
+    const policy = await getKycTierPolicy();
+    const dailyCapMinor = effectiveTierLimit(tier, policy);
+    const existing = await findWalletByOwner(ownerType, ownerId);
+    if (existing) {
+        if (existing.kyc_policy_managed) {
+            const { data, error } = await adminClient
+                .from('wallets')
+                .update({ daily_debit_cap_minor: dailyCapMinor, monthly_debit_cap_minor: null, updated_at: new Date().toISOString() })
+                .eq('id', existing.id)
+                .select('*')
+                .single();
+            if (error) throw new Error(`wallet KYC policy update failed: ${error.message}`);
+            return data as Wallet;
+        }
+        return existing;
+    }
+
+    const { data, error } = await adminClient
+        .from('wallets')
+        .insert({
+            owner_type: ownerType,
+            owner_id: ownerId,
+            daily_debit_cap_minor: dailyCapMinor,
+            monthly_debit_cap_minor: null,
+            kyc_policy_managed: true,
+        })
+        .select('*')
+        .single();
+    if (error) throw new Error(`wallet creation failed: ${error.message}`);
+    return data as Wallet;
+}
+
+/** Resolves the owner's persisted tier before provisioning a missing wallet. */
+export async function getOrCreateOwnerKycWallet(ownerType: OwnerType, ownerId: string): Promise<Wallet> {
+    const table = ownerType === 'vendor' ? 'vendor_organizations' : 'customers';
+    const { data, error } = await adminClient
+        .from(table)
+        .select('kyc_tier')
+        .eq('id', ownerId)
+        .maybeSingle();
+    if (error || !data) throw new WalletStateError('Account KYC status is unavailable.', 'owner_kyc_unavailable', 503);
+    const tier = Number((data as any).kyc_tier);
+    if (![0, 1, 2].includes(tier)) throw new WalletStateError('Account KYC tier is invalid.', 'owner_kyc_invalid', 409);
+    return getOrCreateKycManagedWallet(ownerType, ownerId, tier as KycTier);
 }
 
 export async function findWalletByOwner(ownerType: OwnerType, ownerId: string): Promise<Wallet | null> {

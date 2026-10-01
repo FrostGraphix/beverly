@@ -11,10 +11,16 @@ describe('vendor authentication navigation', () => {
         '/forgot-password',
         '/reset-password?token=secret',
         '/password-change',
+        '/wallet-vendor/password-change?redirect=/',
+        '/vendor/password-change?redirect=/',
         '//evil.example',
         '/\\evil',
         'https://evil.example',
     ])('rejects unsafe destination %s', (destination) => {
         expect(safeVendorRedirect(destination)).toBe('/');
+    });
+
+    it('removes the deployed portal base from destinations', () => {
+        expect(safeVendorRedirect('/wallet-vendor/wallet?source=login')).toBe('/wallet?source=login');
     });
 });

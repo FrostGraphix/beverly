@@ -17,7 +17,7 @@ export default defineConfig(({ command, mode }) => {
         plugins: [
             vue(),
             VitePWA({
-                registerType: 'prompt',
+                registerType: 'autoUpdate',
                 includeAssets: ['brand/beverly-mark.png'],
                 manifest: {
                     name: 'Beverly Wallet Admin',
@@ -36,6 +36,9 @@ export default defineConfig(({ command, mode }) => {
                 workbox: {
                     navigateFallback: assetPath('index.html'),
                     importScripts: ['push-sw.js'],
+                    skipWaiting: true,
+                    clientsClaim: true,
+                    cleanupOutdatedCaches: true,
                     runtimeCaching: [{
                         urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
                         handler: 'CacheFirst',
@@ -63,7 +66,7 @@ export default defineConfig(({ command, mode }) => {
             target: 'es2022',
             sourcemap: false,
             outDir: resolve(__dirname, '../../dist/wallet-admin'),
-            emptyOutDir: false,
+            emptyOutDir: true,
         },
     };
 });

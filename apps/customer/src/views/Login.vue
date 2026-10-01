@@ -73,7 +73,7 @@ async function submit() {
             });
             writeRememberedLogin(email.value.trim().toLowerCase(), rememberLogin.value);
             playLoginVoice();
-            await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+            await router.replace(redirectTarget.value);
             return;
         }
         const normalised = normaliseNigerianPhone(phone.value);
@@ -89,7 +89,7 @@ async function submit() {
             });
             writeRememberedLogin(normalised, rememberLogin.value);
             playLoginVoice();
-            await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+            await router.replace(redirectTarget.value);
             return;
         }
         const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(

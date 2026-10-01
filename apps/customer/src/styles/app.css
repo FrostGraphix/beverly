@@ -202,7 +202,7 @@
   background: 
     radial-gradient(120% 100% at 0% 0%, var(--brand-glow, rgba(34, 197, 94, 0.18)), transparent 65%),
     var(--glass-bg);
-  border: 1px solid oklch(70% 0.19 145 / 0.32);
+  border: 1px solid transparent;
   border-radius: var(--r-xl);
   padding: var(--s-5);
   position: relative;
@@ -215,17 +215,31 @@
 .bw-balance-hero::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: -100%;
-  width: 300%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--brand), #86efac, var(--brand), transparent);
-  animation: bw-shimmer-sweep 4s linear infinite;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--balance-angle, 0turn), transparent 0 16%, var(--brand) 24%, #d9ffe4 33%, var(--brand) 42%, transparent 50% 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: bw-balance-border-spin 4s linear infinite;
 }
 
-@keyframes bw-shimmer-sweep {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(50%); }
+@keyframes bw-balance-border-spin {
+  to { --balance-angle: 1turn; }
+}
+
+@property --balance-angle {
+  syntax: '<angle>';
+  initial-value: 0turn;
+  inherits: false;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bw-balance-hero::before,
+  .bw-token-shimmer,
+  .bw-card-shimmer::before { animation: none !important; }
 }
 
 /* Shimmering Text Effect */
@@ -458,3 +472,10 @@
   color: var(--text-2);
   margin: 4px 0 0;
 }
+
+.bw-switch { width:44px; height:24px; border-radius:999px; border:1px solid var(--border); background:var(--surface-3); padding:2px; cursor:pointer; flex:0 0 auto; }
+.bw-switch span { display:block; width:18px; height:18px; border-radius:50%; background:var(--text-muted); transition:transform .18s ease, background .18s ease; }
+.bw-switch[aria-checked="true"] { background:var(--brand); border-color:var(--brand); }
+.bw-switch[aria-checked="true"] span { transform:translateX(18px); background:white; }
+.bw-switch:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+.bw-switch:disabled { opacity:.55; cursor:wait; }

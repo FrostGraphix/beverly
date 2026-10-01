@@ -102,6 +102,43 @@ global.fetch = async (url) => {
   assert.strictEqual(failedLogin.status, 503);
   assert.strictEqual(failedLogin.body.msg, "Authentication service unavailable");
 
+  let transientAttempts = 0;
+  global.fetch = async (url) => {
+    if (String(url).includes("/auth/v1/token")) {
+      transientAttempts += 1;
+      if (transientAttempts === 1) {
+        return new Response(JSON.stringify({ error: "gateway timeout" }), {
+          status: 504,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+        user: {
+          id: "admin-auth",
+          email: "admin@acoblighting.com",
+          user_metadata: { role_key: "super-admin" }
+        }
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (String(url).includes("/rest/v1/users")) {
+      return new Response(JSON.stringify([{
+        id: "admin-row",
+        auth_user_id: "admin-auth",
+        user_id: "admin",
+        email: "admin@acoblighting.com",
+        name: "Beverly Admin",
+        role_key: "super-admin"
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`unexpected URL: ${url}`);
+  };
+  const recoveredLogin = await signInWithPassword({ userId: "admin@acoblighting.com", password: "secret" });
+  assert.strictEqual(transientAttempts, 2);
+  assert.strictEqual(recoveredLogin.status, 200);
+
   if (typeof previousEnv.SUPABASE_AUTH_ENABLED === "undefined") delete process.env.SUPABASE_AUTH_ENABLED;
   else process.env.SUPABASE_AUTH_ENABLED = previousEnv.SUPABASE_AUTH_ENABLED;
 

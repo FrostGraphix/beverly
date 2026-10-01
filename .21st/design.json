@@ -55,6 +55,11 @@
       "decision": "Package selected archives as a browser-built TAR bundle.",
       "reason": "This supports multiple existing files without adding database or storage quota usage.",
       "evidence": "Existing signed-download archive API"
+    },
+    {
+      "decision": "Use the Operations Ready onboarding direction for customer and vendor KYC.",
+      "reason": "It presents required details, tier limits, review status, and an explicit recovery route without unnecessary friction.",
+      "evidence": "User-selected visual direction, September 30 2026"
     }
   ],
   "evidence": [

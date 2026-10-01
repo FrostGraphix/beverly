@@ -65,7 +65,13 @@ const busy = ref(false);
 const deleteOpen = ref(false);
 const deleteTarget = ref<Vendor | null>(null);
 const deleteReason = ref('');
+const deleteConfirmation = ref('');
 const deleteBusy = ref(false);
+const deleteValid = computed(() => Boolean(
+    deleteTarget.value
+    && deleteReason.value.trim().length >= 4
+    && deleteConfirmation.value === deleteTarget.value.legal_name,
+));
 
 const actionTone = computed<'brand' | 'danger' | 'warn'>(() =>
     targetAction.value === 'frozen' ? 'danger'
@@ -99,6 +105,7 @@ function askDelete(v: Vendor) {
     if (!canManageVendors.value) return;
     deleteTarget.value = v;
     deleteReason.value = '';
+    deleteConfirmation.value = '';
     deleteOpen.value = true;
 }
 
@@ -128,12 +135,13 @@ async function doAction() {
 }
 
 async function deleteVendor() {
-    if (!deleteTarget.value) return;
+    if (!deleteTarget.value || !deleteValid.value) return;
     deleteBusy.value = true;
     banner.value = null;
     try {
         await api.del(`/api/v1/admin/vendors/${deleteTarget.value.id}`, {
-            reason: deleteReason.value.trim() || undefined,
+            reason: deleteReason.value.trim(),
+            confirmation: deleteConfirmation.value,
         });
         banner.value = { tone: 'success', text: `${deleteTarget.value.legal_name} deleted.` };
         vendors.value = vendors.value.filter((v) => v.id !== deleteTarget.value?.id);
@@ -402,14 +410,23 @@ onMounted(() => {
       confirm-label="Delete vendor"
       tone="danger"
       :loading="deleteBusy"
+      :disable-confirm="!deleteValid"
       @confirm="deleteVendor"
     >
-      <label class="cd-input-label">Reason (optional)</label>
+      <label class="cd-input-label">Reason *</label>
       <textarea
         v-model="deleteReason"
         rows="3"
         class="cd-input"
         placeholder="e.g. duplicate vendor record"
+      />
+      <p class="cd-input-hint">Minimum 4 characters.</p>
+      <label class="cd-input-label">Type the vendor name *</label>
+      <input
+        v-model="deleteConfirmation"
+        class="cd-input"
+        autocomplete="off"
+        :placeholder="deleteTarget?.legal_name"
       />
     </ConfirmDialog>
 

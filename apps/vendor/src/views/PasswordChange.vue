@@ -32,6 +32,7 @@ const showNext = ref(false);
 const showConfirm = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const recoveryRequired = ref(false);
 const success = ref(false);
 let redirectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -62,6 +63,7 @@ const passwordsMatch = computed(() => !confirm.value || next.value === confirm.v
 async function submit() {
     if (loading.value) return;
     error.value = null;
+    recoveryRequired.value = false;
 
     if (next.value !== confirm.value) {
         error.value = 'New passwords do not match.';
@@ -99,12 +101,18 @@ async function submit() {
     } catch (e: any) {
         if (e instanceof ApiError) {
             error.value = e.message ?? 'Update failed.';
+            recoveryRequired.value = e.code === 'password_recovery_required';
         } else {
             error.value = e?.message ?? 'Update failed. Please retry.';
         }
     } finally {
         loading.value = false;
     }
+}
+
+async function recoverPassword() {
+    await auth.logout();
+    await router.push('/forgot-password');
 }
 
 function logout() {
@@ -224,6 +232,10 @@ function logout() {
           </div>
 
           <p v-if="error" class="bw-alert danger pc-error" role="alert">{{ error }}</p>
+
+          <button v-if="recoveryRequired" class="bw-btn pc-recovery" type="button" @click="recoverPassword">
+            Recover with verification code
+          </button>
 
           <button
             class="bw-btn primary lg pc-submit"

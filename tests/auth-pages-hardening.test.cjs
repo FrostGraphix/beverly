@@ -14,6 +14,7 @@ const vendorVendAccess = read('apps/vendor/src/views/VendAccess.vue');
 const vendorStore = read('apps/vendor/src/stores/auth.ts');
 const vendorApi = read('apps/vendor/src/lib/api.ts');
 const vendorRouter = read('apps/vendor/src/router/index.ts');
+const vendorPasswordChange = read('apps/vendor/src/views/PasswordChange.vue');
 const customerLogin = read('apps/customer/src/views/Login.vue');
 const customerSignup = read('apps/customer/src/views/Signup.vue');
 const customerVerify = read('apps/customer/src/views/Verify.vue');
@@ -48,6 +49,9 @@ assert.match(vendorApi, /sessionStorage\.getItem\(TOKEN_KEY\)/);
 assert.match(vendorSecurity, /safeRedirectTarget/);
 assert.match(vendorVendAccess, /safeRedirectTarget/);
 assert.doesNotMatch(vendorVendAccess, /router\.push\(String\(route\.query\.redirect/);
+assert.match(vendorPasswordChange, /password_recovery_required/);
+assert.match(vendorPasswordChange, /Recover with verification code/);
+assert.match(vendorPasswordChange, /router\.push\('\/forgot-password'\)/);
 
 assert.match(customerFlow, /safeAuthRedirect/);
 assert.match(customerFlow, /normaliseNigerianPhone/);

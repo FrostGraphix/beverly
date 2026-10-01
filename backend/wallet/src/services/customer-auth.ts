@@ -24,7 +24,7 @@ import { checkVerification, sendSms, sendVerification } from '../adapters/twilio
 import { sendEmail } from '../adapters/resend.js';
 import { welcomeEmail } from '../emails/templates.js';
 import { sendEmailVerification } from './customer-email-otp.js';
-import { getOrCreateWallet } from './wallets.js';
+import { getOrCreateKycManagedWallet } from './wallets.js';
 import { logAction } from './audit.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
@@ -562,10 +562,7 @@ export async function signupWithEmail(
             throw new AuthError('A customer account with this email already exists.', 'email_in_use');
         }
 
-        await getOrCreateWallet('customer', existing.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        await getOrCreateKycManagedWallet('customer', existing.id, 0);
         await logAction({
             actorUserId: session.userId,
             actorType: 'customer',
@@ -643,10 +640,7 @@ export async function signupWithEmail(
                 throw new AuthError(authUpdateError.message, 'account_conversion_failed');
             }
 
-            await getOrCreateWallet('customer', existing.id, {
-                dailyCapMinor: 10_000_000,
-                monthlyCapMinor: 50_000_000,
-            });
+            await getOrCreateKycManagedWallet('customer', existing.id, 0);
             await logAction({
                 actorUserId: authUserId,
                 actorType: 'customer',
@@ -698,10 +692,7 @@ export async function signupWithEmail(
         });
         customerId = customer.id;
 
-        const wallet = await getOrCreateWallet('customer', customer.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        const wallet = await getOrCreateKycManagedWallet('customer', customer.id, 0);
         walletId = wallet.id;
 
         await logAction({
@@ -874,10 +865,7 @@ export async function signupWithPhone(
             resumedCustomer = updated as CustomerProfile;
         }
 
-        await getOrCreateWallet('customer', existing.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        await getOrCreateKycManagedWallet('customer', existing.id, 0);
         await logAction({
             actorUserId: session.userId,
             actorType: 'customer',
@@ -934,10 +922,7 @@ export async function signupWithPhone(
         });
         customerId = customer.id;
 
-        const wallet = await getOrCreateWallet('customer', customer.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        const wallet = await getOrCreateKycManagedWallet('customer', customer.id, 0);
         walletId = wallet.id;
 
         await logAction({
@@ -1169,11 +1154,10 @@ async function signUpCustomer(
         throw new AuthError(custErr.message, 'customer_create_failed');
     }
 
-    // Provision wallet (₦100k daily cap, ₦500k monthly cap for Tier 0)
-    await getOrCreateWallet('customer', (customer as CustomerProfile).id, {
-        dailyCapMinor: 10_000_000,
-        monthlyCapMinor: 50_000_000,
-    });
+    // Provision from the current KYC policy. The database is the only source
+    // of monetary tier limits, so accounts created after an admin update are
+    // never initialized with stale source-code values.
+    await getOrCreateKycManagedWallet('customer', (customer as CustomerProfile).id, 0);
 
     if (email) {
         try {
