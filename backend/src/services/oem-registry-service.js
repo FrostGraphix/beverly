@@ -291,9 +291,7 @@ async function testOemConnection(oemIdOrSlug) {
 }
 
 function requestedOemId(request) {
-  const header = request?.headers?.["x-oem-id"];
-  const value = Array.isArray(header) ? header[0] : header;
-  return String(value || "").trim() || DEFAULT_OEM_SLUG;
+  return String(request?.__oemId || "").trim() || DEFAULT_OEM_SLUG;
 }
 
 // Translate a CRM-canonical (Calinmeter-shaped) upstream path into the equivalent

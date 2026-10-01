@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { loadEnvFile } = require('../../tools/env-loader.cjs');
@@ -9,41 +8,46 @@ const { encryptSecret } = require('../src/services/oem-credential-crypto.js');
 const { restRequest } = require('../src/services/supabase-service.js');
 const storage = require('../src/services/storage-adapter.js');
 
-function apiCall(pathName, method, body, token) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = http.request({
-      hostname: '8.208.16.168',
-      port: 9310,
-      path: pathName,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          resolve({ raw: data, status: res.statusCode });
-        }
-      });
-    });
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
+if (!process.argv.includes('--apply')) {
+  throw new Error('Credential synchronization requires --apply');
+}
+
+function required(name) {
+  const value = String(process.env[name] || '').trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const upstreamBaseUrl = required('UPSTREAM_API_URL').replace(/\/$/, '');
+const upstreamUsername = required('UPSTREAM_USERNAME');
+const upstreamPassword = required('UPSTREAM_PASSWORD');
+
+async function apiCall(pathName, method, body, token) {
+  const response = await fetch(`${upstreamBaseUrl}${pathName}`, {
+    method,
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
   });
+  if (!response.ok) throw new Error(`Upstream request failed: HTTP ${response.status}`);
+  return response.json();
+}
+
+function setEnvLine(content, name, value) {
+  const line = `${name}=${value}`;
+  const pattern = new RegExp(`^${name}=.*$`, 'm');
+  return pattern.test(content) ? content.replace(pattern, () => line) : `${content.trimEnd()}\n${line}\n`;
 }
 
 async function syncUpgradedAdmin() {
-  console.log('1. Logging in as upgraded admin (ACOB_ADMIN)...');
-  const loginRes = await apiCall('/api/user/login', 'POST', { userId: 'admin', password: 'ACOB_ADMIN' });
+  console.log('1. Logging in using configured credentials...');
+  const loginRes = await apiCall('/api/user/login', 'POST', { userId: upstreamUsername, password: upstreamPassword });
   if (loginRes.code !== 0 || !loginRes.result?.token) {
-    throw new Error('Admin login failed: ' + JSON.stringify(loginRes));
+    throw new Error('Admin login failed');
   }
   const newToken = loginRes.result.token;
   console.log('✅ Admin login successful! Acquired upgraded bearer token.');
@@ -52,12 +56,12 @@ async function syncUpgradedAdmin() {
   const envPath = path.resolve(__dirname, '../../.env');
   let envContent = fs.readFileSync(envPath, 'utf8');
 
-  envContent = envContent.replace(/^UPSTREAM_USERNAME=.*$/m, 'UPSTREAM_USERNAME=admin');
-  envContent = envContent.replace(/^UPSTREAM_PASSWORD=.*$/m, 'UPSTREAM_PASSWORD=ACOB_ADMIN');
-  envContent = envContent.replace(/^UPSTREAM_BEARER_TOKEN=.*$/m, `UPSTREAM_BEARER_TOKEN=${newToken}`);
-  envContent = envContent.replace(/^LIVE_API_BEARER_TOKEN=.*$/m, `LIVE_API_BEARER_TOKEN=${newToken}`);
-  envContent = envContent.replace(/^ENERGY_BEARER_TOKEN=.*$/m, `ENERGY_BEARER_TOKEN=${newToken}`);
-  envContent = envContent.replace(/^GPRS_UPSTREAM_BEARER_TOKEN=.*$/m, `GPRS_UPSTREAM_BEARER_TOKEN=${newToken}`);
+  envContent = setEnvLine(envContent, 'UPSTREAM_USERNAME', upstreamUsername);
+  envContent = setEnvLine(envContent, 'UPSTREAM_PASSWORD', upstreamPassword);
+  envContent = setEnvLine(envContent, 'UPSTREAM_BEARER_TOKEN', newToken);
+  envContent = setEnvLine(envContent, 'LIVE_API_BEARER_TOKEN', newToken);
+  envContent = setEnvLine(envContent, 'ENERGY_BEARER_TOKEN', newToken);
+  envContent = setEnvLine(envContent, 'GPRS_UPSTREAM_BEARER_TOKEN', newToken);
 
   fs.writeFileSync(envPath, envContent, 'utf8');
   console.log('✅ .env updated.');
@@ -70,7 +74,7 @@ async function syncUpgradedAdmin() {
   await storage.upsertOemCredentials({
     oemId: CALIN_OEM_ID,
     authStrategy: 'bearer_static',
-    baseUrl: 'http://8.208.16.168:9310',
+    baseUrl: upstreamBaseUrl,
     encryptedBearerToken: encrypted,
     encryptionKeyVersion: 1,
     updatedBy: 'sync-upgraded-admin'
@@ -100,9 +104,13 @@ async function syncUpgradedAdmin() {
 
   console.log('\n5. Verifying dashboard with upgraded admin token:');
   const panel = await apiCall('/api/dashboard/readPanelGroup', 'POST', {}, newToken);
-  console.log('Dashboard panelGroup:', panel.result);
+  if (!panel?.result) throw new Error('Dashboard verification failed');
+  console.log('Dashboard verification succeeded.');
 
   console.log('\n🎉 Upgraded admin account synchronized successfully across all layers!');
 }
 
-syncUpgradedAdmin().catch(console.error);
+syncUpgradedAdmin().catch((error) => {
+  console.error(error instanceof Error ? error.message : 'Credential synchronization failed');
+  process.exitCode = 1;
+});

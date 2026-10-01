@@ -1,49 +1,40 @@
 /**
  * Switch Beverly CRM upstream token to the newly created `Beverly` user account on Calinmeter.
- * Usage: node backend/scripts/switch-to-beverly-user.cjs [password]
+ * Usage: node backend/scripts/switch-to-beverly-user.cjs --apply
  */
 require('../../tools/env-loader.cjs').loadEnvFile();
 const fs = require('fs');
-const http = require('http');
 const localDb = require('../src/services/local-database');
 const { restRequest } = require('../src/services/supabase-service');
 const { encryptSecret } = require('../src/services/oem-credential-crypto');
 
-const userId = 'Beverly';
-const password = process.argv[2] || process.env.UPSTREAM_PASSWORD || 'ACOB_ADMIN';
+if (!process.argv.includes('--apply')) throw new Error('Credential synchronization requires --apply');
 
-function login(u, p) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({ userId: u, password: p });
-    const req = http.request({
-      hostname: '8.208.16.168',
-      port: 9310,
-      path: '/api/user/login',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error(`Login response non-JSON: ${data}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
+function required(name) {
+  const value = String(process.env[name] || '').trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+const userId = required('UPSTREAM_USERNAME');
+const password = required('UPSTREAM_PASSWORD');
+const upstreamBaseUrl = required('UPSTREAM_API_URL').replace(/\/$/, '');
+
+async function login(u, p) {
+  const response = await fetch(`${upstreamBaseUrl}/api/user/login`, {
+    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15_000),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: u, password: p }),
   });
+  if (!response.ok) throw new Error(`Upstream login failed: HTTP ${response.status}`);
+  return response.json();
 }
 
 async function main() {
   console.log(`Authenticating as ${userId} against Calinmeter HES...`);
   const res = await login(userId, password);
   if (!res || res.code !== 0 || !res.result || !res.result.token) {
-    console.error(`❌ Failed to login as ${userId}:`, res ? res.reason : 'No response');
-    console.error('Please ensure user "Beverly" has been created on Calinmeter Web Portal (http://8.208.16.168:9310).');
+    console.error(`Failed to login as ${userId}.`);
     process.exit(1);
   }
 
@@ -65,7 +56,7 @@ async function main() {
   localDb.upsertOemCredentials({
     oemId: 'bd7e4242-651b-41ca-a3de-b0cd4ffe7927',
     authStrategy: 'bearer_static',
-    baseUrl: 'http://8.208.16.168:9310',
+    baseUrl: upstreamBaseUrl,
     encryptedBearerToken: encrypted,
     encryptionKeyVersion: 1,
     updatedBy: 'switch-to-beverly-user'

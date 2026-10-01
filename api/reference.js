@@ -1652,7 +1652,8 @@ async function fetchLiveStationDirectory(request) {
       {
         method: "POST",
         url: "/api/station/read",
-        headers: { ...(request?.headers || {}), "x-oem-id": oem.id },
+        headers: { ...(request?.headers || {}) },
+        __oemId: oem.id,
         __timeoutMs: request?.__timeoutMs,
       },
       "/api/station/read",

@@ -17,6 +17,8 @@ const registry = require("../backend/src/services/oem-registry-service");
 const storageSource = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "backend", "src", "services", "storage-adapter.js"), "utf8");
 
 assert.match(storageSource, /isUuid\(rawKey\).*slug=eq\.\$\{key\}/s, "slug OEM lookups must not query UUID columns");
+assert.strictEqual(registry.requestedOemId({ headers: { "x-oem-id": "forged-oem" } }), registry.DEFAULT_OEM_SLUG, "caller OEM headers must be ignored");
+assert.strictEqual(registry.requestedOemId({ __oemId: "trusted-oem" }), "trusted-oem", "internal OEM selection must remain available");
 
 // ── 1. Credential encryption round-trips and never leaks plaintext ──────────
 {
