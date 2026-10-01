@@ -29,8 +29,9 @@ const METER = "GATE-M1";
 const MIGRATION_PATH = path.join(__dirname, "..", "supabase", "migrations", "20260804190000_incremental_meter_reading_refresh.sql");
 
 function connectionString() {
-  return "postgresql://postgres.qpoipyqgrjsjdvfqmxok:" + encodeURIComponent(process.env.SUPABASE_DB_PASSWORD || "Abdul$amad123") +
-    "@aws-1-eu-west-1.pooler.supabase.com:5432/postgres";
+  const value = String(process.env.SUPABASE_DB_URL || "").trim();
+  if (!value) throw new Error("SUPABASE_DB_URL is required");
+  return value;
 }
 
 async function snapshot(client, station) {
@@ -55,7 +56,13 @@ function findDelta(deltas, meterId, readingDate) {
 }
 
 async function run() {
-  const client = new Client({ connectionString: connectionString(), ssl: { rejectUnauthorized: false }, statement_timeout: 30000 });
+  const caResponse = await fetch("https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt");
+  if (!caResponse.ok) throw new Error(`Supabase CA download failed: HTTP ${caResponse.status}`);
+  const client = new Client({
+    connectionString: connectionString(),
+    ssl: { ca: await caResponse.text(), rejectUnauthorized: true },
+    statement_timeout: 30000,
+  });
   await client.connect();
   await client.query("BEGIN");
   try {

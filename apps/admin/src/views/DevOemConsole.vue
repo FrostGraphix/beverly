@@ -23,6 +23,10 @@ interface OemEndpoint {
   enabled: boolean;
 }
 
+interface OemInstallation { id: string; tenantId: string; displayName: string; status: string; environment: string }
+interface InventoryMeter { id: string; externalId: string; serial: string; siteId: string | null; status: string; lastSeenAt: string }
+interface InventorySnapshot { customers: number; meters: number; checksum: string; completedAt: string }
+
 interface CredentialForm {
   authStrategy: 'bearer_static' | 'bearer_login' | 'api_key_header' | 'oauth2_client_credentials';
   baseUrl: string;
@@ -63,6 +67,11 @@ const oems = ref<OemManufacturer[]>([
 
 const searchQuery = ref('');
 const activeOem = ref<OemManufacturer | null>(null);
+const installations = ref<OemInstallation[]>([]);
+const inventoryMeters = ref<InventoryMeter[]>([]);
+const inventorySnapshot = ref<InventorySnapshot | null>(null);
+const inventoryError = ref('');
+const selectedInstallationId = ref('');
 
 // Credential & endpoint forms
 const credForm = ref<CredentialForm>({
@@ -109,7 +118,24 @@ onMounted(async () => {
   } catch (e) {
     // Keep seeded list as fallback
   }
+  try {
+    const result = await api.get<{ installations: OemInstallation[] }>('/api/v1/oem/installations');
+    installations.value = result.installations;
+  } catch { inventoryError.value = 'Installation inventory is unavailable.'; }
 });
+
+async function loadInstallation(installationId: string) {
+  selectedInstallationId.value = installationId;
+  inventoryError.value = '';
+  try {
+    const [meterResult, reconciliation] = await Promise.all([
+      api.get<{ meters: InventoryMeter[] }>(`/api/v1/oem/installations/${installationId}/meters?limit=25`),
+      api.get<{ snapshot: InventorySnapshot | null }>(`/api/v1/oem/installations/${installationId}/reconciliation`),
+    ]);
+    inventoryMeters.value = meterResult.meters;
+    inventorySnapshot.value = reconciliation.snapshot;
+  } catch { inventoryMeters.value = []; inventorySnapshot.value = null; inventoryError.value = 'Scoped inventory is unavailable.'; }
+}
 
 const filteredOems = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -269,6 +295,26 @@ function openAcobotWithPrompt(prompt: string) {
 
       <!-- OEM Hub Overview Grid -->
       <div v-else class="oem-grid-section">
+        <div class="bw-card oem-sec-card">
+          <h3>Authorized Installations</h3>
+          <p v-if="inventoryError" class="bw-text-muted">{{ inventoryError }}</p>
+          <div class="oem-caps">
+            <button v-for="installation in installations" :key="installation.id" type="button"
+              class="bw-btn bw-btn-outline bw-btn-sm" @click="loadInstallation(installation.id)">
+              {{ installation.displayName }} · {{ installation.environment }}
+            </button>
+          </div>
+          <p v-if="selectedInstallationId && inventorySnapshot" class="bw-text-muted bw-text-sm">
+            Last snapshot: {{ inventorySnapshot.customers }} customers, {{ inventorySnapshot.meters }} meters.
+          </p>
+          <div v-if="inventoryMeters.length" class="bw-table-wrap">
+            <table class="bw-table"><thead><tr><th>Serial</th><th>Site</th><th>Status</th><th>Last seen</th></tr></thead>
+              <tbody><tr v-for="meter in inventoryMeters" :key="meter.id">
+                <td class="bw-mono">{{ meter.serial }}</td><td>{{ meter.siteId || '—' }}</td>
+                <td>{{ meter.status }}</td><td>{{ new Date(meter.lastSeenAt).toLocaleString() }}</td>
+              </tr></tbody></table>
+          </div>
+        </div>
         <div class="oem-toolbar">
           <input
             v-model="searchQuery"

@@ -18,6 +18,67 @@ async function inventoryApp(authenticated = true): Promise<FastifyInstance> {
 
 describe('OEM installation inventory HTTP boundary', () => {
     afterEach(() => vi.unstubAllGlobals());
+    it('returns installation-scoped meters without customer PII', async () => {
+        vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+            const url = new URL(input instanceof Request ? input.url : String(input));
+            if (!url.pathname.endsWith('/rpc/list_authorized_oem_inventory_meters')) return new Response('{}', { status: 404 });
+            return Response.json({ authorized: true, meters: [{
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', external_id: 'meter-1', serial: 'SERIAL-1',
+                site_id: 'site-1', meter_phase: 'single_phase', tariff_id: 'tariff-1', status: 'active',
+                last_seen_at: '2026-09-28T10:00:00.000Z', customer_external_id: 'private-customer-id',
+            }], next_cursor: null });
+        });
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/meters?limit=1');
+            expect(response.statusCode).toBe(200);
+            expect(response.json()).toEqual({ meters: [{
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', externalId: 'meter-1', serial: 'SERIAL-1',
+                siteId: 'site-1', meterPhase: 'single_phase', tariffId: 'tariff-1', status: 'active',
+                lastSeenAt: '2026-09-28T10:00:00.000Z',
+            }], nextCursor: null });
+        } finally { await app.close(); }
+    });
+    it('hides unauthorized installation meters', async () => {
+        vi.stubGlobal('fetch', async () => Response.json({ authorized: false, meters: [], next_cursor: null }));
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/meters');
+            expect(response.statusCode).toBe(404);
+            expect(response.json()).toEqual({ error: 'oem_installation_not_found' });
+        } finally { await app.close(); }
+    });
+    it('returns the last atomic inventory reconciliation', async () => {
+        vi.stubGlobal('fetch', async () => Response.json({ authorized: true, snapshot: {
+            customers: 3073, meters: 3073, checksum: 'abc123', completed_at: '2026-09-28T10:00:00.000Z',
+        } }));
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/reconciliation');
+            expect(response.statusCode).toBe(200);
+            expect(response.json()).toEqual({ snapshot: {
+                customers: 3073, meters: 3073, checksum: 'abc123', completedAt: '2026-09-28T10:00:00.000Z',
+            } });
+        } finally { await app.close(); }
+    });
+    it('hides installation grants lacking active tenant membership', async () => {
+        vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+            const url = new URL(input instanceof Request ? input.url : String(input));
+            const scoped = url.searchParams.get('oem_installations.tenants.oem_tenant_memberships.auth_user_id')
+                === 'eq.11111111-1111-4111-8111-111111111111'
+                && url.searchParams.get('oem_installations.tenants.oem_tenant_memberships.status') === 'eq.active';
+            return Response.json(scoped ? [] : [{ oem_installations: {
+                id: 'installation-a', tenant_id: 'tenant-a', display_name: 'Forbidden',
+                status: 'active', environment: 'production', tenants: { status: 'active' },
+            } }]);
+        });
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations');
+            expect(response.statusCode).toBe(200);
+            expect(response.json()).toEqual({ installations: [] });
+        } finally { await app.close(); }
+    });
     it('returns no installations without explicit grants, ignoring caller scope', async () => {
         vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
             const url = new URL(input instanceof Request ? input.url : String(input));
@@ -39,6 +100,23 @@ describe('OEM installation inventory HTTP boundary', () => {
             const response = await app.inject('/installations');
             expect(response.statusCode).toBe(403);
             expect(response.json()).toEqual({ error: 'oem_access_denied' });
+        } finally { await app.close(); }
+    });
+    it.each([
+        [],
+        [{ auth_user_id: '11111111-1111-4111-8111-111111111111', status: 'revoked' }],
+        [{ auth_user_id: '22222222-2222-4222-8222-222222222222', status: 'active' }],
+    ])('rejects invalid membership evidence %j', async (memberships) => {
+        vi.stubGlobal('fetch', async () => Response.json([{ oem_installations: {
+            id: 'installation-a', tenant_id: 'tenant-a', display_name: 'Hidden',
+            status: 'active', environment: 'production',
+            tenants: { status: 'active', oem_tenant_memberships: memberships },
+        } }]));
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations');
+            expect(response.statusCode).toBe(503);
+            expect(response.json()).toEqual({ error: 'oem_inventory_unavailable' });
         } finally { await app.close(); }
     });
     it.each([
@@ -86,7 +164,9 @@ describe('OEM installation inventory HTTP boundary', () => {
             }
             return Response.json([{ oem_installations: {
                 id: 'installation-a', tenant_id: 'tenant-a', display_name: 'Authorized installation',
-                status: 'draft', environment: 'sandbox', tenants: { status: 'active' },
+                status: 'draft', environment: 'sandbox', tenants: { status: 'active', oem_tenant_memberships: [
+                    { auth_user_id: userId, status: 'active' },
+                ] },
             } }]);
         });
         const app = Fastify();

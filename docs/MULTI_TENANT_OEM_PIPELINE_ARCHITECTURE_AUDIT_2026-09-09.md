@@ -2102,3 +2102,13 @@ Phase 1 may begin against the confirmed public seams: adapter contract, gateway 
 - The existing gateway already routes all `/api/v1/` calls. A red/green HTTP regression fixed omitted cache protection at this gateway; canonical responses now include `Cache-Control: no-store`.
 - Eight inventory tests and full wallet regression (80 files, 557 tests) passed. Root regression and all application builds passed. Migration hygiene reports 171 migrations. The build launcher still reports Node 24 engine warnings; no all-Node-22 build claim is made.
 - No credentials, tenant grants, provider balances, deployed configuration or production activation were changed. Ingestion, collision-safe resource storage, checkpoint/replay, scoped UI, atomic rotation and financial execution remain incomplete.
+
+### 23.52 Scoped inventory pipeline (2026-10-01)
+
+- Tenant membership is now explicit and independent from installation access. Inventory APIs require active membership, an active tenant and an active installation grant in the same database statement. Unauthorized installations return indistinguishable not-found responses.
+- Dedicated installation-scoped customer and meter tables replace OEM-wide identity for the new SparkMeter inventory path. Atomic snapshots serialize per installation, validate duplicates and ownership, upsert observed rows, mark missing rows stale and checkpoint counts plus a checksum. They never delete inventory.
+- The importer exposes this path only through explicit `--scoped --apply`; legacy Calinmeter storage and behavior remain unchanged. Meterless customers remain excluded by the existing verified plan.
+- Staff downstream endpoints expose paginated meter metadata and the last complete reconciliation snapshot. Customer contact data is not returned. Wallet Admin renders authorized installation evidence.
+- Local Node 22 wallet regression passed 80 files and 564 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds passed. Inventory migration, importer and console contracts passed. Targeted lint passed; full lint retains 997 pre-existing violations.
+- Database gates P1 and P5 reject missing explicit configuration and certificate-verify Supabase. P5's embedded password fallback and both disabled TLS configurations were removed. Their security regression passes.
+- Vercel discovery confirms the Beverly project and earlier OEM preview at `b6fd594b`. The new changes are not yet deployed. Production remains blocked by unapplied migrations, absent explicit membership/grant provisioning, unavailable restore verification and unresolved SparkMeter financial retry semantics.

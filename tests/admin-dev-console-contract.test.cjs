@@ -129,7 +129,11 @@ assert.match(bootstrap, /route_hash', 'dev\.console'/);
 assert.match(pkg.scripts["dev-console:user"], /ensure-dev-console-user\.mjs/);
 assert.match(pkg.scripts["test:wallet"], /admin-dev-console-contract\.test\.cjs/);
 assert.match(oemConsoleView, /oem\.slug === 'sparkmeter'[\s\S]*?bearerToken: ''/);
+assert.match(oemConsoleView, /\/api\/v1\/oem\/installations/);
+assert.match(oemConsoleView, /\/reconciliation/);
+assert.match(oemConsoleView, /\/meters\?limit=/);
 assert.doesNotMatch(adminDevRoutes, /apiKey:\s*['"][^'"]+['"]/);
-assert.match(adminDevRoutes, /credentialsConfigured:\s*Boolean\(process\.env\.SPARKMETER_API_KEY\)/);
+assert.match(adminDevRoutes, /write_operations_certified:\s*false/);
+assert.match(adminDevRoutes, /production_activation_authorized:\s*false/);
 
 console.log("admin dev console contract passed");

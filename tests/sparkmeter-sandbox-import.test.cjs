@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-const { buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers } = require("../tools/import-sparkmeter-sandbox.cjs");
+const { applyScopedPlan, buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers } = require("../tools/import-sparkmeter-sandbox.cjs");
 
 const installationId = "ed0eefb2-f017-43ad-a52e-82169684803b";
 const manufacturerId = "e1532892-e09d-44f9-a9cb-b99b5c9ebecf";
@@ -67,6 +67,19 @@ assert.throws(
 );
 
 (async () => {
+  let scopedCall;
+  const scopedSummary = await applyScopedPlan({ query: async (sql, values) => {
+    scopedCall = { sql, values };
+    return { rows: [{ summary: { customers: 1, meters: 1, stale_customers: 0, stale_meters: 0 } }] };
+  } }, plan, { installationId });
+  assert.match(scopedCall.sql, /apply_oem_inventory_snapshot/, "scoped import must use the atomic database RPC");
+  assert.strictEqual(scopedCall.values[0], installationId);
+  assert.deepStrictEqual(JSON.parse(scopedCall.values[1])[0], {
+    external_id: "customer-with-meter", code: "ACOB-001", name: "Metered Customer",
+    phone: "+2348000000000", service_area_id: "service-area-1", site_id: "site-1"
+  });
+  assert.deepStrictEqual(scopedSummary, { customers: 1, meters: 1, stale_customers: 0, stale_meters: 0 });
+  await assert.rejects(() => applyScopedPlan({ query: async () => ({ rows: [{ summary: { customers: 0, meters: 1 } }] }) }, plan, { installationId }), /summary/i);
   assert.throws(() => buildSparkMeterSandboxImportPlan({
     installationId, manufacturerId,
     customers: [{ id: "malformed-customer", name: "Malformed", meters: null }]

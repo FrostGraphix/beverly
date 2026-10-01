@@ -4,6 +4,20 @@ Status: **Incomplete**. Updated 2026-09-28.
 
 ## Latest checkpoint
 
+- Tenant authority now requires two independent server-managed records: active tenant membership and active installation access. Both checks execute inside each database read. Staff role, browser parameters and installation grants alone cannot establish membership.
+- Added installation-scoped customer and meter storage. `apply_oem_inventory_snapshot` validates complete identities, duplicate external IDs, duplicate serials, customer links and ownership changes before mutation. One installation lock serializes snapshots. Missing rows become stale; nothing is deleted. Legacy Calinmeter tables remain untouched.
+- The SparkMeter importer keeps its legacy behavior by default. Explicit `--scoped --apply` uses the single atomic snapshot RPC. The existing metered-only plan still excludes the 39 meterless customers. No live import ran during this checkpoint.
+- Downstream meter and reconciliation endpoints use database-enforced tenant membership plus installation grants. They return sanitized meter metadata and snapshot evidence without customer contact data. The Wallet Admin OEM console consumes these endpoints.
+- Node 22 wallet verification passes 80 files and 564 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for the changed wallet route and tests. Full repository lint still has 997 pre-existing violations.
+- Database gates P1 and P5 require an explicit database URL and verify the official Supabase certificate chain. P5's embedded password fallback was removed. A security regression protects both boundaries.
+- Restore target connection remains unavailable with SQLSTATE `XX000` from the provider. The configured restore pooler identity matches the known restore project, but no specific cause is established. No migration, membership, grant or inventory row was applied.
+
+### Deployment gate
+
+Vercel access is available for the Beverly team and project. The latest observed deployment for this OEM branch is the earlier `b6fd594b` preview, not this checkpoint. Preview deployment cannot verify the new data flow until migrations are applied to the intended non-production database and a real staff membership plus installation grant are provisioned. Production activation remains prohibited.
+
+### Earlier installation checkpoint
+
 - Added `/api/v1/oem/installations` behind existing staff authentication and explicit installation grants. Active tenant and grant filters apply in storage; client-supplied scope is ignored. Responses expose only installation metadata, reject malformed joins, bound queries to ten seconds and fail closed beyond 200 grants. This does not authorize provider dispatch.
 - Added expand-only `20260927120000_oem_actor_installation_access.sql`. No grants are seeded. Its rollback requires explicit review and refuses populated tables. The table is service-role-only with forced RLS; application-layer grant checks remain necessary because the trusted backend bypasses RLS.
 - Gateway routing already covers the new endpoint. Added `Cache-Control: no-store` at the canonical gateway boundary because upstream cache headers were not forwarded. A failing HTTP proxy test demonstrated the omission before the fix.

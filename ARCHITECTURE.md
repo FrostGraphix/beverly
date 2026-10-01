@@ -53,6 +53,9 @@ Keep write safety strict.
 
 - `backend/wallet/src/routes/oem.ts` exposes staff installation inventory through `/api/v1/oem/installations`. Explicit service-managed actor grants and active tenant status scope every query; staff roles alone do not grant installation access. This inventory route does not enable provider dispatch.
 - `supabase/migrations/20260927120000_oem_actor_installation_access.sql` owns service-managed actor-to-installation grants. No ownership grants are inferred or seeded. Its rollback requires review and an empty grant table.
+- `supabase/migrations/20260928120000_oem_tenant_memberships.sql` owns service-managed actor-to-tenant memberships with forced RLS. Installation reads require both active tenant membership and an explicit active installation grant in one database query; no ownership is seeded or inferred from staff roles.
+- `supabase/migrations/20260928130000_oem_inventory.sql` owns installation-scoped customer and meter inventory, separate from legacy Calinmeter tables. Complete snapshots reconcile atomically through `apply_oem_inventory_snapshot`; missing resources become stale rather than deleted. Tenant identity derives from the installation. The operator importer selects this path explicitly with `--scoped`.
+- `/api/v1/oem/installations/:installationId/meters` and `/reconciliation` expose tenant-authorized, installation-scoped inventory results. Database functions enforce membership plus installation grants in the same statement. Meter reads exclude customer contact data.
 
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
 - `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.

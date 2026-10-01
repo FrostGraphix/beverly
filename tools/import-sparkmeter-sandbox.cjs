@@ -330,11 +330,34 @@ async function applyPlan(client, plan, target) {
   }
 }
 
+/** Apply one complete installation snapshot through its atomic database boundary. */
+async function applyScopedPlan(client, plan, target) {
+  const customers = plan.customers.map((row) => ({
+    external_id: row.externalId, code: row.code, name: row.name, phone: row.phone,
+    service_area_id: row.serviceAreaId, site_id: row.siteId
+  }));
+  const meters = plan.meters.map((row) => ({
+    external_id: row.externalId, customer_external_id: row.customerExternalId,
+    serial: row.serial, tariff_id: row.tariffId, meter_phase: row.meterPhase, site_id: row.siteId
+  }));
+  const result = await client.query(
+    "SELECT public.apply_oem_inventory_snapshot($1, $2::jsonb, $3::jsonb) AS summary",
+    [target.installationId, JSON.stringify(customers), JSON.stringify(meters)]
+  );
+  const summary = result.rows[0]?.summary;
+  if (!summary || summary.customers !== customers.length || summary.meters !== meters.length
+      || !Number.isSafeInteger(summary.stale_customers) || !Number.isSafeInteger(summary.stale_meters)) {
+    throw new Error("Scoped inventory summary verification failed");
+  }
+  return summary;
+}
+
 /** @returns {Promise<void>} */
 async function main() {
   process.loadEnvFile(".env");
   const argumentsList = process.argv.slice(2);
   const apply = argumentsList.includes("--apply");
+  const scoped = argumentsList.includes("--scoped");
   const target = resolveImportTarget(argumentsList);
   const connectionString = resolveImportConnectionString(target, process.env);
   const caResponse = await fetch(SUPABASE_CA_URL);
@@ -348,14 +371,14 @@ async function main() {
     await assertImportInstallation(client, target);
     const customers = await fetchSparkMeterCustomers();
     const plan = buildSparkMeterSandboxImportPlan({ installationId: target.installationId, manufacturerId: target.manufacturerId, customers });
-    if (apply) await applyPlan(client, plan, target);
-    console.log(JSON.stringify({ apply, environment: target.environment, customers: plan.customers.length, meters: plan.meters.length, mappings: plan.mappings.length, skippedWithoutMeters: plan.skippedWithoutMeters }));
+    const reconciliation = apply ? (scoped ? await applyScopedPlan(client, plan, target) : await applyPlan(client, plan, target)) : null;
+    console.log(JSON.stringify({ apply, scoped, environment: target.environment, customers: plan.customers.length, meters: plan.meters.length, mappings: plan.mappings.length, skippedWithoutMeters: plan.skippedWithoutMeters, reconciliation }));
   } finally {
     await client.end().catch(() => undefined);
   }
 }
 
-module.exports = { buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers, resolveImportConnectionString, resolveImportTarget };
+module.exports = { applyScopedPlan, buildSparkMeterSandboxImportPlan, fetchWithRetries, fetchSparkMeterCustomers, resolveImportConnectionString, resolveImportTarget };
 
 if (require.main === module) {
   main().catch((error) => {

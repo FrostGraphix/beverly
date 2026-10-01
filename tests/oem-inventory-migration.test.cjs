@@ -1,0 +1,36 @@
+"use strict";
+const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
+const root = path.resolve(__dirname, "..");
+const migrationPath = path.join(root, "supabase/migrations/20260928130000_oem_inventory.sql");
+const rollbackPath = path.join(root, "supabase/rollbacks/20260928130000_oem_inventory.rollback.sql");
+const membershipPath = path.join(root, "supabase/migrations/20260928120000_oem_tenant_memberships.sql");
+const membershipRollbackPath = path.join(root, "supabase/rollbacks/20260928120000_oem_tenant_memberships.rollback.sql");
+assert(fs.existsSync(migrationPath), "missing scoped inventory migration");
+assert(fs.existsSync(rollbackPath), "missing scoped inventory rollback");
+assert(fs.existsSync(membershipPath), "missing tenant membership migration");
+assert(fs.existsSync(membershipRollbackPath), "missing tenant membership rollback");
+const sql = fs.readFileSync(migrationPath, "utf8").toLowerCase();
+const rollback = fs.readFileSync(rollbackPath, "utf8").toLowerCase();
+const membership = fs.readFileSync(membershipPath, "utf8").toLowerCase();
+for (const table of ["oem_inventory_customers", "oem_inventory_meters"]) {
+  assert(sql.includes(`create table if not exists public.${table}`), `missing ${table}`);
+  assert(sql.includes(`alter table public.${table} force row level security`), `missing forced rls: ${table}`);
+}
+assert(sql.includes("function public.apply_oem_inventory_snapshot"), "missing atomic snapshot rpc");
+assert(sql.includes("function public.list_authorized_oem_inventory_meters"), "missing authorized downstream read");
+assert(sql.includes("function public.get_authorized_oem_inventory_reconciliation"), "missing authorized reconciliation read");
+assert(sql.includes("join public.oem_tenant_memberships"), "downstream reads require tenant membership");
+assert(sql.includes("join public.oem_actor_installation_access"), "downstream reads require installation grants");
+assert(sql.includes("for update"), "installation snapshots must serialize");
+assert(sql.includes("status = 'stale'"), "missing resources must become stale");
+assert(sql.includes("unique (oem_installation_id, external_id)"), "external identity must be installation scoped");
+assert(sql.includes("unique (oem_installation_id, serial)"), "serial identity must be installation scoped");
+assert(!sql.includes("delete from public.oem_inventory"), "snapshot reconciliation cannot delete inventory");
+assert(!sql.includes("insert into public.tenants"), "ownership cannot be inferred");
+assert(rollback.includes("manual rollback review required"), "rollback must be guarded");
+assert(membership.includes("primary key (tenant_id, auth_user_id)"), "memberships must be tenant scoped");
+assert(membership.includes("force row level security"), "memberships require forced RLS");
+assert(!membership.includes("insert into public.oem_tenant_memberships"), "membership cannot be inferred");
+console.log(JSON.stringify({ status: "OEM inventory migration contract passed" }, null, 2));
