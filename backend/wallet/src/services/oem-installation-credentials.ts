@@ -1,5 +1,5 @@
 import { adminClient } from '../db/supabase.js';
-import { CredentialKeyringError, decryptInstallationBundle } from './oem-credential-keyring.js';
+import { CredentialKeyringError, decryptInstallationBundle, rotateInstallationBundle } from './oem-credential-keyring.js';
 import type { InstallationCandidate } from './oem-installations.js';
 
 export type InstallationAuthStrategy =
@@ -20,6 +20,14 @@ export interface InstallationCredentialRow {
 
 export interface InstallationCredentialStore {
     findByInstallationId(installationId: string): Promise<InstallationCredentialRow | null>;
+    compareAndSwap?(input: {
+        installationId: string;
+        expectedEncryptedSecretBundle: string;
+        expectedEncryptionKeyVersion: number;
+        newEncryptedSecretBundle: string;
+        newEncryptionKeyVersion: number;
+        updatedBy: string;
+    }): Promise<boolean>;
 }
 
 export interface ApiKeyInstallationCredentials {
@@ -86,6 +94,18 @@ const supabaseCredentialStore: InstallationCredentialStore = {
             tokenEndpoint: row.token_endpoint,
             tokenExpiryPolicy: row.token_expiry_policy ?? {},
         };
+    },
+    async compareAndSwap(input): Promise<boolean> {
+        const { data, error } = await adminClient.rpc('rotate_oem_installation_credentials', {
+            p_oem_installation_id: input.installationId,
+            p_expected_encrypted_secret_bundle: input.expectedEncryptedSecretBundle,
+            p_expected_encryption_key_version: input.expectedEncryptionKeyVersion,
+            p_new_encrypted_secret_bundle: input.newEncryptedSecretBundle,
+            p_new_encryption_key_version: input.newEncryptionKeyVersion,
+            p_updated_by: input.updatedBy,
+        });
+        if (error) throw error;
+        return data === true;
     },
 };
 
@@ -154,4 +174,50 @@ export async function loadInstallationCredentials(
         tokenEndpoint: row.tokenEndpoint,
         tokenExpiryPolicy: row.tokenExpiryPolicy,
     };
+}
+
+/** Re-encrypt and persist one credential row using atomic compare-and-swap. */
+export async function rotateStoredInstallationCredentials(
+    installation: InstallationCandidate,
+    toVersion: number,
+    updatedBy: string,
+    store: InstallationCredentialStore = supabaseCredentialStore,
+): Promise<number> {
+    if (installation.status !== 'active') {
+        throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Installation is not active');
+    }
+    if (!store.compareAndSwap) {
+        throw new InstallationCredentialError('OEM_CREDENTIALS_UNSUPPORTED', 'Credential store cannot rotate credentials');
+    }
+    const row = await store.findByInstallationId(installation.id);
+    if (!row) throw new InstallationCredentialError('OEM_CREDENTIALS_MISSING', 'Installation credentials are missing');
+    if (row.oemInstallationId !== installation.id) {
+        throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Credential installation mismatch');
+    }
+    let encryptedSecretBundle: string;
+    try {
+        encryptedSecretBundle = rotateInstallationBundle(
+            row.encryptedSecretBundle,
+            installation.id,
+            row.encryptionKeyVersion,
+            toVersion,
+        );
+    } catch (error) {
+        throw new InstallationCredentialError(
+            error instanceof CredentialKeyringError ? error.code : 'OEM_CREDENTIALS_INVALID',
+            'Credential rotation failed',
+        );
+    }
+    const updated = await store.compareAndSwap({
+        installationId: installation.id,
+        expectedEncryptedSecretBundle: row.encryptedSecretBundle,
+        expectedEncryptionKeyVersion: row.encryptionKeyVersion,
+        newEncryptedSecretBundle: encryptedSecretBundle,
+        newEncryptionKeyVersion: toVersion,
+        updatedBy,
+    });
+    if (!updated) {
+        throw new InstallationCredentialError('OEM_CREDENTIALS_INVALID', 'Credential rotation conflicted');
+    }
+    return toVersion;
 }

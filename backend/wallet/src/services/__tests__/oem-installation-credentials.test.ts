@@ -4,6 +4,7 @@ import { encryptSecret } from '../oem-registry.js';
 import {
     InstallationCredentialError,
     loadInstallationCredentials,
+    rotateStoredInstallationCredentials,
     type InstallationCredentialStore,
 } from '../oem-installation-credentials.js';
 
@@ -15,6 +16,44 @@ const installation = {
 
 describe('OEM installation credential loading', () => {
     afterEach(() => vi.unstubAllEnvs());
+    it('rotates stored credentials using one compare-and-swap', async () => {
+        const keys = JSON.stringify({
+            2: Buffer.alloc(32, 17).toString('base64'),
+            3: Buffer.alloc(32, 18).toString('base64'),
+        });
+        vi.stubEnv('OEM_INSTALLATION_ENCRYPTION_KEYS', keys);
+        const current = encryptInstallationBundle(JSON.stringify({ apiKey: 'key', apiSecret: 'secret' }), installation.id, 2);
+        let rotated: Parameters<NonNullable<InstallationCredentialStore['compareAndSwap']>>[0] | undefined;
+        const store: InstallationCredentialStore = {
+            async findByInstallationId() {
+                return { oemInstallationId: installation.id, authStrategy: 'api_key_pair', encryptedSecretBundle: current,
+                    encryptionKeyVersion: 2, tokenEndpoint: null, tokenExpiryPolicy: {} };
+            },
+            async compareAndSwap(input) { rotated = input; return true; },
+        };
+
+        await expect(rotateStoredInstallationCredentials(installation, 3, '75c99dc7-6f4f-455b-9399-b9ef0aa50311', store)).resolves.toBe(3);
+        expect(rotated).toMatchObject({ installationId: installation.id, expectedEncryptedSecretBundle: current,
+            expectedEncryptionKeyVersion: 2, newEncryptionKeyVersion: 3,
+            updatedBy: '75c99dc7-6f4f-455b-9399-b9ef0aa50311' });
+        expect(rotated?.newEncryptedSecretBundle).not.toBe(current);
+    });
+
+    it('fails when concurrent rotation wins', async () => {
+        const keys = JSON.stringify({ 2: Buffer.alloc(32, 17).toString('base64'), 3: Buffer.alloc(32, 18).toString('base64') });
+        vi.stubEnv('OEM_INSTALLATION_ENCRYPTION_KEYS', keys);
+        const current = encryptInstallationBundle(JSON.stringify({ apiKey: 'key', apiSecret: 'secret' }), installation.id, 2);
+        const store: InstallationCredentialStore = {
+            async findByInstallationId() {
+                return { oemInstallationId: installation.id, authStrategy: 'api_key_pair', encryptedSecretBundle: current,
+                    encryptionKeyVersion: 2, tokenEndpoint: null, tokenExpiryPolicy: {} };
+            },
+            async compareAndSwap() { return false; },
+        };
+
+        await expect(rotateStoredInstallationCredentials(installation, 3, '75c99dc7-6f4f-455b-9399-b9ef0aa50311', store))
+            .rejects.toMatchObject({ code: 'OEM_CREDENTIALS_INVALID' });
+    });
     it('loads credentials after an installation-bound key rotation', async () => {
         const keys = JSON.stringify({ 2: Buffer.alloc(32, 17).toString('base64') });
         vi.stubEnv('OEM_INSTALLATION_ENCRYPTION_KEYS', keys);
