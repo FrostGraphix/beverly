@@ -14,7 +14,7 @@ Status: **Incomplete**. Updated 2026-09-28.
 
 ### Deployment gate
 
-Vercel access is available for the Beverly team and project. The latest observed deployment for this OEM branch is the earlier `b6fd594b` preview, not this checkpoint. Preview deployment cannot verify the new data flow until migrations are applied to the intended non-production database and a real staff membership plus installation grant are provisioned. Production activation remains prohibited.
+Vercel built commit `f337a85c` successfully as preview deployment `dpl_DJY79EwBBti6DMpGuW5GwGanXr6v`. The preview remained protected: authenticated fetch attempts returned the Vercel authentication redirect, including temporary-share attempts. Runtime data-flow smoke remains blocked until migrations reach the intended non-production database, membership and installation grants exist, and protected access succeeds. Production activation remains prohibited.
 
 ### Earlier installation checkpoint
 
