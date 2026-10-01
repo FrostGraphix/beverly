@@ -34,16 +34,7 @@ onMounted(async () => {
 });
 
 const steps = computed(() => {
-    const kycDone = (auth.kycTier ?? 0) >= 1;
     return [
-        {
-            key: 'kyc',
-            label: 'Raise your account limit',
-            description: 'Identity verification unlocks the next configured limit',
-            done: kycDone,
-            to: '/kyc',
-            icon: '🆔',
-        },
         {
             key: 'meter',
             label: 'Link your first meter',
@@ -291,4 +282,12 @@ function dismiss() {
 
 .slide-enter-active, .slide-leave-active { transition: all 0.3s var(--ease-out); }
 .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-8px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-fill,
+  .step-link,
+  .slide-enter-active,
+  .slide-leave-active { transition: none !important; }
+  .step-link:hover:not(.step--done):not(.step--locked) { transform: none; }
+}
 </style>

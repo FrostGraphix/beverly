@@ -854,6 +854,7 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
         station_id: staff?.station_id ?? actor!.stationId ?? null,
         station_ids: staff?.station_ids ?? actor!.stationIds ?? [],
         profile_picture_url: staff?.profile_picture_url ?? null,
+        login_voice_enabled: staff?.login_voice_enabled !== false,
         updated_at: staff?.updated_at ?? null,
         password_reset_required: actor?.passwordResetRequired === true,
     };
@@ -898,7 +899,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         try {
             let staffResult = await adminClient
                 .from('users')
-                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at, password_reset_required')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, login_voice_enabled, updated_at, password_reset_required')
                 .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
                 .maybeSingle();
             if (missingColumn(staffResult?.error, 'station_ids')) {
@@ -1072,17 +1073,19 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
+            login_voice_enabled: z.boolean().optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.user_name = body.full_name;
+        if (body.login_voice_enabled !== undefined) updates.login_voice_enabled = body.login_voice_enabled;
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
 
         const { data: existing } = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
             .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
             .maybeSingle();
 
@@ -1093,7 +1096,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 .from('users')
                 .update(updates)
                 .eq('id', existing.id)
-                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
                 .single();
             data = result.data;
             error = result.error;
@@ -1107,8 +1110,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                     email: req.actor!.email,
                     role_key: req.actor!.role,
                     profile_picture_url: null,
+                    login_voice_enabled: body.login_voice_enabled ?? true,
                 })
-                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, login_voice_enabled, updated_at')
                 .single();
             data = result.data;
             error = result.error;

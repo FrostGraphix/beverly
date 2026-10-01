@@ -10,6 +10,7 @@ export interface StaffProfile {
     station_id?: string | null;
     station_ids?: string[];
     profile_picture_url: string | null;
+    login_voice_enabled?: boolean;
     updated_at?: string | null;
     password_reset_required: boolean;
 }

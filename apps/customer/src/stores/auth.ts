@@ -9,6 +9,7 @@ export interface CustomerProfile {
     email: string | null;
     phone: string | null;
     profile_picture_url: string | null;
+    login_voice_enabled?: boolean;
     kyc_tier: number;
     kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected';
     kyc_data?: Record<string, unknown> | null;

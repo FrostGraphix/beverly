@@ -24,6 +24,19 @@ const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 const navRef = ref<HTMLElement | null>(null);
 const unreadCount = ref(0);
+type NavGroup = 'operations' | 'walletTools' | 'support' | 'account';
+const navGroupRoutes: Record<NavGroup, string[]> = {
+    operations: ['/meter-orders', '/remote-send', '/consumption'],
+    walletTools: ['/wallet/fund', '/wallet/funding', '/statement', '/receipts'],
+    support: ['/notifications', '/help', '/disputes'],
+    account: ['/profile', '/kyc', '/security', '/vend-access'],
+};
+const navGroups = ref<Record<NavGroup, boolean>>({
+    operations: false,
+    walletTools: false,
+    support: false,
+    account: false,
+});
 
 async function persistLocale(locale: string) {
     try { await api.put('/api/v1/preferences/locale', { locale }); } catch { /* local preference remains active */ }
@@ -39,7 +52,20 @@ function scrollToActiveLink() {
     });
 }
 
-watch(() => route.path, () => scrollToActiveLink());
+function toggleNavGroup(group: NavGroup) {
+    navGroups.value[group] = !navGroups.value[group];
+}
+
+function isNavGroupOpen(group: NavGroup) {
+    return navGroups.value[group];
+}
+
+watch(() => route.path, () => {
+    (Object.keys(navGroupRoutes) as NavGroup[]).forEach((group) => {
+        if (isSectionActive(navGroupRoutes[group])) navGroups.value[group] = true;
+    });
+    scrollToActiveLink();
+}, { immediate: true });
 watch(drawerOpen, (isOpen) => {
     if (isOpen) scrollToActiveLink();
 });
@@ -201,8 +227,8 @@ onBeforeUnmount(() => {
       </div>
 
       <nav ref="navRef" class="bw-nav" aria-label="Vendor primary navigation">
-        <div :class="['bw-nav-section', { active: isSectionActive(['/', '/vend', '/meter-orders', '/remote-send']) }]">Vending</div>
-        <RouterLink to="/" :class="['bw-nav-item', { active: isItemActive('/') }]" :aria-current="isItemActive('/') ? 'page' : undefined" @click="closeDrawer">
+        <div class="bw-nav-primary" aria-label="Primary destinations">
+        <RouterLink to="/" class="bw-nav-item primary-dashboard" :class="{ active: isItemActive('/') }" :aria-current="isItemActive('/') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
           Dashboard
         </RouterLink>
@@ -210,20 +236,34 @@ onBeforeUnmount(() => {
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
           Buy Token
         </RouterLink>
-        <RouterLink to="/meter-orders" :class="['bw-nav-item', { active: isItemActive('/meter-orders') }]" :aria-current="isItemActive('/meter-orders') ? 'page' : undefined" @click="closeDrawer">
-          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4"/><path d="M20 12H4"/><path d="M20 17H4"/><path d="M8 7v10"/></svg>
-          Meter Orders
-        </RouterLink>
-        <RouterLink to="/remote-send" :class="['bw-nav-item', { active: isItemActive('/remote-send') }]" :aria-current="isItemActive('/remote-send') ? 'page' : undefined" @click="closeDrawer">
-          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          Remote Send
-        </RouterLink>
-
-        <div :class="['bw-nav-section', { active: isSectionActive(['/wallet', '/wallet/fund', '/wallet/funding', '/statement', '/consumption', '/notifications']) }]">Wallet</div>
         <RouterLink to="/wallet" :class="['bw-nav-item', { active: isItemActive('/wallet') }]" :aria-current="isItemActive('/wallet') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
           Wallet
         </RouterLink>
+        <RouterLink to="/transactions" :class="['bw-nav-item', { active: isItemActive('/transactions') }]" :aria-current="isItemActive('/transactions') ? 'page' : undefined" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          Transactions
+        </RouterLink>
+        </div>
+
+        <section class="bw-nav-group">
+          <button type="button" class="bw-nav-group-toggle" :aria-expanded="isNavGroupOpen('operations')" aria-controls="vendor-nav-operations" @click="toggleNavGroup('operations')">
+            <span :class="['bw-nav-section', { active: isSectionActive(navGroupRoutes.operations) }]">Operations</span>
+            <svg :class="['bw-nav-group-chevron', { open: isNavGroupOpen('operations') }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div v-show="isNavGroupOpen('operations')" id="vendor-nav-operations" class="bw-nav-group-items">
+            <RouterLink to="/meter-orders" :class="['bw-nav-item', { active: isItemActive('/meter-orders') }]" :aria-current="isItemActive('/meter-orders') ? 'page' : undefined" @click="closeDrawer"><svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7H4M20 12H4M20 17H4M8 7v10"/></svg>Meter Orders</RouterLink>
+            <RouterLink to="/remote-send" :class="['bw-nav-item', { active: isItemActive('/remote-send') }]" :aria-current="isItemActive('/remote-send') ? 'page' : undefined" @click="closeDrawer"><svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>Remote Send</RouterLink>
+            <RouterLink to="/consumption" :class="['bw-nav-item', { active: isItemActive('/consumption') }]" :aria-current="isItemActive('/consumption') ? 'page' : undefined" @click="closeDrawer"><svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4m0 16h16M8 15l3-4 3 2 4-6"/></svg>Consumption</RouterLink>
+          </div>
+        </section>
+
+        <section class="bw-nav-group">
+          <button type="button" class="bw-nav-group-toggle" :aria-expanded="isNavGroupOpen('walletTools')" aria-controls="vendor-nav-wallet-tools" @click="toggleNavGroup('walletTools')">
+            <span :class="['bw-nav-section', { active: isSectionActive(navGroupRoutes.walletTools) }]">Wallet tools</span>
+            <svg :class="['bw-nav-group-chevron', { open: isNavGroupOpen('walletTools') }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div v-show="isNavGroupOpen('walletTools')" id="vendor-nav-wallet-tools" class="bw-nav-group-items">
         <RouterLink to="/wallet/fund" :class="['bw-nav-item', { active: isItemActive('/wallet/fund') }]" :aria-current="isItemActive('/wallet/fund') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Fund Wallet
@@ -236,26 +276,23 @@ onBeforeUnmount(() => {
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
           Statement
         </RouterLink>
-        <RouterLink to="/consumption" :class="['bw-nav-item', { active: isItemActive('/consumption') }]" :aria-current="isItemActive('/consumption') ? 'page' : undefined" @click="closeDrawer">
-          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4m0 16h16M8 15l3-4 3 2 4-6"/></svg>
-          Consumption
-        </RouterLink>
-        <RouterLink to="/notifications" :class="['bw-nav-item', { active: isItemActive('/notifications') }]" :aria-current="isItemActive('/notifications') ? 'page' : undefined" @click="closeDrawer">
-          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-          Notifications
-        </RouterLink>
-
-        <div :class="['bw-nav-section', { active: isSectionActive(['/transactions', '/receipts']) }]">Records</div>
-        <RouterLink to="/transactions" :class="['bw-nav-item', { active: isItemActive('/transactions') }]" :aria-current="isItemActive('/transactions') ? 'page' : undefined" @click="closeDrawer">
-          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-          Transactions
-        </RouterLink>
         <RouterLink to="/receipts" :class="['bw-nav-item', { active: isItemActive('/receipts') }]" :aria-current="isItemActive('/receipts') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5L3 5v16l3-2 3 2 3-2 3 2 3-2 3 2V5z"/></svg>
           Receipts
         </RouterLink>
+          </div>
+        </section>
 
-        <div :class="['bw-nav-section', { active: isSectionActive(['/help', '/disputes']) }]">Support</div>
+        <section class="bw-nav-group">
+          <button type="button" class="bw-nav-group-toggle" :aria-expanded="isNavGroupOpen('support')" aria-controls="vendor-nav-support" @click="toggleNavGroup('support')">
+            <span :class="['bw-nav-section', { active: isSectionActive(navGroupRoutes.support) }]">Support</span>
+            <svg :class="['bw-nav-group-chevron', { open: isNavGroupOpen('support') }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div v-show="isNavGroupOpen('support')" id="vendor-nav-support" class="bw-nav-group-items">
+        <RouterLink to="/notifications" :class="['bw-nav-item', { active: isItemActive('/notifications') }]" :aria-current="isItemActive('/notifications') ? 'page' : undefined" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Notifications
+        </RouterLink>
         <RouterLink to="/help" :class="['bw-nav-item', { active: isItemActive('/help') }]" :aria-current="isItemActive('/help') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4"/><path d="M12 17h.01"/></svg>
           Help &amp; FAQ
@@ -264,8 +301,15 @@ onBeforeUnmount(() => {
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           Disputes
         </RouterLink>
+          </div>
+        </section>
 
-        <div :class="['bw-nav-section', { active: isSectionActive(['/profile', '/kyc', '/security', '/vend-access']) }]">Account</div>
+        <section class="bw-nav-group">
+          <button type="button" class="bw-nav-group-toggle" :aria-expanded="isNavGroupOpen('account')" aria-controls="vendor-nav-account" @click="toggleNavGroup('account')">
+            <span :class="['bw-nav-section', { active: isSectionActive(navGroupRoutes.account) }]">Account</span>
+            <svg :class="['bw-nav-group-chevron', { open: isNavGroupOpen('account') }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div v-show="isNavGroupOpen('account')" id="vendor-nav-account" class="bw-nav-group-items">
         <RouterLink to="/profile" :class="['bw-nav-item', { active: isItemActive('/profile') }]" :aria-current="isItemActive('/profile') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg>
           Profile
@@ -282,6 +326,8 @@ onBeforeUnmount(() => {
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v.01"/><path d="M7 10V7a5 5 0 0110 0v3"/><rect x="5" y="10" width="14" height="11" rx="2"/></svg>
           Vend Authorization
         </RouterLink>
+          </div>
+        </section>
       </nav>
 
       <footer class="bw-sidebar-foot sidebar-account">
@@ -566,6 +612,67 @@ onBeforeUnmount(() => {
 
 .bw-topbar {
     z-index: var(--z-dropdown);
+}
+
+.bw-nav-primary {
+    display: grid;
+    gap: 2px;
+    padding-bottom: var(--s-2);
+}
+
+.primary-dashboard {
+    min-height: 44px;
+    color: var(--text);
+    font-weight: 750;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 22%, var(--surface-2)), var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--brand) 36%, var(--glass-border));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent), 0 6px 16px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.primary-dashboard .bw-ic { color: var(--brand-on-surface); }
+.primary-dashboard:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 30%, var(--surface-2)), var(--surface-2)); }
+.primary-dashboard.active { background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 35%, var(--surface-2)), var(--surface-2)); }
+
+.bw-nav-group {
+    border-top: 1px solid color-mix(in srgb, var(--glass-border) 72%, transparent);
+}
+
+.bw-nav-group:first-of-type { margin-top: var(--s-2); }
+
+.bw-nav-group-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+}
+
+.bw-nav-group-toggle:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+    border-radius: var(--r-md);
+}
+
+.bw-nav-group-toggle .bw-nav-section { flex: 1; }
+.bw-nav-group-chevron {
+    width: 15px;
+    height: 15px;
+    margin-right: var(--s-3);
+    color: var(--text-faint);
+    transition: transform var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.bw-nav-group-toggle:hover .bw-nav-group-chevron,
+.bw-nav-group-toggle:focus-visible .bw-nav-group-chevron { color: var(--text-dim); }
+.bw-nav-group-chevron.open { transform: rotate(180deg); }
+.bw-nav-group-items { display: grid; padding-bottom: var(--s-2); }
+
+@media (prefers-reduced-motion: reduce) {
+    .primary-dashboard,
+    .bw-nav-group-chevron { transition: none; }
 }
 
 </style>

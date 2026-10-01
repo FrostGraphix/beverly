@@ -266,6 +266,7 @@ async function shapeVendorProfile(row: any, mfaVerified: boolean | undefined) {
         phone: row?.phone ?? org?.contact_phone ?? null,
         email: row?.email ?? org?.contact_email ?? null,
         profile_picture_url: row?.profile_picture_url ?? null,
+        login_voice_enabled: row?.login_voice_enabled !== false,
         mfa_enrolled: row?.mfa_enrolled,
         mfa_verified: mfaVerified,
         password_reset_required: row?.password_reset_required,
@@ -299,7 +300,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor!;
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, login_voice_enabled, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
             .eq('id', actor.actorId).single();
         return shapeVendorProfile(vu, actor.mfaVerified);
     });
@@ -311,11 +312,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
             phone: z.string().trim().min(6).max(32).optional(),
+            login_voice_enabled: z.boolean().optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.full_name = body.full_name;
         if (body.phone !== undefined) updates.phone = body.phone;
+        if (body.login_voice_enabled !== undefined) updates.login_voice_enabled = body.login_voice_enabled;
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
@@ -323,7 +326,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('vendor_users')
             .update(updates)
             .eq('id', req.actor!.actorId)
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, login_voice_enabled, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at, kyc_tier, kyc_status)')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return shapeVendorProfile(data, req.actor?.mfaVerified);

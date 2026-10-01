@@ -52,6 +52,17 @@ const uploading = ref(false);
 const cropOpen = ref(false);
 const cropFile = ref<File | null>(null);
 const error = ref<string | null>(null);
+const voiceSaving = ref(false);
+const loginVoiceEnabled = computed(() => auth.user?.login_voice_enabled !== false);
+async function setLoginVoice(enabled: boolean) {
+    if (!auth.user || voiceSaving.value) return;
+    const previous = auth.user.login_voice_enabled !== false;
+    auth.user.login_voice_enabled = enabled;
+    voiceSaving.value = true; error.value = null;
+    try { await api.patch('/api/v1/vendor/me', { login_voice_enabled: enabled }); await auth.refreshMe(); }
+    catch (e: any) { auth.user.login_voice_enabled = previous; error.value = e?.message ?? 'Login voice preference could not be saved.'; }
+    finally { voiceSaving.value = false; }
+}
 
 function fallback(value: string | null | undefined): string {
     return value?.trim() || '-';
@@ -246,6 +257,10 @@ async function uploadProcessedProfilePicture(file: File) {
           <div class="profile-row"><dt>Phone</dt><dd>{{ fallback(auth.user?.primary_phone ?? auth.user?.phone) }}</dd></div>
           <div class="profile-row"><dt>Role</dt><dd>{{ roleLabel }}</dd></div>
         </dl>
+      </section>
+      <section class="profile-section bw-card">
+        <div class="profile-section-head"><span>Preferences</span><h2>Login voice</h2></div>
+        <div class="bw-row" style="gap:var(--s-3)"><p class="bw-muted" style="flex:1; margin:0">Play a voice greeting when you sign in.</p><button class="bw-switch" type="button" role="switch" :aria-checked="loginVoiceEnabled" aria-label="Login voice" :disabled="voiceSaving" @click="setLoginVoice(!loginVoiceEnabled)"><span /></button></div>
       </section>
 
       <section v-for="section in profileSections" :key="section.title" class="profile-section bw-card">

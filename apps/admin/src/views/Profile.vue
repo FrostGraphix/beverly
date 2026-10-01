@@ -21,6 +21,16 @@ const avatarMenuOpen = ref(false);
 const removePictureOpen = ref(false);
 const avatarMenu = ref<HTMLElement | null>(null);
 const photoInput = ref<HTMLInputElement | null>(null);
+const voiceSaving = ref(false);
+const loginVoiceEnabled = computed(() => auth.user?.login_voice_enabled !== false);
+async function setLoginVoice(enabled: boolean) {
+    if (!auth.user || voiceSaving.value) return;
+    const previous = auth.user.login_voice_enabled !== false;
+    auth.user.login_voice_enabled = enabled; voiceSaving.value = true; error.value = null;
+    try { await syncAuthFromApi(await api.patch('/api/v1/admin/me', { login_voice_enabled: enabled })); feedback.value = 'Login voice preference saved.'; }
+    catch (e: any) { auth.user.login_voice_enabled = previous; error.value = e?.message ?? 'Login voice preference could not be saved.'; }
+    finally { voiceSaving.value = false; }
+}
 
 const initials = computed(() => {
     const source = auth.user?.full_name?.trim() || auth.user?.email?.trim() || 'ST';
@@ -314,6 +324,10 @@ onBeforeUnmount(() => {
           <div class="profile-panel-head"><span class="profile-panel-kicker">Security</span><h2>Password</h2></div>
           <p class="bw-muted">Update your password securely.</p>
           <router-link class="bw-btn primary" to="/password-change">Change password</router-link>
+        </article>
+        <article class="bw-card profile-panel">
+          <div class="profile-panel-head"><span class="profile-panel-kicker">Preferences</span><h2>Login voice</h2></div>
+          <div class="bw-row" style="gap:12px"><p class="bw-muted" style="flex:1; margin:0">Play a voice greeting when you sign in.</p><button class="bw-switch" type="button" role="switch" :aria-checked="loginVoiceEnabled" aria-label="Login voice" :disabled="voiceSaving" @click="setLoginVoice(!loginVoiceEnabled)"><span /></button></div>
         </article>
       </section>
     </div>

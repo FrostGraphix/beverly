@@ -133,6 +133,9 @@ function respond(route, payload) {
     });
     const vendorPage = await vendorContext.newPage();
     await vendorPage.goto(`http://127.0.0.1:${vendorServer.address().port}/wallet-vendor/kyc`, { waitUntil: "domcontentloaded" });
+    await vendorPage.getByText("Your vendor wallet is ready").waitFor({ timeout: 5_000 });
+    assert.equal(await vendorPage.getByLabel("Identity document type").count(), 0, "Tier 0 vendor upgrades must be optional");
+    await vendorPage.getByRole("button", { name: "Raise my limit" }).click();
     await vendorPage.getByRole("heading", { name: "Request Tier 1" }).waitFor({ timeout: 5_000 });
     await vendorPage.getByLabel("Identity document type").waitFor({ timeout: 5_000 });
     await vendorPage.getByText("0 of 2 required files ready.").waitFor({ timeout: 5_000 });
