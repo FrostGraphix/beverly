@@ -68,7 +68,7 @@ assert.match(routes, /vend_credential_hash, vend_credential_salt/);
 assert.doesNotMatch(routes, /allowArchivedFallback/);
 assert.doesNotMatch(routes, /allowHistoricalFallback/);
 assert.match(tokenEngine, /return env\.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true/);
-assert.match(walletEnv, /parsed\.data\.UPSTREAM_BEARER_TOKEN \|\| parsed\.data\.ENERGY_BEARER_TOKEN/);
+assert.match(walletEnv, /resolvedData\.UPSTREAM_BEARER_TOKEN \|\| resolvedData\.ENERGY_BEARER_TOKEN/);
 assert.ok(vendingService.indexOf('assertEnergyVendReady()') < vendingService.indexOf("findWalletByOwner('vendor'"));
 assert.ok(customerPurchaseService.indexOf('assertEnergyVendReady()') < customerPurchaseService.indexOf('// Resolve meter'));
 

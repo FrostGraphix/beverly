@@ -21,6 +21,7 @@ assert(requiredProductionKeys.includes("WEBHOOK_SECRET"));
 assert(validateProvisioningEnv(valid).ok);
 assert(!validateProvisioningEnv({ ...valid, LIVE_API_BASE_URL: "" }).ok);
 assert(!validateProvisioningEnv({ ...valid, SUPABASE_SERVICE_ROLE_KEY: "changeme" }).ok);
+assert(!validateProvisioningEnv({ ...valid, SUPABASE_SERVICE_ROLE_KEY: valid.SUPABASE_ANON_KEY }).ok);
 assert(validateProvisioningEnv({ NODE_ENV: "development" }).ok);
 
 console.log("provisioning-env ok");
