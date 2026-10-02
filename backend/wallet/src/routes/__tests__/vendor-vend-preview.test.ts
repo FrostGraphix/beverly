@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     dispatchGeneratedVendorToken: vi.fn(),
     vendorPurchase: vi.fn(),
     verifyVendorVendCredential: vi.fn(),
+    queryConsumption: vi.fn(),
 }));
 
 vi.mock('../../services/token-engine.js', () => ({
@@ -38,6 +39,11 @@ vi.mock('../../services/vendor-vend-credential.js', () => ({
     getVendorVendCredentialStatus: vi.fn(),
     setVendorVendCredential: vi.fn(),
     VendorVendCredentialError: class VendorVendCredentialError extends Error {},
+}));
+
+vi.mock('../../services/consumption.js', () => ({
+    queryConsumption: mocks.queryConsumption,
+    stationsAuthority: (stationIds: string[]) => ({ kind: 'stations', stationIds }),
 }));
 
 import vendorRoutes from '../vendor.js';
@@ -75,6 +81,7 @@ describe('Vendor vending preview HTTP seam', () => {
         mocks.dispatchGeneratedVendorToken.mockReset();
         mocks.vendorPurchase.mockReset();
         mocks.verifyVendorVendCredential.mockReset();
+        mocks.queryConsumption.mockReset();
     });
 
     it('returns an actionable response when live meter lookup fails unexpectedly', async () => {
@@ -154,5 +161,36 @@ describe('Vendor vending preview HTTP seam', () => {
                 delivery_state: 'token_generated_needs_reconciliation',
             },
         });
+    });
+});
+
+describe('Vendor meter-only consumption HTTP seam', () => {
+    it('rejects retired station-wide analytics requests', async () => {
+        const app = await appForPreview();
+        const response = await app.inject({ method: 'GET', url: '/consumption?scope=station' });
+        await app.close();
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({ error: 'meter_scope_required' });
+        expect(mocks.queryConsumption).not.toHaveBeenCalled();
+    });
+
+    it('requires a meter and requests only that meter inside the vendor station', async () => {
+        mocks.queryConsumption.mockResolvedValue([]);
+        const app = await appForPreview();
+
+        const missingMeter = await app.inject({ method: 'GET', url: '/consumption' });
+        const allowedMeter = await app.inject({ method: 'GET', url: '/consumption?meter_id=M-T1&period=month&spend=true' });
+        await app.close();
+
+        expect(missingMeter.statusCode).toBe(400);
+        expect(missingMeter.json()).toMatchObject({ error: 'meter_scope_required' });
+        expect(allowedMeter.statusCode).toBe(200);
+        expect(mocks.queryConsumption).toHaveBeenCalledWith(
+            expect.objectContaining({
+                scope: 'meter', scope_id: 'M-T1', period_type: 'month', withSpend: true, withLatestReading: true,
+            }),
+            { kind: 'stations', stationIds: ['TUNGA'] },
+        );
     });
 });

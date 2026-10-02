@@ -1841,25 +1841,34 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── Consumption ─────────────────────────────────────────────────────────
-    // A vendor sees their single assigned station, including meter-level detail
-    // for the customers at that site. Authority comes from the actor's station,
-    // never from the query string, so a vendor cannot ask for another site.
+    // Vendors review individual meters only. Station-wide analytics are an
+    // operations concern and deliberately are not exposed through this route.
+    // Authority comes from the actor's station, never from the query string.
 
     fastify.get('/consumption', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const actor = vendorActorOrReply(req, reply);
         if (!actor) return undefined;
 
         const qs = req.query as Record<string, string>;
-        const scope  = (qs.scope ?? 'station') as 'meter' | 'station' | 'cumulative';
+        const scope  = qs.scope ?? 'meter';
         const period = (qs.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
 
-        if (!['meter', 'station', 'cumulative'].includes(scope)) {
-            return reply.code(400).send({ error: 'bad_scope', message: 'scope must be meter | station | cumulative' });
+        if (scope !== 'meter') {
+            return reply.code(400).send({
+                error: 'meter_scope_required',
+                message: 'Vendor consumption analytics are available for individual meters only.',
+            });
         }
         if (!['day', 'week', 'month', 'year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
         const meterId = String(qs.meter_id ?? '').trim();
+        if (!meterId) {
+            return reply.code(400).send({
+                error: 'meter_scope_required',
+                message: 'Enter a meter number to view its consumption analytics.',
+            });
+        }
         if (meterId && !/^[A-Za-z0-9_-]{3,64}$/.test(meterId)) {
             return reply.code(400).send({
                 error: 'invalid_meter_id',
@@ -1876,15 +1885,16 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { queryConsumption, stationsAuthority } = await import('../services/consumption.js');
         const rows = await queryConsumption(
             {
-                scope,
-                // Meter drill-down stays inside the vendor's own station because
-                // the authority below is ANDed with any scope_id supplied here.
-                scope_id: scope === 'meter' ? (meterId || undefined) : actor.stationId,
+                scope: 'meter',
+                // Meter reporting stays inside the vendor's own station because
+                // this filter is ANDed with the station authority below.
+                scope_id: meterId,
                 period_type: period,
                 from: qs.from ?? undefined,
                 to: qs.to ?? undefined,
                 limit: Math.min(Number(qs.limit ?? 120), 500),
                 withSpend: qs.spend === 'true',
+                withLatestReading: true,
             },
             stationsAuthority([actor.stationId]),
         );
