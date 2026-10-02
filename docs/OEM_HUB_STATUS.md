@@ -81,18 +81,23 @@ Ran every test file individually (not just the `&&`-chained `npm test`, which ab
 
 ## 3. What's Left
 
-### Phase 5 — Onboard a second real OEM (the acceptance test) — **blocked, not started**
-This is the proof that the abstraction actually holds for a manufacturer with different naming conventions, not just a mock. **Blocked on the user providing real API access** (base URL, auth credentials, real endpoint paths) for Sparkmeter or Ihemeter — explicitly discussed and deferred until that's available.
+### Phase 5 — Onboard a second real OEM (the acceptance test) — **production blocked**
+
+> **Current SparkMeter certification state:** Follow
+> [`MULTI_TENANT_OEM_PIPELINE_ARCHITECTURE_AUDIT_2026-09-09.md`](./MULTI_TENANT_OEM_PIPELINE_ARCHITECTURE_AUDIT_2026-09-09.md)
+> as the canonical record. Authenticated read-only inventory and isolated
+> sandbox imports are complete. SparkMeter payment, vending, relay, and
+> customer writes remain uncertified and disabled. Do not activate an
+> installation or attempt a real vend from this checklist.
+This is the proof that the abstraction holds for a real manufacturer, not merely a mock. SparkMeter read-only access exists. Its write contract remains uncertified.
 
 What's already de-risked ahead of this phase: the mechanism has been exercised end-to-end against a **mock** second OEM during Phase 3 testing — path translation correctly remapped a CRM-canonical path to a fake OEM's configured path, capability gating correctly hid/showed sidebar groups, and credential encrypt→store→decrypt→resolve round-tripped correctly through the registry. The only missing piece is a real upstream to point it at.
 
-#### Everything now pre-staged, ahead of credentials arriving
+#### Certified provisioning only
 
-Since real credentials aren't available yet but are expected soon, the following was built specifically so onboarding becomes "paste credentials in and go" rather than "build the missing pieces under time pressure":
+`backend/scripts/prestage-draft-oems.cjs` is retired. It previously assigned guessed capabilities, methods, endpoint meanings, and vending behavior. It now exits without database or provider access.
 
-- **Both draft OEMs already exist as cards in the Hub.** `backend/scripts/prestage-draft-oems.cjs` (idempotent, re-runnable) created `Sparkmeter` and `Ihemeter` as `status: draft` manufacturers with reasonable default capabilities (remote meter tasks, tariff management, wallet vending on; protocol/GPRS specifics off until confirmed). They show up in the Hub grid today, ready to configure.
-- **A starter endpoint checklist is pre-seeded for each**, not a blank slate: 18 core logical keys — `ReadStation`, `ReadCustomer`, `ReadAccount`, `ReadMeter`, `ReadTariff`, `ReadGateway`, `ReadUser`, `ReadItem`, `ReadItemList`, `ReadPanelGroup`, `ReadLineChart`, `GenerateCreditToken`, `ReadCreditTokenRecord`, `CreateTokenTask`, `GetReadingTask`, `GetControlTask`, `GetTokenTask`, `ReadDailyDataMeter` — the set that powers the CRM's baseline pages (Dashboard, Management tables, Token Generate, Remote Operation Task). Each row has a blank `upstreamPath` and `enabled: false`. The Settings → API endpoints table for these two OEMs already reads as a fill-in-the-blanks form: paste the real path next to each logical key, flip it on, save. Logical keys deliberately match Calinmeter's own contract `operationId`s so the proxy's path-translation reverse-lookup works immediately with zero extra wiring.
-- **Seeded via `backend/scripts/prestage-draft-oems.cjs`** (idempotent, re-runnable — `--only=sparkmeter` / `--only=ihemeter` to target one). During the audit pass a duplicate script (`seed-draft-oems.cjs`) was found to have been created independently and had overwritten these capability defaults to all-true; it was deleted and `prestage-draft-oems.cjs` re-run to restore the intended conservative defaults (protocol/GPRS/firmware specifics off until confirmed). Verified correct via direct DB read after the fix.
+Each OEM installation must be provisioned from provider evidence. Store only verified operations. Keep every unverified operation disabled. Do not reuse Calinmeter paths, methods, payloads, or strategies.
 - **All 4 auth strategies are now fully implemented, not just UI placeholders** — this was the biggest real gap the previous version of this doc flagged, and it's closed:
   - `bearer_static` (unchanged, was already done).
   - `api_key_header` — sends the credential under a configurable custom header name (`oem_credentials.api_key_header_name`, new column, defaults to `X-Api-Key` if left blank) instead of `Authorization`.
@@ -102,15 +107,15 @@ Since real credentials aren't available yet but are expected soon, the following
 - **"Test Connection" button** — `OemSettingsPage.vue`'s credentials section now has a Test Connection action next to Save. Backend: `POST /api/system/oem/:id/test-connection` → `oemRegistry.testOemConnection()`, which forces a fresh (non-cached) token resolution for whichever auth strategy is configured, and — if at least one enabled GET endpoint exists — makes one real call and reports status/latency. Gives immediate feedback the moment credentials are pasted in, before any endpoint paths are filled in.
 - **Rate-limit overrides are now in the Settings UI** (previously schema-only, API-only). Two number fields (window ms / max requests per window) with their own small save action, wired to the existing `PUT /api/system/oem/:id` endpoint.
 
-**When real credentials arrive, the work is now just:**
-1. Open the draft OEM's Settings screen (already exists — Sparkmeter or Ihemeter).
-2. Pick the real auth strategy, paste base URL + credentials.
-3. Click **Test Connection** — confirms auth resolves before touching anything else.
-4. Fill in real upstream paths for the 17 pre-seeded starter-checklist rows (the ones actually needed first), flip each to enabled, save.
-5. Flip the OEM's status from `draft` to `active` (Edit name/details).
-6. Verify at least one live read through the CRM UI, and if the flow allows, one real token vend end-to-end.
-7. Confirm no station-ID collision against Calinmeter's live stations in the retrofit tables (`station_meter_read_rollups`, `consumption_aggregates`).
-8. Treat any config-schema gap this surfaces as expected discovery — feed it back into the generic schema, not a one-off code path for that OEM specifically. Likely candidates: the token-extraction field names (see above), or a genuinely novel entity type beyond the 17-key starter checklist.
+**When provider evidence arrives:**
+1. Create a draft installation.
+2. Store verified credentials only.
+3. Add certified read operations.
+4. Test read-only operations.
+5. Keep status `draft`.
+6. Certify write behavior separately.
+7. Verify installation-scoped collisions.
+8. Record every unknown detail.
 
 ### Phase 6 — Wallet backend unification — **DONE** (built ahead of schedule, at the user's request, before Phase 5's real second OEM)
 The plan originally deferred this until after Phase 5 proved the registry stable, to avoid compounding regression risk on the revenue-critical vending path in two systems at once. The user asked for it to be finished end-to-end now instead — built with the same zero-regression discipline as every other phase, and proven via the wallet backend's own pre-existing test suite (134/134 passing, unchanged) plus a `tsc --noEmit` clean typecheck.
@@ -118,7 +123,7 @@ The plan originally deferred this until after Phase 5 proved the registry stable
 - **`backend/wallet/src/services/oem-registry.ts`** (new) — a parallel, minimal port of the CRM's registry for this *separate deployable* (the wallet is a standalone Fastify service on Fly.io/Railway, not bundled with the CRM's Vercel functions — they share one Supabase project but can't share a Node module at runtime). Reads the SAME `oem_manufacturers`/`oem_credentials` tables via the wallet's own `adminClient`, decrypts with the SAME AES-256-GCM scheme and the SAME `OEM_CREDENTIALS_ENCRYPTION_KEY` env var (added to `config/env.ts`'s Zod schema, alongside `OEM_REGISTRY_DISABLED`/`OEM_CONFIG_CACHE_TTL_MS` for the same emergency-rollback/cache-tuning levers the CRM has), same in-process TTL cache. Fails closed to `null` on any error — never throws.
 - **`token-engine.ts`'s `energyCall`** now resolves `{baseUrl, authHeader}` as a single atomic unit — either fully from the registry-resolved OEM (never mixing one OEM's URL with another's token) or fully from the legacy `env.ENERGY_BACKEND_URL`/`env.ENERGY_BEARER_TOKEN` pair, whichever is usable. `OEM_REGISTRY_DISABLED=true` forces the legacy path instantly, mirroring the CRM's own kill-switch.
 - **`MeterInfo`/`GenerateTokenInput`/`RemoteSendInput` all carry an optional `oemId`**, threaded through every call site (`lookupMeter`, `lookupMeterMeta`, `lookupLocalAccountBinding` — now also selects+returns the `oem_id` column, `lookupHistoricalLowPurchaseReport`, `listStations` — cache now keyed per-OEM, `generateCreditToken`, `createRemoteSendTask`, `waitForRemoteTokenTerminal`, `pollRemoteSendStatus`). `vending.ts` tags every new `purchase_orders` row with `oem_id` and threads `meter.oemId`/`po.oem_id` through the generate/remote-send/poll/reconcile call chain.
-- **`direct_credit` guard**: `assertVendingStrategySupported()` checks the resolved OEM's `vendingStrategy` before building an STS payload — throws a clear, specific error (`vending_strategy_not_implemented`) if a future OEM is configured for direct-credit vending, rather than silently trying to force Calinmeter's STS shape onto an OEM that doesn't speak it. The actual `direct_credit` code path is still not built (still not needed by Calinmeter or, per public docs, Sparkmeter) — this guard is what makes that gap fail loudly instead of silently mis-vending.
+- **`direct_credit` guard**: `assertVendingStrategySupported()` checks the resolved OEM's `vendingStrategy` before building an STS payload — throws a clear, specific error (`vending_strategy_not_implemented`) if a future OEM is configured for direct-credit vending, rather than silently trying to force Calinmeter's STS shape onto an OEM that doesn't speak it. The actual `direct_credit` code path is still not built and remains uncertified for SparkMeter — this guard makes that gap fail loudly instead of silently mis-vending.
 - **Zero real-world behavior change today**: since no caller anywhere in the wallet passes a non-default `oemId` yet (there's no wallet-side OEM picker — vending still resolves to whichever OEM the meter's `account_bindings.oem_id` says, defaulting to Calinmeter for every existing meter, exactly as before), this phase is pure plumbing readiness. It becomes load-bearing the moment Phase 5 tags a real second OEM's meters via `account_bindings`.
 - Confirmed via the existing test suite that the "registry unreachable → safe fallback" path genuinely works, not just in theory: `vitest.setup.ts` points `SUPABASE_URL` at a fake, unreachable domain, and all 134 tests still pass — proving the try/catch-to-null design gracefully falls through to the legacy env-var path exactly as intended.
 

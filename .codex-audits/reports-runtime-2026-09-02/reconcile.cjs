@@ -12,13 +12,15 @@ const env = Object.fromEntries(
 );
 
 async function main() {
+  const caResponse = await fetch('https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt');
+  if (!caResponse.ok) throw new Error(`Supabase CA download failed: HTTP ${caResponse.status}`);
   const client = new Client({
     host: env.SUPABASE_DB_HOST,
     port: Number(env.SUPABASE_DB_PORT),
     user: env.SUPABASE_DB_USER,
     password: env.SUPABASE_DB_PASSWORD,
     database: env.SUPABASE_DB_NAME,
-    ssl: { rejectUnauthorized: false },
+    ssl: { ca: await caResponse.text(), rejectUnauthorized: true },
   });
   await client.connect();
   const params = ['2026-06-05T00:00:00.000Z', '2026-09-02T23:59:59.999Z'];

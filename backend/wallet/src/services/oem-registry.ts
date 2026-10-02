@@ -43,16 +43,11 @@ export interface OemLiveConfig {
 let cachedKey: Buffer | null = null;
 const insecureDevKey = crypto.createHash('sha256').update('beverly-local-oem-credentials-key-only').digest();
 
-let keyWarningLogged = false;
-
 function resolveKey(): Buffer {
     if (cachedKey) return cachedKey;
     const configured = String(env.OEM_CREDENTIALS_ENCRYPTION_KEY || '').trim();
     if (!configured) {
-        if (!keyWarningLogged && env.NODE_ENV === 'production') {
-            keyWarningLogged = true;
-            console.warn('[wallet-oem-registry] OEM_CREDENTIALS_ENCRYPTION_KEY is not configured; falling back to default key.');
-        }
+        if (env.NODE_ENV === 'production') throw new Error('OEM_CREDENTIALS_ENCRYPTION_KEY is required in production.');
         cachedKey = insecureDevKey;
         return cachedKey;
     }
@@ -62,7 +57,7 @@ function resolveKey(): Buffer {
     return cachedKey;
 }
 
-function decryptSecret(encoded: string | null | undefined): string {
+export function decryptSecret(encoded: string | null | undefined): string {
     const raw = String(encoded || '').trim();
     if (!raw) return '';
     let buffer: Buffer;

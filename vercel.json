@@ -58,6 +58,7 @@
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
     { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
     { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/oem-telemetry", "schedule": "0 4 * * *" },
     { "path": "/api/cron/archive-readings", "schedule": "0 1 * * *" }
   ],
   "headers": [
@@ -118,6 +119,7 @@
     { "source": "/api/v1/acobot/:path*", "destination": "/api/wallet?__pathname=/api/v1/acobot/:path*" },
     { "source": "/api/v1/customer/:path*", "destination": "/api/wallet?__pathname=/api/v1/customer/:path*" },
     { "source": "/api/v1/vendor/:path*", "destination": "/api/wallet?__pathname=/api/v1/vendor/:path*" },
+    { "source": "/api/v1/oem/:path*", "destination": "/api/wallet?__pathname=/api/v1/oem/:path*" },
     { "source": "/api/wallet-service/:path*", "destination": "/api/wallet-service" },
     { "source": "/api/receipt-pdf", "destination": "/api/receipt-pdf" },
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },

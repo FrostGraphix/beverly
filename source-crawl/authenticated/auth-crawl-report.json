@@ -9,7 +9,7 @@
     {
       "method": "POST",
       "url": "http://8.208.16.168:9310/api/user/login",
-      "postData": "{\"userId\":\"admin\",\"password\":\"ACOB_ADMIN\"}"
+      "postData": "{\"userId\":\"admin\",\"password\":\"[REDACTED]\"}"
     },
     {
       "status": 200,

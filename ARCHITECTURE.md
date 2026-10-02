@@ -51,8 +51,36 @@ Keep write safety strict.
 
 ## Backend
 
+- `backend/wallet/src/routes/oem.ts` exposes staff installation inventory through `/api/v1/oem/installations`. Explicit service-managed actor grants and active tenant status scope every query; staff roles alone do not grant installation access. This inventory route does not enable provider dispatch.
+- `supabase/migrations/20260927120000_oem_actor_installation_access.sql` owns service-managed actor-to-installation grants. No ownership grants are inferred or seeded. Its rollback requires review and an empty grant table.
+- `supabase/migrations/20261001130000_oem_tenant_memberships.sql` owns service-managed actor-to-tenant memberships with forced RLS. Installation reads require both active tenant membership and an explicit active installation grant in one database query; no ownership is seeded or inferred from staff roles.
+- `supabase/migrations/20261002120000_acob_oem_authority.sql` binds the explicitly approved `admin@acoblighting.com` super-admin identity to the ACOB tenant and its two draft installations. It activates tenant reads without activating either provider installation or any write capability.
+- `supabase/migrations/20261001140000_oem_inventory.sql` owns installation-scoped customer and meter inventory, separate from legacy Calinmeter tables. Complete snapshots reconcile atomically through `apply_oem_inventory_snapshot`; missing resources become stale rather than deleted. Tenant identity derives from the installation. The operator importer defaults to this scoped path.
+- `supabase/migrations/20261001150000_oem_telemetry.sql` owns installation-scoped raw telemetry, quarantine evidence, and atomic page checkpoints. Unknown energy-counter and credit-balance semantics remain explicit and unconverted.
+- `supabase/migrations/20261001160000_oem_telemetry_reads.sql` owns bounded telemetry reads. Every read proves active tenant membership and an explicit installation grant before returning provider measurements.
+- `backend/wallet/src/services/oem-telemetry.ts` owns verified Koios v2 reading normalization and atomic persistence. Provider payloads never enter downstream storage without canonical validation.
+- `/api/v1/oem/installations/:installationId/meters`, `/telemetry`, and `/reconciliation` expose tenant-authorized, installation-scoped results. Database functions enforce membership plus installation grants in the same statement. Meter and telemetry reads exclude customer contact data.
+
+- `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
+- `backend/wallet/src/adapters/calinmeter-v1.ts` owns extracted Calinmeter wallet wire formats and response parsing. Existing token-engine exports remain compatibility facades during migration.
+- `backend/wallet/src/adapters/sparkmeter-v1.ts` owns documented Koios v1 payment translation, dual-header authentication, and fail-closed response normalization. It requires an explicit customer mapping and verified settlement currency before building requests.
+- SparkMeter credit assessment is advisory only. It preserves provider debt, rejects malformed telemetry, and never authorizes financial writes or proves offline relay cutoff. Neither this assessment nor the payment translator is currently connected to production dispatch.
+- `tools/import-sparkmeter-sandbox.cjs` is an operator-run inventory import, not an incremental telemetry worker. Its read loop rejects cyclic/malformed pagination, bounds retries, honors provider retry delays within its budget, and refuses redirects carrying credentials. Legacy OEM-scoped storage remains a multi-tenant rollout blocker.
+- `backend/wallet/src/services/oem-installations.ts` owns server-authoritative installation resolution for wallet callers. It requires tenant identity and explicit actor installation scope before returning an active installation.
+- `backend/wallet/src/services/oem-installation-credentials.ts` owns installation-scoped credential loading after authorization. It decrypts typed secret bundles and rejects inactive, missing, mismatched, malformed, or unsupported records.
+- `backend/wallet/src/services/oem-credential-keyring.ts` owns versioned installation encryption. Versions 2+ require exact 32-byte base64 keys from `OEM_INSTALLATION_ENCRYPTION_KEYS` and authenticate installation ID plus key version using AES-GCM additional authenticated data. Legacy v1 Calinmeter-compatible decryption remains unchanged. Rotation preparation does not persist or activate credentials.
+- `supabase/migrations/20261001120000_oem_credential_rotation.sql` owns atomic credential compare-and-swap. Rotation requires the expected version and ciphertext, advances the version, updates both fields together, and exposes only a boolean result to the service role.
+- `backend/wallet/src/services/oem-endpoint-security.ts` owns pre-request upstream origin validation. It requires exact approved hostnames, HTTPS, standard ports, and entirely public DNS results.
+- `supabase/migrations/20260915120000_oem_installation_control_plane.sql` owns the expand-only tenant, installation, immutable configuration, external mapping, and sync-cursor control plane. Provisioning remains service-role-only and never infers tenant ownership.
+- `supabase/rollbacks/` contains reviewed emergency rollback scripts. Their execution guards require explicit operator validation.
+- `supabase/migrations/20260915140000_oem_command_foundation.sql` owns durable OEM commands, attempts, secured evidence references, webhook replay records, transactional outbox state, and health snapshots. Existing money paths do not consume it yet.
+- `supabase/migrations/20260918120000_acob_sparkmeter_sandbox_provisioning.sql` owns explicit draft-only provisioning for the ACOB Lighting SparkMeter sandbox. Its unsupported vending state blocks writes until a current provider contract and adapter are certified.
+- `supabase/migrations/20260918130000_oem_endpoint_security.sql` adds installation hostname allowlists. Active production installations require HTTPS and at least one approved hostname.
+- `supabase/migrations/20260918200000_oem_api_key_pair.sql` adds the dual-header installation credential strategy required by official Koios v1 authentication.
+- OEM integration remains disabled for production until installation identity, tenant authorization, command durability, reconciliation, telemetry isolation, conformance, and rollback gates pass.
 - `api/reference.js` fronts all backend calls.
 - `api/reference.js` proxies `/api/v1/*` only.
+- Canonical gateway responses set `Cache-Control: no-store`, including installation inventory and wallet errors.
 - `backend/wallet/` owns canonical wallet writes.
 - `backend/wallet/src/contracts/route-policy.ts` owns canonical mutation policy, money-write flags, cache exclusion, and developer-only route classification.
 - `api/wallet-route-contract.cjs` owns the legacy gateway's explicit canonical-money proxy contract.

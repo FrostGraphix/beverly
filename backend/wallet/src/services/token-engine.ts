@@ -21,6 +21,25 @@ import { adminClient } from '../db/supabase.js';
 import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
+import {
+    buildCalinmeterBearerHeader,
+    buildCalinmeterCreditTokenPayload,
+    buildCalinmeterRemoteTokenPayload,
+    buildCalinmeterStandbyConfirmPayload,
+    buildCalinmeterTaskConfirmPayload,
+    buildCalinmeterTaskLookupPayload,
+    collectCalinmeterTaskRows as collectTaskRows,
+    findCalinmeterMeter,
+    getCalinmeterAccountRows as accountRows,
+    normalizeCalinmeterBoolean as normalizeBoolean,
+    normalizeCalinmeterMeterRow as normalizeMeterRow,
+    normalizeCalinmeterRemoteRemark as normalizeRemoteRemark,
+    normalizeCalinmeterStations,
+    parseCalinmeterCreditTokenResponse,
+    parseCalinmeterTaskRow as taskResultFromRow,
+} from '../adapters/calinmeter-v1.js';
+
+export { normalizeRemoteRemark };
 
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
@@ -124,6 +143,8 @@ export function assertEnergyVendReady(now = Date.now()): void {
 // must use that registry identity. The legacy environment pair is available only
 // when the registry is explicitly disabled, preventing accidental 0001 vending.
 export async function resolveEnergyTarget(oemId?: string, stationId?: string | null): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
+    // Legacy credentials are manufacturer-scoped. Installation routing must use
+    // the new installation registry and may never masquerade as station scope.
     void stationId;
     const oemConfig = await resolveOemConfig(oemId);
     const authHeaderFromOem = resolveOemAuthHeader(oemConfig);
@@ -135,7 +156,7 @@ export async function resolveEnergyTarget(oemId?: string, stationId?: string | n
     }
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
-        authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
+        authHeader: buildCalinmeterBearerHeader(env.ENERGY_BEARER_TOKEN),
     };
 }
 
@@ -317,9 +338,8 @@ export async function lookupMeter(
             body: JSON.stringify({ meterId: normalizedMeterId, pageNumber: 1, pageSize: 50 }),
         }, opts.oemId ?? undefined);
         if (!upstreamSucceeded(data)) throw upstreamFailure(data, 'energy_query_failed');
-        const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || '').trim() === normalizedMeterId);
-        if (row) {
-            const meter = normalizeMeterRow(row, normalizedMeterId);
+        const meter = findCalinmeterMeter(data, normalizedMeterId);
+        if (meter) {
             let isThreePhase = meter.isThreePhase ?? null;
             let sgc = meter.sgc ?? null;
             if (isThreePhase === null || !sgc) {
@@ -370,51 +390,6 @@ export async function lookupMeter(
         );
     }
     throw new TokenEngineError(`meter not found ${normalizedMeterId}`, 'meter_not_found');
-}
-
-function accountRows(payload: {
-    records?: Array<Record<string, unknown>>;
-    rows?: Array<Record<string, unknown>>;
-    data?: { data?: Array<Record<string, unknown>>; records?: Array<Record<string, unknown>>; list?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
-    result?: { data?: Array<Record<string, unknown>>; records?: Array<Record<string, unknown>>; list?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
-}): Array<Record<string, unknown>> {
-    if (Array.isArray(payload.records)) return payload.records;
-    if (Array.isArray(payload.rows)) return payload.rows;
-    if (Array.isArray(payload.data)) return payload.data;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.data)) return payload.data.data;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.records)) return payload.data.records;
-    if (payload.data && !Array.isArray(payload.data) && Array.isArray(payload.data.list)) return payload.data.list;
-    if (Array.isArray(payload.result)) return payload.result;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.data)) return payload.result.data;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.records)) return payload.result.records;
-    if (payload.result && !Array.isArray(payload.result) && Array.isArray(payload.result.list)) return payload.result.list;
-    return [];
-}
-
-function normalizeMeterRow(row: Record<string, unknown>, requestedMeterId: string): MeterInfo {
-    const meter = String(row.meterId || row.meter_id || requestedMeterId).trim();
-    const customerId = String(row.customerId || row.customer_id || row.id || meter).trim();
-    const station = String(row.stationId || row.station_id || row.SITE_ID || row.customerAddress || row.customer_address || '').trim();
-    return {
-        meterId: meter,
-        customerId,
-        customerName: String(row.customerName || row.customer_name || row.name || `Customer ${meter}`).trim(),
-        stationId: station || 'UNKNOWN',
-        tariffId: String(row.tariffId || row.tariff_id || '').trim() || 'RESIDENTIAL',
-        protocolVersion: String(row.protocolVersion || row.protocol_version || '').trim() || null,
-        communicationWay: String(row.communicationWay || row.communication_way || '').trim() || null,
-        isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
-        sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
-    };
-}
-
-function normalizeBoolean(value: unknown): boolean | null {
-    if (value === true || value === 1 || value === '1') return true;
-    if (value === false || value === 0 || value === '0') return false;
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (['true', 'yes', 'y'].includes(normalized)) return true;
-    if (['false', 'no', 'n'].includes(normalized)) return false;
-    return null;
 }
 
 async function lookupMeterMeta(meterId: string, oemId?: string | null): Promise<{ isThreePhase: boolean | null; sgc: string | null }> {
@@ -600,22 +575,11 @@ export async function listStations(opts: { force?: boolean; oemId?: string | nul
         method: 'POST',
         body: JSON.stringify({ pageNumber: 1, pageSize: 500 }),
     }, opts.oemId ?? undefined);
-    const raw = resp.result?.data ?? [];
-    // Exclude system noise rows (legacy "admin", "0001" placeholder)
-    const stations: StationInfo[] = raw
-        .filter((s) => s.stationId && s.stationId.toUpperCase() !== 'ADMIN')
-        .map((s) => ({
-            stationId: s.stationId,
-            name: s.name ?? s.stationId,
-            remark: s.remark ?? null,
-            oemId: owner?.oemId ?? null,
-            oemSlug: owner?.slug ?? null,
-            oemName: owner?.displayName ?? null,
-            status: s.status === false || s.status === 0 || /^(disabled|inactive|offline|deleted)$/i.test(String(s.status ?? ''))
-                ? 'disabled' as const
-                : 'active' as const,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    const stations: StationInfo[] = normalizeCalinmeterStations(resp, {
+        oemId: owner?.oemId ?? null,
+        oemSlug: owner?.slug ?? null,
+        oemName: owner?.displayName ?? null,
+    });
     stationsCache.set(cacheKey, { at: Date.now(), data: stations });
     return stations;
 }
@@ -675,26 +639,10 @@ export interface GenerateTokenResult {
 }
 
 export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
-    const amount = Math.round((input.amountMinor / 100) * 100) / 100;
-    const operatorName = input.operatorName || input.vendorName || input.customerName || 'Beverly';
-    return {
-        customerId: input.customerId,
-        meterId: input.meterId,
-        tariffId: input.tariffId,
+    return buildCalinmeterCreditTokenPayload({
+        ...input,
         authorizationPassword: env.ENERGY_AUTHORIZATION_PASSWORD ?? '',
-        remark: `Beverly vend ${input.reference}`,
-        isPreview: opts.isPreview ?? false,
-        isVendByTotalPaid: true,
-        amount,
-        totalUnit: input.units,
-        payDebtPercent: 0,
-        paymentMethod: 'Cash',
-        isS2: typeof opts.isS2 === 'boolean' ? opts.isS2 : input.isThreePhase === true,
-        operatorName,
-        userName: operatorName,
-        vendorName: operatorName,
-        operator: operatorName,
-    };
+    }, opts);
 }
 
 /**
@@ -738,9 +686,9 @@ export async function resolveEffectiveIsS2(input: GenerateTokenInput): Promise<b
  * Guards against silently building an STS token payload for an OEM that doesn't
  * speak STS. `direct_credit` (an OEM that credits a meter in real time with no
  * physical token) is reserved in the schema (oem_manufacturers.vending_strategy)
- * but its actual code path has NOT been built — neither Calinmeter nor, per public
- * documentation, Sparkmeter needs it, so building it now would be speculative,
- * untestable code with no real spec to verify against. Fails loudly and
+ * but its actual code path has NOT been built. SparkMeter direct-credit behavior
+ * is uncertified, so building it now would be speculative, untestable code with
+ * no real spec to verify against. Fails loudly and
  * specifically instead of vending Calinmeter's STS shape at a non-STS OEM.
  */
 async function assertVendingStrategySupported(oemId?: string | null): Promise<void> {
@@ -774,19 +722,16 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
         }
         throw upstreamFailure(response, 'token_generation_failed');
     }
-    const data = (response.result || response.data || response) as Record<string, unknown>;
-    const token = String(data.token || data.tokenFirst || '').trim();
-    if (!token) {
+    const result = parseCalinmeterCreditTokenResponse(response, {
+        reference: input.reference,
+        amountMinor: input.amountMinor,
+        units: input.units,
+        generatedAtFallback: new Date().toISOString(),
+    });
+    if (!result) {
         throw new TokenEngineError('energy backend did not return a token', 'token_missing');
     }
-    return {
-        token,
-        tokenRecordId: String(data.tokenRecordId || data.receiptId || data.id || input.reference),
-        amountMinor: Math.round(Number(data.amount ?? data.totalPaid ?? input.amountMinor / 100) * 100),
-        units: Number(data.units ?? data.totalUnit ?? input.units),
-        generatedAt: String(data.createdAt || data.createTime || data.createDate || new Date().toISOString()),
-        upstreamPayload: data,
-    };
+    return result;
 }
 
 export function buildCreditTokenPreviewPlan(input: GenerateTokenInput) {
@@ -821,80 +766,19 @@ function cleanToken(value: string) {
 }
 
 export function buildRemoteTokenTaskPayload(input: RemoteSendInput) {
-    const token = cleanToken(input.token);
-    return [{
-        customerId: input.customerId || input.meterId,
-        customerName: input.customerName ?? '',
-        meterId: input.meterId,
-        version: input.protocolVersion || '2.2',
-        flag: 'A120',
-        name: 'Send Token',
-        dataItem: 'Send Token',
-        dataDefault: '',
-        dataPrefix: '',
-        data: token,
-        stationId: input.stationId,
-        remark: `Beverly remote token ${input.reference}`,
-    }];
+    return buildCalinmeterRemoteTokenPayload(input);
 }
 
 export function buildRemoteTaskConfirmPayload(response: unknown) {
-    return [...new Set(collectTaskIds(response))].map((id) => ({ id }));
+    return buildCalinmeterTaskConfirmPayload(response);
 }
 
 export function buildRemoteTokenTaskLookupPayload(input: Pick<RemoteSendInput, 'meterId'>) {
-    return {
-        lang: 'en',
-        meterId: input.meterId,
-        pageNumber: 1,
-        pageSize: 10,
-        orderBy: 'createDate desc',
-    };
+    return buildCalinmeterTaskLookupPayload(input.meterId);
 }
 
 export function buildRemoteTokenStandbyConfirmPayload(response: unknown, input: Pick<RemoteSendInput, 'meterId' | 'token'>) {
-    const meterId = String(input.meterId || '').trim();
-    const token = cleanToken(input.token);
-    const ids = collectTaskRows(response)
-        .filter((row) => String(row.meterId || '').trim() === meterId)
-        .filter((row) => cleanToken(String(row.data || row.token || '')) === token)
-        .filter((row) => isStandbyStatus(row.status))
-        .map((row) => Number(row.id ?? row.taskId ?? row.recordId))
-        .filter((id) => Number.isFinite(id) && id > 0);
-    return [...new Set(ids)].map((id) => ({ id }));
-}
-
-function collectTaskIds(value: unknown, target: number[] = []): number[] {
-    if (!value) return target;
-    if (Array.isArray(value)) {
-        for (const item of value) collectTaskIds(item, target);
-        return target;
-    }
-    if (typeof value !== 'object') return target;
-    const record = value as Record<string, unknown>;
-    const id = Number(record.id ?? record.taskId ?? record.taskID ?? record.recordId);
-    if (Number.isFinite(id) && id > 0) target.push(id);
-    collectTaskIds(record.result, target);
-    collectTaskIds(record.data, target);
-    return target;
-}
-
-function collectTaskRows(value: unknown, target: Array<Record<string, unknown>> = []): Array<Record<string, unknown>> {
-    if (!value) return target;
-    if (Array.isArray(value)) {
-        for (const item of value) collectTaskRows(item, target);
-        return target;
-    }
-    if (typeof value !== 'object') return target;
-    const record = value as Record<string, unknown>;
-    if (record.id || record.taskId || record.recordId) target.push(record);
-    collectTaskRows(record.result, target);
-    collectTaskRows(record.data, target);
-    return target;
-}
-
-function isStandbyStatus(value: unknown) {
-    return value === 0 || value === '0' || String(value || '').toLowerCase() === 'standby';
+    return buildCalinmeterStandbyConfirmPayload(response, input.meterId, input.token);
 }
 
 function isAcceptedRemoteConfirm(response: { code?: number; msg?: string; reason?: string }) {
@@ -909,35 +793,6 @@ function taskRowForRemoteSend(response: unknown, input: Pick<RemoteSendInput, 'm
     return collectTaskRows(response)
         .filter((row) => !Number.isFinite(taskId) || Number(row.id ?? row.taskId ?? row.recordId) === taskId)
         .find((row) => String(row.meterId || '').trim() === meterId && (!token || cleanToken(String(row.data || row.token || '')) === token)) ?? null;
-}
-
-export function normalizeRemoteRemark(rawRemark: unknown): string {
-    const text = String(rawRemark ?? '').trim();
-    const lower = text.toLowerCase();
-
-    if (!text) return 'Remote send completed.';
-    if (lower.includes('token used') || lower.includes('used token') || lower.includes('token already used') || lower.includes('old token') || lower.includes('duplicate token')) {
-        return 'Token has already been used or entered into the meter.';
-    }
-    if (lower.includes('already sent') || lower.includes('already exists') || lower.includes('task exists') || lower.includes('no data has been changed')) {
-        return 'Token was already sent over the air to this meter.';
-    }
-    if (lower.includes('keypad') || lower.includes('manual entry')) {
-        return 'Token was entered manually via meter keypad.';
-    }
-    if (lower.includes('offline') || lower.includes('unreachable') || lower.includes('timeout')) {
-        return 'Meter is currently offline or unconfirmed over the air. Token remains valid for manual keypad entry.';
-    }
-    return text;
-}
-
-function taskResultFromRow(row: Record<string, unknown>, fallbackTaskId: string): RemoteSendResult {
-    const rawRemark = row.remark == null ? null : String(row.remark);
-    return {
-        taskId: String(row.id ?? row.taskId ?? row.recordId ?? fallbackTaskId),
-        status: normalizeRemoteTaskStatus(row.status),
-        remark: rawRemark ? normalizeRemoteRemark(rawRemark) : null,
-    };
 }
 
 function tokenRejectError(task: RemoteSendResult) {
@@ -1094,12 +949,4 @@ export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_status_failed');
     const row = taskRowForRemoteSend(response, { meterId: context.meterId ?? '', token: context.token ?? '', taskId }) || collectTaskRows(response).find((item) => Number(item.id ?? item.taskId ?? item.recordId) === Number(taskId));
     return row ? taskResultFromRow(row, taskId) : { taskId, status: 'unknown', remark: null };
-}
-
-function normalizeRemoteTaskStatus(status: unknown): RemoteSendResult['status'] {
-    const value = String(status ?? '').trim().toLowerCase();
-    if (['1', 'success', 'successful', 'done', 'completed'].includes(value)) return 'success';
-    if (['2', 'failed', 'failure', 'error'].includes(value)) return 'failed';
-    if (['0', '3', 'pending', 'processing', 'standby', 'queued'].includes(value)) return 'pending';
-    return 'unknown';
 }

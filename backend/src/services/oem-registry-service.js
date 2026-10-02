@@ -87,6 +87,7 @@ async function getOemScopedLiveConfig(oemIdOrSlug) {
   try {
     const config = await resolveOemConfig(oemIdOrSlug || DEFAULT_OEM_SLUG);
     if (!config || !config.liveBaseUrl) return null;
+    if (!config.isSeedDefault && config.slug !== DEFAULT_OEM_SLUG) return null;
     return config;
   } catch (error) {
     console.error("[oem-registry] resolve failed", error instanceof Error ? error.message : String(error));
@@ -104,6 +105,7 @@ function peekOemRateLimit(oemIdOrSlug) {
   const cached = configCache.get(cacheKeyFor(oemIdOrSlug));
   const config = cached && cached.expiresAt > Date.now() ? cached.config : null;
   if (!config) return null;
+  if (!config.isSeedDefault && config.slug !== DEFAULT_OEM_SLUG) return null;
   return {
     windowMs: config.rateLimitWindowMs || null,
     maxRequests: config.rateLimitMaxRequests || null
@@ -245,6 +247,9 @@ async function testOemConnection(oemIdOrSlug) {
   invalidateOemCache(oemIdOrSlug);
   const config = await resolveOemConfig(oemIdOrSlug);
   if (!config) return { ok: false, stage: "resolve", error: "OEM not found" };
+  if (!config.isSeedDefault && config.slug !== DEFAULT_OEM_SLUG) {
+    return { ok: false, stage: "config", error: "Installation gateway required" };
+  }
   // Force a fresh token fetch keyed by the real id (the input above may have been
   // a slug, which the dynamic-token cache — keyed only by real oemId — wouldn't match).
   invalidateDynamicToken(config.oemId);
@@ -291,9 +296,7 @@ async function testOemConnection(oemIdOrSlug) {
 }
 
 function requestedOemId(request) {
-  const header = request?.headers?.["x-oem-id"];
-  const value = Array.isArray(header) ? header[0] : header;
-  return String(value || "").trim() || DEFAULT_OEM_SLUG;
+  return String(request?.__oemId || "").trim() || DEFAULT_OEM_SLUG;
 }
 
 // Translate a CRM-canonical (Calinmeter-shaped) upstream path into the equivalent

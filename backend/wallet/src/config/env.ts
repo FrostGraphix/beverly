@@ -80,9 +80,9 @@ const schema = z.object({
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
     UPSTREAM_API_URL: z.string().url().optional(),
-    UPSTREAM_PASSWORD: z.string().default('ACOB_ADMIN'),
+    UPSTREAM_PASSWORD: z.string().optional(),
     UPSTREAM_BEARER_TOKEN: z.string().optional(),
-    ENERGY_AUTHORIZATION_PASSWORD: z.string().default('123456'),
+    ENERGY_AUTHORIZATION_PASSWORD: z.string().optional(),
     ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
         if (value === undefined || value === '') return undefined;
         if (typeof value === 'boolean') return value;
@@ -121,7 +121,7 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    VENDOR_PORTAL_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
+    VENDOR_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
     STAFF_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-admin/'),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
     VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
@@ -129,7 +129,7 @@ const schema = z.object({
 
     // Public app base URLs — used to build password-reset links in emails.
     CUSTOMER_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-customer/'),
-    VENDOR_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
+    VENDOR_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
 
     // Firebase Cloud Messaging — push notifications
@@ -200,6 +200,13 @@ const schema = z.object({
             message: 'Production deployments require a dedicated APP_ENCRYPTION_KEY.',
         });
     }
+    if (values.NODE_ENV === 'production' && !values.OEM_CREDENTIALS_ENCRYPTION_KEY) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['OEM_CREDENTIALS_ENCRYPTION_KEY'],
+            message: 'Production deployments require OEM_CREDENTIALS_ENCRYPTION_KEY.',
+        });
+    }
     if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {
         if (!values.PAYSTACK_SECRET_KEY) {
             context.addIssue({
@@ -245,12 +252,12 @@ const nodeEnvironment = (appEnvironment === 'production' || process.env.VERCEL_E
 const rawSupabaseUrl = process.env.SUPABASE_URL
     || process.env.VITE_SUPABASE_URL
     || process.env.NEXT_PUBLIC_SUPABASE_URL
-    || 'https://qpoipyqgrjsjdvfqmxok.supabase.co';
+    || '';
 
 const expectedProjectRef = process.env.EXPECTED_SUPABASE_PROJECT_REF
     || (() => {
         try { return new URL(rawSupabaseUrl).hostname.split('.')[0]; }
-        catch { return 'qpoipyqgrjsjdvfqmxok'; }
+        catch { return ''; }
     })();
 
 const parsed = schema.safeParse({
@@ -258,8 +265,8 @@ const parsed = schema.safeParse({
     APP_ENV: appEnvironment,
     NODE_ENV: nodeEnvironment,
     SUPABASE_URL: rawSupabaseUrl,
-    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
     EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
     PAYSTACK_SECRET_KEY: normalizePaystackKey(process.env.PAYSTACK_SECRET_KEY),
     PAYSTACK_PUBLIC_KEY: normalizePaystackKey(process.env.PAYSTACK_PUBLIC_KEY),
@@ -269,36 +276,13 @@ if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  • ${i.path.join('.')}: ${i.message}`).join('\n');
     const message = `Env validation failed:\n${issues}`;
     console.error(message);
-    if (!process.env.VERCEL && process.env.SERVERLESS !== '1' && process.env.SERVERLESS !== 'true') {
-        process.exit(1);
-    }
+    throw new Error(message);
 }
 
-const fallbackData = {
-    APP_ENV: appEnvironment,
-    NODE_ENV: nodeEnvironment,
-    SUPABASE_URL: rawSupabaseUrl,
-    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNzUwMjgsImV4cCI6MjA1MTg1MTAyOH0.Q1a2oTsd-tO5Bv08_7GgQsmL_0qQd4j_h5cW7eOsq0Q',
-    EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
-    ENERGY_AUTHORIZATION_PASSWORD: process.env.ENERGY_AUTHORIZATION_PASSWORD || '123456',
-    UPSTREAM_PASSWORD: process.env.UPSTREAM_PASSWORD || 'ACOB_ADMIN',
-    PAYSTACK_PAYMENTS_ENABLED: ['1', 'true', 'yes', 'on'].includes(String(process.env.PAYSTACK_PAYMENTS_ENABLED ?? '').trim().toLowerCase()),
-    PAYSTACK_SECRET_KEY: /^sk_(test|live)_[A-Za-z0-9]+$/.test(normalizePaystackKey(process.env.PAYSTACK_SECRET_KEY) ?? '')
-        ? normalizePaystackKey(process.env.PAYSTACK_SECRET_KEY)
-        : undefined,
-    PAYSTACK_PUBLIC_KEY: /^pk_(test|live)_[A-Za-z0-9]+$/.test(normalizePaystackKey(process.env.PAYSTACK_PUBLIC_KEY) ?? '')
-        ? normalizePaystackKey(process.env.PAYSTACK_PUBLIC_KEY)
-        : undefined,
-    PAYSTACK_WEBHOOK_URL: process.env.PAYSTACK_WEBHOOK_URL,
-};
-
-const resolvedData = parsed.success ? parsed.data : schema.parse(fallbackData);
-
 export const env = {
-    ...resolvedData,
-    ENERGY_BACKEND_URL: parsed.success ? (parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL) : (resolvedData.UPSTREAM_API_URL || resolvedData.ENERGY_BACKEND_URL),
-    ENERGY_BEARER_TOKEN: parsed.success ? (parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN) : (resolvedData.UPSTREAM_BEARER_TOKEN || resolvedData.ENERGY_BEARER_TOKEN),
+    ...parsed.data,
+    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
+    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
 };
 
 export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {

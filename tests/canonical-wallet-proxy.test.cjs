@@ -51,6 +51,7 @@ function request(port, method, path, payload, headers = {}) {
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("end", () => resolve({
         status: res.statusCode,
+        headers: res.headers,
         body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
       }));
     });
@@ -105,6 +106,7 @@ async function main() {
     assert.strictEqual(read.status, 200);
     assert.strictEqual(read.body.path, "/api/v1/vendor/wallet");
     assert.strictEqual(read.body.authorization, "Bearer test-token");
+    assert.strictEqual(read.headers['cache-control'], 'no-store');
 
     const remoteFailure = await request(
       facadePort,
@@ -140,6 +142,14 @@ async function main() {
     const previewBlocked = await request(facadePort, "POST", "/api/v1/vendor/vend", { amountMinor: 10000 });
     assert.strictEqual(previewBlocked.status, 503);
     assert.strictEqual(forwarded, 3);
+
+    const installations = await request(facadePort, "GET", "/api/v1/oem/installations", undefined, {
+      Authorization: "Bearer installation-reader",
+    });
+    assert.strictEqual(installations.status, 200);
+    assert.strictEqual(installations.body.path, "/api/v1/oem/installations");
+    assert.strictEqual(installations.body.authorization, "Bearer installation-reader");
+    assert.strictEqual(installations.headers['cache-control'], 'no-store');
 
     delete process.env.WALLET_API_BASE_URL;
     process.env.VERCEL_ENV = "production";
