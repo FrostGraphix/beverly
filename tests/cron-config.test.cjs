@@ -15,6 +15,7 @@ assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hourly" && c
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-daily" && cron.schedule === "0 23 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-backfill" && cron.schedule === "0 18 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/consumption-sync" && cron.schedule === "0 3 * * *"));
+assert(vercel.crons.some((cron) => cron.path === "/api/cron/oem-telemetry" && cron.schedule === "0 4 * * *"), "OEM telemetry must remain Hobby-safe");
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_MB, "500", "database quota must be explicit");
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_WARN_PERCENT, "70", "database warning gate must preserve thirty-percent headroom");
 assert.strictEqual(vercel.env?.DATABASE_QUOTA_BACKFILL_PAUSE_PERCENT, "75", "database backfill gate must preserve twenty-five-percent headroom");
@@ -29,6 +30,7 @@ assert(api.includes("CRON_SECRET"), "cron secret check missing");
 assert(api.includes("runRefreshJob"), "refresh runner missing");
 assert(api.includes("writeDailyMeterRows"), "refresh runner must store daily meter rows");
 assert(api.includes("runConsumptionSync"), "smart consumption sync missing");
+assert(api.includes("syncActiveSparkMeterTelemetry"), "OEM telemetry runner missing");
 assert(api.includes("[consumption-sync-start]"), "consumption sync start logs missing");
 assert(api.includes("[consumption-sync-done]"), "consumption sync completion logs missing");
 assert(api.includes("[consumption-sync-error]"), "consumption sync failure logs missing");

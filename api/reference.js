@@ -2814,6 +2814,13 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       mode: "backfill"
     }));
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/oem-telemetry") {
+    if (!cronAuthorized(request)) {
+      return { status: 401, body: { code: 401, msg: "Unauthorized", reason: "Unauthorized", data: null, result: null, _proxy: { source: "cron-auth", pathname } } };
+    }
+    const { syncActiveSparkMeterTelemetry } = await import("../backend/wallet/dist/services/oem-telemetry-sync.js");
+    return localJobResponse(await syncActiveSparkMeterTelemetry());
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/sync-oem-dimensions") {
     if (!cronAuthorized(request)) {
       return {

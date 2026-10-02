@@ -39,6 +39,33 @@ describe('OEM installation inventory HTTP boundary', () => {
             }], nextCursor: null });
         } finally { await app.close(); }
     });
+    it('returns authorized telemetry without provider payloads', async () => {
+        vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+            const url = new URL(input instanceof Request ? input.url : String(input));
+            if (!url.pathname.endsWith('/rpc/list_authorized_oem_telemetry')) return new Response('{}', { status: 404 });
+            return Response.json({ authorized: true, readings: [{
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', external_site_id: 'site-1',
+                external_meter_id: 'meter-1', reading_at: '2026-10-01T10:00:00.000Z',
+                energy_kwh: 12.5, energy_interpretation: 'provider_total_unknown_semantics',
+                voltage_avg: 230, current_avg: 2, power_factor_avg: 0.9,
+                provider_credit_balance: 100, meter_state: 'on', reading_type: 'customer',
+                received_at: '2026-10-01T10:01:00.000Z', provider_payload: { secret: true },
+            }], next_cursor: null });
+        });
+        const app = await inventoryApp();
+        try {
+            const response = await app.inject('/installations/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/telemetry?limit=1');
+            expect(response.statusCode).toBe(200);
+            expect(response.json()).toEqual({ readings: [{
+                id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', externalSiteId: 'site-1',
+                externalMeterId: 'meter-1', readingAt: '2026-10-01T10:00:00.000Z',
+                energyKwh: 12.5, energyInterpretation: 'provider_total_unknown_semantics',
+                voltageAvg: 230, currentAvg: 2, powerFactorAvg: 0.9,
+                providerCreditBalance: 100, meterState: 'on', readingType: 'customer',
+                receivedAt: '2026-10-01T10:01:00.000Z',
+            }], nextCursor: null });
+        } finally { await app.close(); }
+    });
     it('hides unauthorized installation meters', async () => {
         vi.stubGlobal('fetch', async () => Response.json({ authorized: false, meters: [], next_cursor: null }));
         const app = await inventoryApp();

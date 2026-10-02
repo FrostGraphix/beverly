@@ -111,6 +111,27 @@ export type VendOutcome =
 /** Validate an adapter result before financial state changes. */
 export declare function requireVendOutcome(outcome: unknown): VendOutcome;
 
+/** Provider telemetry with unresolved counter and credit semantics preserved. */
+export interface CanonicalTelemetryReading {
+  readonly externalSiteId: string;
+  readonly externalMeterId: string;
+  readonly externalCustomerId?: string | null;
+  readonly timestamp: string;
+  readonly energyKwh?: number | null;
+  readonly voltageAvg?: number | null;
+  readonly currentAvg?: number | null;
+  readonly powerFactorAvg?: number | null;
+  readonly providerCreditBalance?: number | null;
+  readonly state: 'on' | 'off' | 'fault';
+  readonly type: 'customer' | 'totalizer';
+  readonly energyInterpretation?: 'provider_total_unknown_semantics';
+}
+
+/** Validate telemetry without inventing provider semantics. */
+export declare function requireTelemetryReading(reading: unknown): CanonicalTelemetryReading & {
+  readonly energyInterpretation: 'provider_total_unknown_semantics';
+};
+
 /** Connection probe; never certifies an installation alone. */
 export type ConnectionResult =
   | { readonly ok: true }

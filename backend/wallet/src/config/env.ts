@@ -13,6 +13,28 @@ const envBoolean = z.preprocess((value) => {
     return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
 }, z.boolean());
 
+export function normalizePaystackKey(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    let normalized = value.trim();
+    if (normalized.length >= 2) {
+        const first = normalized[0];
+        const last = normalized[normalized.length - 1];
+        if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+            normalized = normalized.slice(1, -1).trim();
+        }
+    }
+    return normalized || undefined;
+}
+
+const paystackSecretKey = z.preprocess(
+    normalizePaystackKey,
+    z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
+);
+const paystackPublicKey = z.preprocess(
+    normalizePaystackKey,
+    z.string().regex(/^pk_(test|live)_[A-Za-z0-9]+$/).optional(),
+);
+
 function loadEnvFile(filePath: string) {
     if (!fs.existsSync(filePath)) return;
     const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
@@ -67,8 +89,8 @@ const schema = z.object({
         return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
     }, z.boolean()).optional(),
 
-    PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
-    PAYSTACK_PUBLIC_KEY: z.string().regex(/^pk_(test|live)_[A-Za-z0-9]+$/).optional(),
+    PAYSTACK_SECRET_KEY: paystackSecretKey,
+    PAYSTACK_PUBLIC_KEY: paystackPublicKey,
     PAYSTACK_WEBHOOK_URL: z.string().url().optional(),
     PAYSTACK_PAYMENTS_ENABLED: envBoolean.default(false),
 
@@ -246,6 +268,8 @@ const parsed = schema.safeParse({
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
     EXPECTED_SUPABASE_PROJECT_REF: expectedProjectRef,
+    PAYSTACK_SECRET_KEY: normalizePaystackKey(process.env.PAYSTACK_SECRET_KEY),
+    PAYSTACK_PUBLIC_KEY: normalizePaystackKey(process.env.PAYSTACK_PUBLIC_KEY),
 });
 
 if (!parsed.success) {

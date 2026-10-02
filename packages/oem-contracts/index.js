@@ -99,4 +99,32 @@ function requireVendOutcome(outcome) {
   return value;
 }
 
-module.exports = { OemContractError, resolveInstallation, authorizeInstallation, requireCapability, requireVendOutcome };
+/** Validate provider telemetry without inventing energy or credit semantics. */
+function requireTelemetryReading(reading) {
+  if (!reading || typeof reading !== 'object' || Array.isArray(reading)) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry is invalid');
+  }
+  const value = /** @type {Record<string, unknown>} */ (reading);
+  for (const field of ['externalSiteId', 'externalMeterId']) {
+    if (typeof value[field] !== 'string' || !value[field].trim()) {
+      throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry identity is invalid');
+    }
+  }
+  if (typeof value.timestamp !== 'string' || !Number.isFinite(Date.parse(value.timestamp))) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry timestamp is invalid');
+  }
+  for (const field of ['energyKwh', 'voltageAvg', 'currentAvg', 'powerFactorAvg', 'providerCreditBalance']) {
+    if (value[field] !== undefined && value[field] !== null && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) {
+      throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry number is invalid');
+    }
+  }
+  if (!['on', 'off', 'fault'].includes(value.state)) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry state is invalid');
+  }
+  if (!['customer', 'totalizer'].includes(value.type)) {
+    throw new OemContractError('OEM_OUTCOME_INVALID', 'OEM telemetry type is invalid');
+  }
+  return { ...value, energyInterpretation: 'provider_total_unknown_semantics' };
+}
+
+module.exports = { OemContractError, resolveInstallation, authorizeInstallation, requireCapability, requireTelemetryReading, requireVendOutcome };

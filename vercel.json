@@ -58,6 +58,7 @@
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
     { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
     { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/oem-telemetry", "schedule": "0 4 * * *" },
     { "path": "/api/cron/archive-readings", "schedule": "0 1 * * *" }
   ],
   "headers": [

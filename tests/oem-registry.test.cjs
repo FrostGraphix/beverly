@@ -175,9 +175,7 @@ assert.strictEqual(registry.requestedOemId({ __oemId: "trusted-oem" }), "trusted
 
   registry.invalidateOemCache();
   const cfg = await registry.getOemScopedLiveConfig("resolver");
-  assert(cfg, "resolver config resolves");
-  assert.strictEqual(cfg.liveBaseUrl, "http://resolver.test:9000");
-  assert.strictEqual(cfg.liveBearerToken, "resolver-token-xyz", "resolver decrypts the bearer token");
+  assert.strictEqual(cfg, null, "non-default OEMs require the installation gateway");
 
   // Kill switch forces null (proxy then falls back to legacy env vars).
   process.env.OEM_REGISTRY_DISABLED = "true";
@@ -209,6 +207,7 @@ assert.strictEqual(registry.requestedOemId({ __oemId: "trusted-oem" }), "trusted
   registry.invalidateOemCache();
   const seedCfg = await registry.getOemScopedLiveConfig("seedmeter");
   const otherCfg = await registry.getOemScopedLiveConfig("othermeter");
+  assert.strictEqual(otherCfg, null, "legacy routing cannot select another OEM");
 
   // Seed default → identity regardless of incoming path.
   assert.strictEqual(await registry.translateEndpointPathForOem(seedCfg, "/api/station/read"), "/api/station/read", "seed default is identity");
@@ -217,7 +216,7 @@ assert.strictEqual(registry.requestedOemId({ __oemId: "trusted-oem" }), "trusted
   // uses a different slug, translation for `other` falls back to identity when the
   // default calinmeter row is absent — assert the safe fallback never throws.
   const translated = await registry.translateEndpointPathForOem(otherCfg, "/api/station/read");
-  assert(typeof translated === "string" && translated.startsWith("/api/"), "translate returns a safe path string");
+  assert.strictEqual(translated, "/api/station/read", "blocked OEM translation remains identity");
 
   ldb.deleteOemManufacturer(seed.id);
   ldb.deleteOemManufacturer(other.id);
@@ -227,9 +226,9 @@ assert.strictEqual(registry.requestedOemId({ __oemId: "trusted-oem" }), "trusted
   ldb.upsertOemCredentials({ oemId: rl.id, authStrategy: "bearer_static", baseUrl: "http://rate", encryptedBearerToken: crypto.encryptSecret("t") });
   registry.invalidateOemCache();
   assert.strictEqual(registry.peekOemRateLimit("ratemeter"), null, "peek is null before the config is cached");
-  await registry.getOemScopedLiveConfig("ratemeter"); // warms the cache
+  await registry.getOemScopedLiveConfig("ratemeter");
   const peeked = registry.peekOemRateLimit("ratemeter");
-  assert(peeked && peeked.maxRequests === 42 && peeked.windowMs === 60000, "peek returns cached per-OEM overrides");
+  assert.strictEqual(peeked, null, "blocked legacy OEMs cannot influence rate limits");
   ldb.deleteOemManufacturer(rl.id);
 
   ldb.resetForTests();

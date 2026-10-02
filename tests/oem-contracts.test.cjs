@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { resolveInstallation, authorizeInstallation, requireCapability, requireVendOutcome } = require('../packages/oem-contracts');
+const { resolveInstallation, authorizeInstallation, requireCapability, requireTelemetryReading, requireVendOutcome } = require('../packages/oem-contracts');
 
 // The gateway must not choose one installation for a colliding meter identity.
 assert.throws(
@@ -57,5 +57,13 @@ assert.throws(
   () => requireVendOutcome({ status: 'pending', providerReference: { id: 'bad' } }),
   { code: 'OEM_OUTCOME_INVALID' }
 );
+
+const telemetry = requireTelemetryReading({
+  externalSiteId: 'SITE-1', externalMeterId: 'METER-1', timestamp: '2026-09-27T18:45:00.000Z',
+  energyKwh: 17.25, state: 'on', type: 'customer', providerCreditBalance: 0,
+});
+assert.equal(telemetry.energyInterpretation, 'provider_total_unknown_semantics');
+assert.throws(() => requireTelemetryReading({ ...telemetry, timestamp: 'invalid' }), { code: 'OEM_OUTCOME_INVALID' });
+assert.throws(() => requireTelemetryReading({ ...telemetry, energyKwh: Number.NaN }), { code: 'OEM_OUTCOME_INVALID' });
 
 console.log('oem-contracts ok');

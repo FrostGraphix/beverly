@@ -32,9 +32,43 @@ const reconciliationSnapshot = z.object({
         checksum: z.string().min(1), completed_at: z.string().datetime({ offset: true }),
     }).nullable(),
 });
+const telemetryReadings = z.object({
+    authorized: z.boolean(),
+    readings: z.array(z.object({
+        id: z.string().uuid(), external_site_id: z.string().min(1), external_meter_id: z.string().min(1),
+        reading_at: z.string().datetime({ offset: true }), energy_kwh: z.number().nullable(),
+        energy_interpretation: z.literal('provider_total_unknown_semantics'), voltage_avg: z.number().nullable(),
+        current_avg: z.number().nullable(), power_factor_avg: z.number().nullable(),
+        provider_credit_balance: z.number().nullable(), meter_state: z.enum(['on', 'off', 'fault']),
+        reading_type: z.enum(['customer', 'totalizer']), received_at: z.string().datetime({ offset: true }),
+    })).max(101),
+    next_cursor: z.string().uuid().nullable(),
+});
 
 /** Staff authentication and explicit server-managed grants both remain mandatory. */
 const oemRoutes: FastifyPluginAsync = async (app) => {
+    app.get('/installations/:installationId/telemetry', { preHandler: app.requireStaff() }, async (req, reply) => {
+        reply.header('Cache-Control', 'no-store');
+        const actorId = req.actor?.type === 'staff' ? z.string().uuid().safeParse(req.actor.userId) : { success: false as const };
+        const params = z.object({ installationId: z.string().uuid() }).safeParse(req.params);
+        const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), after: z.string().uuid().optional() }).safeParse(req.query);
+        if (!actorId.success) return reply.code(403).send({ error: 'oem_access_denied' });
+        if (!params.success || !query.success) return reply.code(400).send({ error: 'invalid_oem_telemetry_request' });
+        const { data, error } = await adminClient.rpc('list_authorized_oem_telemetry', {
+            p_auth_user_id: actorId.data, p_installation_id: params.data.installationId,
+            p_after: query.data.after ?? null, p_limit: query.data.limit,
+        }).abortSignal(AbortSignal.timeout(10_000));
+        const parsed = telemetryReadings.safeParse(data);
+        if (error || !parsed.success) return reply.code(503).send({ error: 'oem_telemetry_unavailable' });
+        if (!parsed.data.authorized) return reply.code(404).send({ error: 'oem_installation_not_found' });
+        return { readings: parsed.data.readings.map((row) => ({
+            id: row.id, externalSiteId: row.external_site_id, externalMeterId: row.external_meter_id,
+            readingAt: row.reading_at, energyKwh: row.energy_kwh, energyInterpretation: row.energy_interpretation,
+            voltageAvg: row.voltage_avg, currentAvg: row.current_avg, powerFactorAvg: row.power_factor_avg,
+            providerCreditBalance: row.provider_credit_balance, meterState: row.meter_state,
+            readingType: row.reading_type, receivedAt: row.received_at,
+        })), nextCursor: parsed.data.next_cursor };
+    });
     app.get('/installations/:installationId/reconciliation', { preHandler: app.requireStaff() }, async (req, reply) => {
         reply.header('Cache-Control', 'no-store');
         const actorId = req.actor?.type === 'staff' ? z.string().uuid().safeParse(req.actor.userId) : { success: false as const };
