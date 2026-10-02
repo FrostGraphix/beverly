@@ -1,13 +1,13 @@
 # OEM pipeline execution status
 
-Status: **Incomplete**. Updated 2026-10-01.
+Status: **Implementation complete; external verification blocked**. Updated 2026-10-02.
 
 ## Latest checkpoint
 
 - Production now contains migrations through `20261001160000`. The telemetry tables, quarantine, atomic page checkpointing, and membership-plus-grant read function were applied successfully. A live read-only call with unrelated identities returned `authorized: false` and no readings.
 - Verified Koios v2 telemetry now flows through an exact-host, HTTPS-only SparkMeter client, canonical validation, quarantine, idempotent persistence, bounded pagination, and an authenticated downstream API. Provider payloads and customer identifiers are excluded from downstream telemetry responses.
-- A daily authenticated telemetry schedule is configured within the current Vercel plan limit. It remains inert because both ACOB installations and the tenant remain draft, no tenant membership or installation grants exist, and installation-scoped encrypted credentials are not provisioned.
-- Production contains no staff identity matching Alexander Obiechina. Ownership cannot be inferred from names, roles, or the existing administrator account. The exact existing authentication account must be identified, or Alexander must create one, before membership and grants can be provisioned.
+- A daily authenticated telemetry schedule is configured within the current Vercel plan limit. Both ACOB installations remain draft, so provider execution remains inert.
+- The explicitly approved `admin@acoblighting.com` account was verified against both `auth.users` and the Beverly super-admin profile. Migration `20261002120000` activated the ACOB tenant, created one active tenant membership, and created two active installation grants. Both installations remain draft. Active canary authorizations remain zero.
 - Legacy dynamic OEM registry and dimension-sync paths now reject non-Calinmeter providers. SparkMeter uses the installation gateway; existing Calinmeter behavior remains available through the default path.
 - Node 22 verification passes: 92 wallet files with 614 tests, the full root regression, OEM checks, security checks, typechecking, targeted lint, migration hygiene, and all six production builds. The first security run rejected an unsupported fifteen-minute Hobby cron; the corrected daily schedule passes deployment preflight.
 - Pull request 153 verifies commit `92e405ee`: production-hardening contracts, wallet tests, frontend type checks, frontend build, structural acceptance, and Vercel deployment all pass. The production dependency audit now reports only the documented ExcelJS `uuid` exception after patching `fast-uri` and `brace-expansion` through exact transitive overrides.
@@ -18,7 +18,7 @@ Status: **Incomplete**. Updated 2026-10-01.
 - Downstream meter and reconciliation endpoints use database-enforced tenant membership plus installation grants. They return sanitized meter metadata and snapshot evidence without customer contact data. The Wallet Admin OEM console consumes these endpoints.
 - Node 22 wallet verification passes 80 files and 566 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for changed wallet files. Full repository lint still has 997 pre-existing violations.
 - Database gates P1 and P5 require an explicit database URL and verify the official Supabase certificate chain. P5's embedded password fallback was removed. A security regression protects both boundaries.
-- Restore target connection remains unavailable with SQLSTATE `XX000` from the provider. The configured restore pooler identity matches the known restore project, but no specific cause is established. No migration, membership, grant or inventory row was applied.
+- Restore target connectivity recovered. Direct inspection confirms restored Beverly tables, but OEM tables and Supabase migration history are absent there. Production migration history also contains four newer migrations missing from this worktree; temporary local history markers isolated the authority dry-run and were removed immediately. No restore-target mutation occurred.
 - The repeatable audit now follows `OEM_MASTER_AUDIT_PROMPT.md`. Credential rotation persists ciphertext and version through one service-role-only compare-and-swap, records the responsible actor, and rejects concurrent changes. No credential row was rotated.
 - Inventory snapshots now reject null and empty complete-snapshot payloads before locking or mutation. Malformed upstream results cannot mark an installation's entire inventory stale.
 - Two tracked operator scripts were hardened. The Calinmeter credential synchronizer requires explicit apply intent and environment credentials, sanitizes failures, and exits nonzero. The historical reconciliation script now verifies Supabase TLS.
@@ -98,6 +98,14 @@ Preserve the existing `supabase/.temp/cli-latest` modification. Do not apply pro
 | `npm --prefix backend/wallet test` | Passed on Node 22.23.2: 78 files, 538 tests |
 | `npm --prefix backend/wallet run typecheck` | Passed on Node 22.23.2 |
 | `npm --prefix backend/wallet run build` | Passed on Node 22.23.2 |
+| `node tests/acob-oem-authority-migration.test.cjs` | Passed; exact identity, draft-state guards, bounded grants, and rollback are covered |
+| `npx supabase db push --linked --include-all --dry-run` | Passed after aligning local-only history markers; isolated `20261002120000` |
+| `npx supabase db push --linked --include-all` | Applied `20261002120000` successfully |
+| Live authority query | Verified one matching super-admin, active tenant, one active membership, two active grants, two draft installations, and zero active canary authorizations |
+| `npm run test:security` | Passed |
+| `npm test` | Passed full repository regression |
+| `npm --prefix backend/wallet test` | Passed on Node 22.13.1: 92 files, 614 tests |
+| `npm run build` | Passed all six production builds on Node 22.13.1 |
 | `npm test` | Full root regression passed on Node 24.13.1 |
 | `npm run build` | Wallet, CRM, admin, vendor, customer and landing builds passed on Node 24.13.1; engine warning remains |
 | `npm --prefix backend/wallet run lint` | Failed: ESLint is declared as a command but not installed/configured |
