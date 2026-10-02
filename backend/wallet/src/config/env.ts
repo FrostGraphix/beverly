@@ -279,12 +279,10 @@ if (!parsed.success) {
     throw new Error(message);
 }
 
-const resolvedData = parsed.data;
-
 export const env = {
-    ...resolvedData,
-    ENERGY_BACKEND_URL: resolvedData.UPSTREAM_API_URL || resolvedData.ENERGY_BACKEND_URL,
-    ENERGY_BEARER_TOKEN: resolvedData.UPSTREAM_BEARER_TOKEN || resolvedData.ENERGY_BEARER_TOKEN,
+    ...parsed.data,
+    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
+    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
 };
 
 export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {
