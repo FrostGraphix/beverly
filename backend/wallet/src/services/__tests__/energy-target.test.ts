@@ -70,13 +70,28 @@ describe('production energy identity', () => {
         });
     });
 
-    it('rejects legacy 0001 fallback', async () => {
+    it('uses the legacy target when the default registry credential is unavailable', async () => {
         mocks.resolveOemConfig.mockResolvedValue(null);
         mocks.resolveOemAuthHeader.mockReturnValue(null);
 
         const { resolveEnergyTarget } = await import('../token-engine.js');
 
-        await expect(resolveEnergyTarget(undefined, 'UMAISHA')).rejects.toMatchObject({
+        await expect(resolveEnergyTarget(undefined, 'UMAISHA')).resolves.toEqual({
+            baseUrl: 'https://legacy-energy.test',
+            authHeader: {
+                name: 'Authorization',
+                value: 'Bearer legacy-0001-token',
+            },
+        });
+    });
+
+    it('rejects fallback for an explicitly selected OEM', async () => {
+        mocks.resolveOemConfig.mockResolvedValue(null);
+        mocks.resolveOemAuthHeader.mockReturnValue(null);
+
+        const { resolveEnergyTarget } = await import('../token-engine.js');
+
+        await expect(resolveEnergyTarget('missing-oem-id', 'UMAISHA')).rejects.toMatchObject({
             code: 'oem_energy_not_configured',
         });
     });
