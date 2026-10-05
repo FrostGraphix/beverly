@@ -8,11 +8,11 @@ export interface SparkMeterPaymentInput {
 
 export interface SparkMeterPaymentRequest {
     method: 'POST';
-    path: '/api/v1/payments';
+    path: `/api/v1/customers/${string}/payments`;
     body: {
         amount: string;
         memo: string;
-        customer_id: string;
+        external_id: string;
     };
 }
 
@@ -173,7 +173,7 @@ export function buildSparkMeterAuthHeaders(apiKey: string, apiSecret: string): R
     };
 }
 
-/** Build Koios v1's documented customer-ID payment request. */
+/** Build Koios v1's documented uniqueness-protected customer payment request. */
 export function buildSparkMeterPaymentRequest(input: SparkMeterPaymentInput): SparkMeterPaymentRequest {
     if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
         throw new Error('SparkMeter payment amount is invalid');
@@ -181,15 +181,17 @@ export function buildSparkMeterPaymentRequest(input: SparkMeterPaymentInput): Sp
     if (input.currency.trim().toUpperCase() !== input.settlementCurrency.trim().toUpperCase()) {
         throw new Error('SparkMeter settlement currency mismatch');
     }
+    const commandId = input.commandId.trim();
+    if (!commandId) throw new Error('SparkMeter payment command is required');
     const externalCustomerId = input.externalCustomerId.trim();
     if (!externalCustomerId) throw new Error('SparkMeter customer mapping is required');
     return {
         method: 'POST',
-        path: '/api/v1/payments',
+        path: `/api/v1/customers/${encodeURIComponent(externalCustomerId)}/payments`,
         body: {
             amount: (input.amountMinor / 100).toFixed(2),
-            memo: `Beverly vend ${input.commandId}`,
-            customer_id: externalCustomerId,
+            memo: `Beverly vend ${commandId}`,
+            external_id: commandId,
         },
     };
 }

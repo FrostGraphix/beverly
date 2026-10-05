@@ -1,8 +1,15 @@
 # OEM pipeline execution status
 
-Status: **Implementation complete; external verification blocked**. Updated 2026-10-02.
+Status: **Implementation complete; provider sandbox pending**. Updated 2026-10-05.
 
 ## Latest checkpoint
+
+- Authenticated official Koios OpenAPI was recovered directly from SparkMeter. Koios v1 documents `POST /api/v1/customers/{customer_id}/payments` with organization-unique `external_id`, plus payment lookup by `external_id`. Koios v2 exposes no payment route. The adapter now uses Beverly's durable command ID as `external_id`; ambiguous outcomes require lookup before retry.
+- SparkMeter support received the authorized sandbox and retry-contract request. A dedicated write sandbox, non-production Nova meter, Full-access credentials, and explicit timeout/5xx/429 guidance remain provider-controlled and pending. No live provider write was attempted.
+- The restore database accepted all twenty OEM migrations atomically after a full transactional rollback rehearsal. Verification found 24 OEM tables, one active tenant membership, two grants, two draft installations, and zero active canary authorizations. The restored project lacks Supabase migration-history metadata, so this proves restored schema behavior, not CLI history reconciliation.
+- Vercel's authenticated deployment-protection bypass reached the application. Preview health and readiness both returned HTTP 200 after configuring the existing serverless queue mode. Readiness verified database access; Redis and Paystack remained intentionally disabled there.
+- The OEM credential encryption key now exists in Vercel Preview and Production. The single legacy Calinmeter bearer credential was atomically re-encrypted with its base URL preserved. Secret values were neither committed nor documented.
+- Both provider installations remain draft. Production writes remain disabled. No canary authorization exists.
 
 - Production now contains migrations through `20261001160000`. The telemetry tables, quarantine, atomic page checkpointing, and membership-plus-grant read function were applied successfully. A live read-only call with unrelated identities returned `authorized: false` and no readings.
 - Verified Koios v2 telemetry now flows through an exact-host, HTTPS-only SparkMeter client, canonical validation, quarantine, idempotent persistence, bounded pagination, and an authenticated downstream API. Provider payloads and customer identifiers are excluded from downstream telemetry responses.
@@ -11,14 +18,14 @@ Status: **Implementation complete; external verification blocked**. Updated 2026
 - Legacy dynamic OEM registry and dimension-sync paths now reject non-Calinmeter providers. SparkMeter uses the installation gateway; existing Calinmeter behavior remains available through the default path.
 - Node 22 verification passes: 92 wallet files with 614 tests, the full root regression, OEM checks, security checks, typechecking, targeted lint, migration hygiene, and all six production builds. The first security run rejected an unsupported fifteen-minute Hobby cron; the corrected daily schedule passes deployment preflight.
 - Pull request 153 verifies commit `92e405ee`: production-hardening contracts, wallet tests, frontend type checks, frontend build, structural acceptance, and Vercel deployment all pass. The production dependency audit now reports only the documented ExcelJS `uuid` exception after patching `fast-uri` and `brace-expansion` through exact transitive overrides.
-- Preview deployment `ETvuhSn2tEaNAEcDxMWAUsAa7aZE` reached Ready. An unauthenticated `/api/v1/health` request returned the expected Vercel SSO redirect with `Cache-Control: no-store`; application-level smoke remains blocked without a preview bypass token.
+- Preview deployment `beverly-4ptrpujph-danmusa-abdulsamads-projects.vercel.app` passed authenticated `/api/v1/health` and `/api/v1/ready` smoke through Vercel's deployment-protection bypass.
 - Tenant authority now requires two independent server-managed records: active tenant membership and active installation access. Both checks execute inside each database read. Staff role, browser parameters and installation grants alone cannot establish membership.
 - Added installation-scoped customer and meter storage. `apply_oem_inventory_snapshot` validates complete identities, duplicate external IDs, duplicate serials, customer links and ownership changes before mutation. One installation lock serializes snapshots. Missing rows become stale; nothing is deleted. Legacy Calinmeter tables remain untouched.
 - The SparkMeter importer now defaults to installation-scoped storage. Legacy OEM-wide storage requires explicit `--legacy --apply`. The existing metered-only plan still excludes the 39 meterless customers. No live import ran during this checkpoint.
 - Downstream meter and reconciliation endpoints use database-enforced tenant membership plus installation grants. They return sanitized meter metadata and snapshot evidence without customer contact data. The Wallet Admin OEM console consumes these endpoints.
-- Node 22 wallet verification passes 80 files and 566 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for changed wallet files. Full repository lint still has 997 pre-existing violations.
+- Node 22 wallet verification passes 92 files and 614 tests. The full root regression, security suite, OEM suite, wallet typecheck and all six production builds pass. Targeted lint passes for changed wallet files. Full wallet lint still has 1,009 pre-existing violations.
 - Database gates P1 and P5 require an explicit database URL and verify the official Supabase certificate chain. P5's embedded password fallback was removed. A security regression protects both boundaries.
-- Restore target connectivity recovered. Direct inspection confirms restored Beverly tables, but OEM tables and Supabase migration history are absent there. Production migration history also contains four newer migrations missing from this worktree; temporary local history markers isolated the authority dry-run and were removed immediately. No restore-target mutation occurred.
+- Restore target connectivity recovered. Twenty curated OEM migrations were rollback-rehearsed, then applied atomically. OEM schema and authority state now verify there; Supabase migration-history metadata remains absent.
 - The repeatable audit now follows `OEM_MASTER_AUDIT_PROMPT.md`. Credential rotation persists ciphertext and version through one service-role-only compare-and-swap, records the responsible actor, and rejects concurrent changes. No credential row was rotated.
 - Inventory snapshots now reject null and empty complete-snapshot payloads before locking or mutation. Malformed upstream results cannot mark an installation's entire inventory stale.
 - Two tracked operator scripts were hardened. The Calinmeter credential synchronizer requires explicit apply intent and environment credentials, sanitizes failures, and exits nonzero. The historical reconciliation script now verifies Supabase TLS.
@@ -27,7 +34,7 @@ Status: **Implementation complete; external verification blocked**. Updated 2026
 
 ### Deployment gate
 
-Vercel built commit `f337a85c` successfully as preview deployment `dpl_DJY79EwBBti6DMpGuW5GwGanXr6v`. The preview remained protected: authenticated fetch attempts returned the Vercel authentication redirect, including temporary-share attempts. Runtime data-flow smoke remains blocked until migrations reach the intended non-production database, membership and installation grants exist, and protected access succeeds. Production activation remains prohibited.
+Vercel preview protection now permits authenticated automation. Health and readiness return HTTP 200, and the restore target contains the required OEM schema and authority state. Production activation remains prohibited until SparkMeter supplies the requested isolated write environment and credentials.
 
 ### Earlier installation checkpoint
 
@@ -111,6 +118,14 @@ Preserve the existing `supabase/.temp/cli-latest` modification. Do not apply pro
 | `npm --prefix backend/wallet run lint` | Failed: ESLint is declared as a command but not installed/configured |
 | `corepack pnpm install --lockfile-only --offline --frozen-lockfile --ignore-scripts` | Passed; no lockfile content change |
 | `git diff --check` | Passed |
+| `npm run test:oem` | Passed on Node 22.23.1 |
+| `npm --prefix backend/wallet run typecheck` | Passed on Node 22.23.1 |
+| Targeted SparkMeter ESLint | Passed on both changed adapter files |
+| `npm --prefix backend/wallet test` | Passed on Node 22.23.1: 92 files, 614 tests |
+| `npm run test:security` | Passed on Node 22.23.1, including 187 migration checks |
+| `npm test` | Passed full root regression on Node 22.23.1 |
+| `npm run build` | Passed wallet, CRM, admin, vendor, customer, and landing builds on Node 22.23.1 |
+| Full wallet ESLint | Failed on 1,009 pre-existing errors; changed SparkMeter files pass |
 
 The Node 22 suite used the existing cached Node 22.23.2 executable at the front of the process PATH. Database transport fixtures validate request scoping, not live database RLS. No migration/rollback was executed in this batch. No deployed smoke or remote CI completion is claimed.
 
@@ -120,7 +135,7 @@ An authenticated live read of `/api/v1/customers?per_page=1` returned HTTP 200 w
 
 Documentation access is now recovered. Remaining provider clarification concerns energy counter-versus-interval meaning, credit balance units, corrections/late-data semantics, ambiguous-payment reconciliation and firmware-specific local cutoff. The official schema and read-query contracts are recorded separately. Successful empty queries cannot substitute for a nonempty authorized telemetry fixture.
 
-Protected-preview smoke is separately blocked: none of `VERCEL_PROTECTION_BYPASS`, `VERCEL_AUTOMATION_BYPASS`, or `VERCEL_AUTOMATION_BYPASS_SECRET` is configured in the loaded local environment. `LIVE_API_BEARER_TOKEN` exists, but its suitability for preview authentication has not been verified. Configure the bypass through secure environment storage; do not paste it into documentation.
+Protected-preview smoke is complete through Vercel's authenticated automation bypass. The bypass secret remains in secure platform storage and is not recorded here.
 
 ## Deployment, recovery and rollback
 

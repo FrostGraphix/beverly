@@ -171,11 +171,11 @@ describe('SparkMeter Koios v1 adapter', () => {
             externalCustomerId: 'a49c0554-60be-406c-b109-03cc2ba785f4',
         })).toEqual({
             method: 'POST',
-            path: '/api/v1/payments',
+            path: '/api/v1/customers/a49c0554-60be-406c-b109-03cc2ba785f4/payments',
             body: {
                 amount: '2.34',
                 memo: 'Beverly vend 4b85a890-75ee-48ff-8eb1-bf19b6282494',
-                customer_id: 'a49c0554-60be-406c-b109-03cc2ba785f4',
+                external_id: '4b85a890-75ee-48ff-8eb1-bf19b6282494',
             },
         });
     });
