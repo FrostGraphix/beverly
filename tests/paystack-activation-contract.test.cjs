@@ -32,11 +32,11 @@ for (const portal of [vendorFund, customerFund]) {
 assert.match(webhookRoute, /verifyWebhookSignature/);
 assert.equal(
   vercelConfig.env.PAYSTACK_WEBHOOK_URL,
-  "https://acob-beverly.vercel.app/api/v1/webhook/paystack",
+  "https://beverly.acoblighting.com/api/v1/webhook/paystack",
 );
 assert.equal(
   vercelConfig.env.CUSTOMER_FUNDING_CALLBACK_URL,
-  "https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return",
+  "https://beverly.acoblighting.com/wallet-customer/wallet/fund?payment=return",
 );
 assert.equal(
   vercelConfig.env.VENDOR_FUNDING_CALLBACK_URL,
