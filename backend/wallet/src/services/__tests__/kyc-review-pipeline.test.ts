@@ -60,7 +60,7 @@ describe('KYC review evidence rules', () => {
         await expect(submitKycReview({
             subjectType: 'customer', subjectId: 'customer-1', requestedTier: 1,
             submittedBy: 'user-1', submission: {}, documentIds: ['doc-1', 'doc-2'],
-        })).rejects.toMatchObject({ code: 'documents_required' });
+        })).rejects.toMatchObject({ code: 'selfie_required' });
         expect(rpc).not.toHaveBeenCalled();
         expect(notifyOperationalStaff).not.toHaveBeenCalled();
     });
