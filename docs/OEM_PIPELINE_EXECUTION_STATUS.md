@@ -1,8 +1,12 @@
 # OEM pipeline execution status
 
-Status: **Implementation complete; provider sandbox pending**. Updated 2026-10-05.
+Status: **Local contract sandbox implemented; provider-controlled gates remain**. Updated 2026-10-06.
 
 ## Latest checkpoint
+
+- Added a deterministic, test-only Koios v2 sandbox using injected fetch and synthetic telemetry. It exercises the documented read route, authentication headers, canonical normalization, and malformed-reading quarantine without network access. It has no payment route and does not simulate provider retry guarantees. Credentials were not rotated or changed. Production writes remain disabled.
+- The user-requested numbering does not match the repository's phase plan: the architecture audit defines phases 0–10 only (`MULTI_TENANT_OEM_PIPELINE_ARCHITECTURE_AUDIT_2026-09-09.md`, section 17). It defines no phases 11–16. No undocumented phase requirements were inferred. Existing work and blockers remain tracked against that source plan.
+- Verification on Node 24.13.1: `npm run test:oem`, `npm --prefix backend/wallet run test` (93 files, 618 tests), `npm test`, `npm run test:security`, `npm run typecheck`, targeted wallet ESLint, `npm run build` (six apps/services), `npm --prefix backend/wallet run build`, and `git diff --check` passed. The repository requires Node 22.x; no Node 22 runtime was available here, so supported-runtime verification remains outstanding.
 
 - Authenticated official Koios OpenAPI was recovered directly from SparkMeter. Koios v1 documents `POST /api/v1/customers/{customer_id}/payments` with organization-unique `external_id`, plus payment lookup by `external_id`. Koios v2 exposes no payment route. The adapter now uses Beverly's durable command ID as `external_id`; ambiguous outcomes require lookup before retry.
 - SparkMeter support received the authorized sandbox and retry-contract request. A dedicated write sandbox, non-production Nova meter, Full-access credentials, and explicit timeout/5xx/429 guidance remain provider-controlled and pending. No live provider write was attempted.

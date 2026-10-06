@@ -59,6 +59,7 @@ Keep write safety strict.
 - `supabase/migrations/20261001150000_oem_telemetry.sql` owns installation-scoped raw telemetry, quarantine evidence, and atomic page checkpoints. Unknown energy-counter and credit-balance semantics remain explicit and unconverted.
 - `supabase/migrations/20261001160000_oem_telemetry_reads.sql` owns bounded telemetry reads. Every read proves active tenant membership and an explicit installation grant before returning provider measurements.
 - `backend/wallet/src/services/oem-telemetry.ts` owns verified Koios v2 reading normalization and atomic persistence. Provider payloads never enter downstream storage without canonical validation.
+- `backend/wallet/src/adapters/__tests__/fixtures/sparkmeter-contract-sandbox.ts` is a test-only Koios v2 simulator using synthetic readings and injected fetch. It has no network access and cannot certify provider writes.
 - `/api/v1/oem/installations/:installationId/meters`, `/telemetry`, and `/reconciliation` expose tenant-authorized, installation-scoped results. Database functions enforce membership plus installation grants in the same statement. Meter and telemetry reads exclude customer contact data.
 
 - `packages/oem-contracts/` owns shared, canonical OEM gateway types and runtime validation. CRM, wallet, and telemetry consume these contracts; provider-specific payloads stay inside versioned adapters.
