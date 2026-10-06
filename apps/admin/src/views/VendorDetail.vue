@@ -173,6 +173,9 @@ const detailSearch = ref('');
 const detailPage = ref(1);
 const detailPageSize = ref(10);
 const detailView = ref<'table' | 'list'>('table');
+const detailTypeFilter = ref('all');
+const detailDateFrom = ref('');
+const detailDateTo = ref('');
 
 const detailExportRows = computed<any[]>(() => {
     if (tab.value === 'wallet') return wallet.value?.entries ?? [];
@@ -215,8 +218,16 @@ const detailExportColumns = computed<WalletExportColumn<any>[]>(() => {
 });
 const detailFilteredRows = computed(() => {
     const query = detailSearch.value.trim().toLowerCase();
-    if (!query) return detailExportRows.value;
-    return detailExportRows.value.filter((row) => detailExportColumns.value.some((column) => String(column.value(row) ?? '').toLowerCase().includes(query)));
+    const from = detailDateFrom.value ? new Date(`${detailDateFrom.value}T00:00:00`).getTime() : null;
+    const to = detailDateTo.value ? new Date(`${detailDateTo.value}T23:59:59.999`).getTime() : null;
+    return detailExportRows.value.filter((row) => {
+        const rowType = String(tab.value === 'wallet' ? row.entry_type ?? row.type ?? '' : row.status ?? '').toLowerCase();
+        const createdAt = new Date(row.created_at).getTime();
+        return (!query || detailExportColumns.value.some((column) => String(column.value(row) ?? '').toLowerCase().includes(query)))
+            && (detailTypeFilter.value === 'all' || rowType === detailTypeFilter.value)
+            && (from === null || createdAt >= from)
+            && (to === null || createdAt <= to);
+    });
 });
 const detailPagedRows = computed(() => {
     const start = (detailPage.value - 1) * detailPageSize.value;
@@ -224,6 +235,28 @@ const detailPagedRows = computed(() => {
 });
 const detailStatusOptions = computed(() => [...new Set(detailExportRows.value.map((row) => String(row.status ?? '')).filter(Boolean))]
     .map((value) => ({ value, label: value.replace(/_/g, ' ') })));
+const detailFilterOptions = computed(() => [...new Set(detailExportRows.value.map((row) => String(
+    tab.value === 'wallet' ? row.entry_type ?? row.type ?? '' : row.status ?? '',
+).toLowerCase()).filter(Boolean))].map((value) => ({ value, label: value.replace(/_/g, ' ') })));
+
+async function loadAllHistory(path: string, key: string) {
+    let cursor: string | null = null;
+    let first: any = null;
+    const rows: any[] = [];
+    const seen = new Set<string>();
+    // ponytail: eager loading keeps filters complete; move filtering server-side if a vendor reaches tens of thousands of rows.
+    do {
+        const params = new URLSearchParams({ limit: '200' });
+        if (cursor) params.set('cursor', cursor);
+        const page: any = await api.get(`${path}?${params}`);
+        first ??= page;
+        rows.push(...(page[key] ?? []));
+        cursor = page.nextCursor ?? null;
+        if (cursor && seen.has(cursor)) break;
+        if (cursor) seen.add(cursor);
+    } while (cursor);
+    return { ...(first ?? {}), [key]: rows, nextCursor: null };
+}
 
 async function loadDetail() {
     loading.value = true;
@@ -272,17 +305,20 @@ async function loadDetail() {
 async function switchTab(t: Tab) {
     tab.value = t;
     detailSearch.value = '';
+    detailTypeFilter.value = 'all';
+    detailDateFrom.value = '';
+    detailDateTo.value = '';
     detailPage.value = 1;
     if (t === 'wallet' && !wallet.value) {
         tabLoading.value = true;
-        try { wallet.value = await api.get<any>(`/api/v1/admin/vendors/${id}/wallet`); }
+        try { wallet.value = await loadAllHistory(`/api/v1/admin/vendors/${id}/wallet`, 'entries'); }
         catch { wallet.value = { entries: [] }; }
         finally { tabLoading.value = false; }
     }
     if (t === 'transactions' && !transactions.value.length) {
         tabLoading.value = true;
         try {
-            const r = await api.get<any>(`/api/v1/admin/vendors/${id}/transactions`);
+            const r = await loadAllHistory(`/api/v1/admin/vendors/${id}/transactions`, 'transactions');
             transactions.value = r.transactions ?? r.purchases ?? [];
         }
         catch { transactions.value = []; }
@@ -291,7 +327,7 @@ async function switchTab(t: Tab) {
     if (t === 'funding' && !funding.value.length) {
         tabLoading.value = true;
         try {
-            const r = await api.get<any>(`/api/v1/admin/vendors/${id}/funding`);
+            const r = await loadAllHistory(`/api/v1/admin/vendors/${id}/funding`, 'funding');
             funding.value = r.funding ?? r.items ?? [];
         }
         catch { funding.value = []; }
@@ -553,8 +589,16 @@ onMounted(loadDetail);
       </div>
 
       <div v-if="['wallet','transactions','funding','staff'].includes(tab)" class="vendor-table-toolbar">
-        <input v-model="detailSearch" class="bw-input" :placeholder="`Search ${tab}`" :aria-label="`Search ${tab}`" @input="detailPage = 1" />
-        <WalletDataViewSwitch v-model="detailView" :label="`${tab} display view`" />
+        <div class="vendor-filter-fields">
+          <input v-model="detailSearch" class="bw-input" :placeholder="`Search ${tab}`" :aria-label="`Search ${tab}`" @input="detailPage = 1" />
+          <select v-model="detailTypeFilter" class="bw-input" :aria-label="`Filter ${tab} by type`" @change="detailPage = 1">
+            <option value="all">All {{ tab === 'wallet' ? 'types' : 'statuses' }}</option>
+            <option v-for="option in detailFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <label class="vendor-date-filter">From<input v-model="detailDateFrom" type="date" class="bw-input" @change="detailPage = 1" /></label>
+          <label class="vendor-date-filter">To<input v-model="detailDateTo" type="date" class="bw-input" @change="detailPage = 1" /></label>
+        </div>
+        <WalletDataViewSwitch v-model="detailView" :modes="['list', 'table']" :label="`${tab} display view`" />
       </div>
 
       <!-- ── Overview ────────────────────────────────────────── -->
@@ -677,14 +721,29 @@ onMounted(loadDetail);
             </div>
             <router-link v-if="canViewWallets" to="/wallets" class="bw-btn sm" style="text-decoration: none">All wallets →</router-link>
           </div>
-          <ul class="ledger-list">
+          <div v-if="detailView === 'table'" class="bw-t-wrap">
+            <table class="bw-table">
+              <thead><tr><th>When</th><th>Type</th><th>Direction</th><th style="text-align:right">Amount</th><th style="text-align:right">Balance</th></tr></thead>
+              <tbody>
+                <tr v-for="e in detailPagedRows" :key="e.id">
+                  <td class="bw-mono bw-muted">{{ shortDate(e.created_at) }}</td>
+                  <td>{{ (e.entry_type ?? e.type ?? '').replace(/_/g, ' ') }}</td>
+                  <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.direction }}</span></td>
+                  <td class="bw-money" style="text-align:right">{{ dirSign(e.direction) }}{{ naira(e.amount_minor) }}</td>
+                  <td class="bw-money bw-muted" style="text-align:right">{{ naira(e.balance_after_minor) }}</td>
+                </tr>
+                <tr v-if="!detailFilteredRows.length"><td colspan="5" class="bw-muted empty">No wallet movements match these filters.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul v-else class="ledger-list">
             <li v-for="e in detailPagedRows" :key="e.id" class="ledger-row">
               <span class="bw-mono ledger-when">{{ shortDate(e.created_at) }}</span>
               <span class="bw-mono ledger-type">{{ (e.entry_type ?? e.type ?? '').replace(/_/g, ' ') }}</span>
               <span class="bw-money ledger-amt" :class="e.direction">{{ dirSign(e.direction) }}{{ naira(e.amount_minor) }}</span>
               <span class="bw-money bw-muted ledger-bal">{{ naira(e.balance_after_minor) }}</span>
             </li>
-            <li v-if="!wallet.entries?.length" class="bw-muted empty">No wallet movements yet.</li>
+            <li v-if="!detailFilteredRows.length" class="bw-muted empty">No wallet movements match these filters.</li>
           </ul>
         </template>
         <div v-else class="empty bw-muted">No wallet provisioned for this vendor.</div>
@@ -693,7 +752,7 @@ onMounted(loadDetail);
       <!-- ── Transactions ───────────────────────────────────── -->
       <div v-else-if="tab === 'transactions'" class="bw-card flush">
         <div v-if="tabLoading" class="empty bw-muted">Loading…</div>
-        <div v-else class="bw-t-wrap">
+        <div v-else-if="detailView === 'table'" class="bw-t-wrap">
           <table class="bw-table">
             <thead>
               <tr>
@@ -718,18 +777,26 @@ onMounted(loadDetail);
                 <td class="bw-money" style="text-align:right">{{ naira(tx.vat_amount_minor ?? 0) }}</td>
                 <td><span :class="['bw-badge', txBadge(tx.status)]">{{ tx.status }}</span></td>
               </tr>
-              <tr v-if="!transactions.length">
-                <td colspan="8" class="bw-muted empty">No transactions yet.</td>
+              <tr v-if="!detailFilteredRows.length">
+                <td colspan="8" class="bw-muted empty">No transactions match these filters.</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <ul v-else class="detail-card-list">
+          <li v-for="tx in detailPagedRows" :key="tx.id" class="detail-record-card">
+            <div v-for="column in detailExportColumns" :key="column.key" class="detail-record-field">
+              <span>{{ column.header }}</span><strong>{{ column.value(tx) || '—' }}</strong>
+            </div>
+          </li>
+          <li v-if="!detailFilteredRows.length" class="bw-muted empty">No transactions match these filters.</li>
+        </ul>
       </div>
 
       <!-- ── Funding ────────────────────────────────────────── -->
       <div v-else-if="tab === 'funding'" class="bw-card flush">
         <div v-if="tabLoading" class="empty bw-muted">Loading…</div>
-        <div v-else class="bw-t-wrap">
+        <div v-else-if="detailView === 'table'" class="bw-t-wrap">
           <table class="bw-table">
             <thead>
               <tr>
@@ -748,18 +815,26 @@ onMounted(loadDetail);
                 <td class="bw-money" style="text-align:right">{{ naira(f.amount_minor ?? f.amount) }}</td>
                 <td><span :class="['bw-badge', fundBadge(f.status)]">{{ f.status }}</span></td>
               </tr>
-              <tr v-if="!funding.length">
-                <td colspan="5" class="bw-muted empty">No funding history.</td>
+              <tr v-if="!detailFilteredRows.length">
+                <td colspan="5" class="bw-muted empty">No funding records match these filters.</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <ul v-else class="detail-card-list">
+          <li v-for="row in detailPagedRows" :key="row.id" class="detail-record-card">
+            <div v-for="column in detailExportColumns" :key="column.key" class="detail-record-field">
+              <span>{{ column.header }}</span><strong>{{ column.value(row) || '—' }}</strong>
+            </div>
+          </li>
+          <li v-if="!detailFilteredRows.length" class="bw-muted empty">No funding records match these filters.</li>
+        </ul>
       </div>
 
       <!-- ── Staff ──────────────────────────────────────────── -->
       <div v-else-if="tab === 'staff'" class="bw-card flush">
         <div v-if="tabLoading" class="empty bw-muted">Loading…</div>
-        <div v-else class="bw-t-wrap">
+        <div v-else-if="detailView === 'table'" class="bw-t-wrap">
           <table class="bw-table">
             <thead>
               <tr>
@@ -778,12 +853,20 @@ onMounted(loadDetail);
                 <td><span :class="['bw-badge', staffBadge(u.status ?? 'active')]">{{ u.status ?? 'active' }}</span></td>
                 <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(u.created_at) }}</td>
               </tr>
-              <tr v-if="!staff.length">
-                <td colspan="5" class="bw-muted empty">No staff accounts found.</td>
+              <tr v-if="!detailFilteredRows.length">
+                <td colspan="5" class="bw-muted empty">No staff accounts match these filters.</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <ul v-else class="detail-card-list">
+          <li v-for="row in detailPagedRows" :key="row.id" class="detail-record-card">
+            <div v-for="column in detailExportColumns" :key="column.key" class="detail-record-field">
+              <span>{{ column.header }}</span><strong>{{ column.value(row) || '—' }}</strong>
+            </div>
+          </li>
+          <li v-if="!detailFilteredRows.length" class="bw-muted empty">No staff accounts match these filters.</li>
+        </ul>
       </div>
 
       <WalletTablePagination
@@ -1022,7 +1105,17 @@ onMounted(loadDetail);
 .danger-stat .stat-value { color: var(--danger); }
 .stat-sub { font-size: var(--t-xs); color: var(--text-muted); margin: 4px 0 0; }
 .vendor-table-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--s-3); padding:var(--s-3) var(--s-4); border:1px solid var(--border); border-bottom:0; border-radius:var(--r-lg) var(--r-lg) 0 0; background:var(--surface-2); }
-.vendor-table-toolbar .bw-input { width:min(340px, 100%); }
+.vendor-table-toolbar + .bw-card { border-top-left-radius:0; border-top-right-radius:0; }
+.vendor-filter-fields { display:flex; align-items:end; gap:var(--s-2); flex:1; flex-wrap:wrap; }
+.vendor-filter-fields > .bw-input:first-child { width:min(300px, 100%); }
+.vendor-filter-fields select.bw-input { width:auto; min-width:140px; text-transform:capitalize; }
+.vendor-date-filter { display:grid; gap:3px; color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+.vendor-date-filter .bw-input { width:145px; }
+.detail-card-list { list-style:none; margin:0; padding:var(--s-3); display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s-3); }
+.detail-record-card { padding:var(--s-3); border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); display:grid; gap:8px; }
+.detail-record-field { display:flex; justify-content:space-between; gap:var(--s-3); font-size:var(--t-xs); }
+.detail-record-field span { color:var(--text-muted); }
+.detail-record-field strong { text-align:right; overflow-wrap:anywhere; }
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: var(--s-2); margin-bottom: var(--s-3); border-bottom: 1px solid var(--border); }
@@ -1121,6 +1214,10 @@ onMounted(loadDetail);
   .ledger-row  { grid-template-columns: 1fr auto; }
   .ledger-when, .ledger-bal { grid-column: 1 / -1; opacity: 0.7; }
   .tabs        { overflow-x: auto; }
+  .vendor-table-toolbar { align-items:stretch; flex-direction:column; }
+  .vendor-filter-fields { display:grid; grid-template-columns:1fr 1fr; }
+  .vendor-filter-fields > .bw-input:first-child { width:100%; grid-column:1 / -1; }
+  .vendor-filter-fields select.bw-input, .vendor-date-filter .bw-input { width:100%; min-width:0; }
   .an-two-col  { grid-template-columns: 1fr; }
 }
 </style>

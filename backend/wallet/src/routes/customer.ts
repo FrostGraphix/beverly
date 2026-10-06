@@ -52,6 +52,7 @@ import {
     getNinVerificationAvailability, saveCustomerBasicInfo, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
+import { assertKycEnabled, getKycPolicy } from '../services/kyc-policy.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
     linkMeter, unlinkMeter, listCustomerMeters, listCustomerMeterLinkHistory, listCustomerPurchases, sendTokenSmsToCustomer,
@@ -563,6 +564,8 @@ const customer: FastifyPluginAsync = async (fastify) => {
     // ── KYC ───────────────────────────────────────────────────────────────────
 
     const saveBasicInfo = async (req: any, reply: any) => {
+        try { await assertKycEnabled('customer'); }
+        catch (error) { if (error instanceof KycReviewError) return reply.code(error.status).send({ error: error.code, message: error.message }); throw error; }
         const { full_name, date_of_birth, address, state, lga } = req.body as {
             full_name: string; date_of_birth: string; address: string; state: string; lga: string;
         };
@@ -599,6 +602,8 @@ const customer: FastifyPluginAsync = async (fastify) => {
             throw error;
         }
     });
+
+    fastify.get('/kyc/policy', { preHandler: fastify.requireCustomer() }, async () => ({ policy: await getKycPolicy() }));
 
     fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const body = z.object({
@@ -642,7 +647,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({
@@ -658,7 +663,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier2/submit', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(3).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({

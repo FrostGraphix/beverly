@@ -562,10 +562,7 @@ export async function signupWithEmail(
             throw new AuthError('A customer account with this email already exists.', 'email_in_use');
         }
 
-        await getOrCreateWallet('customer', existing.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        await getOrCreateWallet('customer', existing.id);
         await logAction({
             actorUserId: session.userId,
             actorType: 'customer',
@@ -698,10 +695,7 @@ export async function signupWithEmail(
         });
         customerId = customer.id;
 
-        const wallet = await getOrCreateWallet('customer', customer.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        const wallet = await getOrCreateWallet('customer', customer.id);
         walletId = wallet.id;
 
         await logAction({
@@ -874,10 +868,7 @@ export async function signupWithPhone(
             resumedCustomer = updated as CustomerProfile;
         }
 
-        await getOrCreateWallet('customer', existing.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        await getOrCreateWallet('customer', existing.id);
         await logAction({
             actorUserId: session.userId,
             actorType: 'customer',
@@ -934,10 +925,7 @@ export async function signupWithPhone(
         });
         customerId = customer.id;
 
-        const wallet = await getOrCreateWallet('customer', customer.id, {
-            dailyCapMinor: 10_000_000,
-            monthlyCapMinor: 50_000_000,
-        });
+        const wallet = await getOrCreateWallet('customer', customer.id);
         walletId = wallet.id;
 
         await logAction({
@@ -1169,11 +1157,8 @@ async function signUpCustomer(
         throw new AuthError(custErr.message, 'customer_create_failed');
     }
 
-    // Provision wallet (₦100k daily cap, ₦500k monthly cap for Tier 0)
-    await getOrCreateWallet('customer', (customer as CustomerProfile).id, {
-        dailyCapMinor: 10_000_000,
-        monthlyCapMinor: 50_000_000,
-    });
+    // Provision wallet (canonical Tier 0 KYC policy)
+    await getOrCreateWallet('customer', (customer as CustomerProfile).id);
 
     if (email) {
         try {

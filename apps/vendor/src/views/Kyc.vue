@@ -6,6 +6,7 @@ import { useVendorAuthStore } from '../stores/auth';
 
 const auth = useVendorAuthStore();
 const state = ref<any>(null);
+const policy = ref<any>(null);
 const identityFile = ref<File | null>(null);
 const identityDocumentType = ref<'national_id' | 'voters_card' | 'passport' | 'drivers_license'>('national_id');
 const selfieFile = ref<File | null>(null);
@@ -21,7 +22,6 @@ const fileError = ref('');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const tier = computed(() => Number(state.value?.kyc_tier ?? auth.user?.kyc_tier ?? 0));
 const status = computed(() => state.value?.kyc_status ?? auth.user?.kyc_status ?? 'unverified');
@@ -29,11 +29,19 @@ const pending = computed(() => status.value === 'pending' || state.value?.review
 const reviewNote = computed(() => String(state.value?.review?.reviewer_note ?? '').trim());
 const changesRequested = computed(() => state.value?.review?.status === 'rejected');
 const selectedFileCount = computed(() => [identityFile.value, selfieFile.value, addressFile.value].filter(Boolean).length);
+const kycEnabled = computed(() => policy.value?.vendor_enabled !== false);
+const allowedFormats = computed<Set<string>>(() => new Set<string>(policy.value?.allowed_mime_types ?? [...DOCUMENT_MIME_TYPES]));
+const identityOptions = computed(() => policy.value?.vendor?.tier2?.identity ?? ['national_id', 'voters_card', 'passport', 'drivers_license']);
+const addressOptions = computed(() => policy.value?.vendor?.tier2?.address ?? ['utility_bill', 'bank_statement']);
+const needsSelfie = computed(() => policy.value?.vendor?.tier2?.selfie !== false);
+const needsAddress = computed(() => addressOptions.value.length > 0);
+const documentAccept = computed(() => [...allowedFormats.value].join(','));
+const imageAccept = computed(() => [...allowedFormats.value].filter((type: string) => type.startsWith('image/')).join(','));
 
 function selectFile(slot: 'identity' | 'selfie' | 'address', event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0] ?? null;
-  const allowed = slot === 'selfie' ? IMAGE_MIME_TYPES : DOCUMENT_MIME_TYPES;
+  const allowed = slot === 'selfie' ? new Set([...allowedFormats.value].filter((type: string) => type.startsWith('image/'))) : allowedFormats.value;
   fileError.value = '';
 
   if (file && !allowed.has(file.type)) {
@@ -57,7 +65,8 @@ async function load() {
   stateLoaded.value = false;
   error.value = '';
   try {
-    state.value = await api.get('/api/v1/vendor/kyc/status');
+    const [current, rules] = await Promise.all([api.get('/api/v1/vendor/kyc/status'), api.get<{ policy: any }>('/api/v1/vendor/kyc/policy')]);
+    state.value = current; policy.value = rules.policy;
     stateLoaded.value = true;
   }
   catch (cause: any) { error.value = cause?.message ?? 'KYC status failed.'; }
@@ -77,7 +86,7 @@ async function upload(file: File, documentType: 'national_id' | 'voters_card' | 
 }
 
 async function submit() {
-  if (!identityFile.value || !selfieFile.value || !addressFile.value) return;
+  if (!identityFile.value || (needsSelfie.value && !selfieFile.value) || (needsAddress.value && !addressFile.value)) return;
   submitting.value = true;
   error.value = '';
   notice.value = '';
@@ -85,11 +94,11 @@ async function submit() {
     progress.value = 'Uploading identity evidence…';
     const identityId = await upload(identityFile.value, identityDocumentType.value);
     progress.value = 'Uploading representative selfie…';
-    const selfieId = await upload(selfieFile.value, 'selfie');
-    progress.value = 'Uploading business address evidence…';
-    const addressId = await upload(addressFile.value, addressDocumentType.value);
+    const documentIds = [identityId];
+    if (needsSelfie.value && selfieFile.value) { progress.value = 'Uploading representative selfie…'; documentIds.push(await upload(selfieFile.value, 'selfie')); }
+    if (needsAddress.value && addressFile.value) { progress.value = 'Uploading business address evidence…'; documentIds.push(await upload(addressFile.value, addressDocumentType.value)); }
     progress.value = 'Submitting review…';
-    await api.post('/api/v1/vendor/kyc/tier2/submit', { document_ids: [identityId, selfieId, addressId] });
+    await api.post('/api/v1/vendor/kyc/tier2/submit', { document_ids: documentIds });
     notice.value = 'Tier 2 review submitted.';
     identityFile.value = null;
     selfieFile.value = null;
@@ -115,6 +124,7 @@ onMounted(load);
 
     <div v-if="error && stateLoaded" class="bw-alert danger" role="alert">{{ error }}</div>
     <div v-if="notice" class="bw-alert success" role="status">{{ notice }}</div>
+    <section v-if="stateLoaded && !kycEnabled" class="bw-card status-card"><div><h2>KYC is not required</h2><p>Vendor verification has been turned off by Beverly.</p></div></section>
 
     <section v-if="stateLoaded" class="tier-grid" aria-label="KYC tiers">
       <article v-for="level in [0,1,2]" :key="level" :class="['tier-card', { active: tier >= level }]">
@@ -139,10 +149,10 @@ onMounted(load);
       <div><h2>Review in progress</h2><p>Beverly is reviewing your Tier {{ state?.review?.requested_tier ?? tier + 1 }} evidence.</p></div>
       <button class="bw-btn" @click="load">Refresh status</button>
     </section>
-    <section v-else-if="tier >= 2" class="bw-card complete-card">
+    <section v-else-if="kycEnabled && tier >= 2" class="bw-card complete-card">
       <span class="complete-mark">✓</span><div><h2>Enhanced KYC complete</h2><p>Your vendor account reached Tier 2.</p></div>
     </section>
-    <section v-else class="bw-card submission-card">
+    <section v-else-if="kycEnabled" class="bw-card submission-card">
       <div class="section-head"><div><span>Next verification</span><h2>Request Tier 2</h2></div><span class="bw-badge warn">Manual review</span></div>
       <p class="instructions">Provide identity, a current selfie, and recent business address evidence.</p>
       <form @submit.prevent="submit">
@@ -156,22 +166,21 @@ onMounted(load);
               <option value="passport">Passport</option>
               <option value="drivers_license">Driver's licence</option>
             </select>
-            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Government identity file" :disabled="submitting" required @change="selectFile('identity', $event)" />
+            <input type="file" :accept="documentAccept" aria-label="Government identity file" :disabled="submitting" required @change="selectFile('identity', $event)" />
             <small>{{ identityFile ? `Selected: ${identityFile.name}` : 'Choose a file' }}</small>
           </label>
-          <label class="upload-field">
+          <label v-if="needsSelfie" class="upload-field">
             <strong>Representative selfie</strong>
             <span>Use a clear photo. Avoid filters.</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Representative selfie file" :disabled="submitting" required @change="selectFile('selfie', $event)" />
+            <input type="file" :accept="imageAccept" aria-label="Representative selfie file" :disabled="submitting" required @change="selectFile('selfie', $event)" />
             <small>{{ selfieFile ? `Selected: ${selfieFile.name}` : 'Choose a file' }}</small>
           </label>
-          <label class="upload-field">
+          <label v-if="needsAddress" class="upload-field">
             <strong>Business address</strong>
             <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting">
-              <option value="utility_bill">Utility bill</option>
-              <option value="bank_statement">Bank statement</option>
+              <option v-for="type in addressOptions" :key="type" :value="type">{{ type.replace(/_/g, ' ') }}</option>
             </select>
-            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Business address file" :disabled="submitting" required @change="selectFile('address', $event)" />
+            <input type="file" :accept="documentAccept" aria-label="Business address file" :disabled="submitting" required @change="selectFile('address', $event)" />
             <small>{{ addressFile ? `Selected: ${addressFile.name}` : 'Choose a recent document' }}</small>
           </label>
         </div>
@@ -179,7 +188,7 @@ onMounted(load);
         <p class="privacy">Private storage. File validated. Maximum 10 MB.</p>
         <div v-if="fileError" class="bw-alert danger" role="alert">{{ fileError }}</div>
         <div v-if="progress" class="bw-alert info" role="status" aria-live="polite">{{ progress }}</div>
-        <button class="bw-btn primary lg" type="submit" :disabled="submitting || !identityFile || !selfieFile || !addressFile">{{ submitting ? 'Submitting…' : 'Submit Tier 2 review' }}</button>
+        <button class="bw-btn primary lg" type="submit" :disabled="submitting || !identityFile || (needsSelfie && !selfieFile) || (needsAddress && !addressFile)">{{ submitting ? 'Submitting…' : 'Submit Tier 2 review' }}</button>
       </form>
     </section>
   </AppShell>

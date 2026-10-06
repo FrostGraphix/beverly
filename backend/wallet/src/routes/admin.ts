@@ -29,6 +29,10 @@ import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, g
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
+import {
+    getKycPolicy, kycPolicySchema, updateKycPolicy,
+    getKycTierSettings, updateKycTierSettings, getKycTierPolicyHistory, kycTierSettingsUpdateSchema,
+} from '../services/kyc-policy.js';
 import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement, staffInvitationReadiness } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
@@ -592,6 +596,11 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',
+    'GET /kyc-policy': 'wallet.kyc.review',
+    'PUT /kyc-policy': 'wallet.kyc.review',
+    'GET /kyc-tier-settings': 'wallet.kyc.settings.manage',
+    'GET /kyc-tier-settings/history': 'wallet.kyc.settings.manage',
+    'PUT /kyc-tier-settings': 'wallet.kyc.settings.manage',
     'GET /vat-policies': 'wallet.vat.manage',
     'POST /vat-policies': 'wallet.vat.manage',
     'POST /vat-policies/:id/approve': 'wallet.vat.manage',
@@ -2144,10 +2153,11 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('wallets').select('*').eq('owner_type', 'vendor').eq('owner_id', id).maybeSingle();
         if (!wallet) return reply.code(404).send({ error: 'wallet_not_found', message: 'No wallet for this vendor.' });
         const { limit, cursor } = req.query as { limit?: string; cursor?: string };
+        const pageSize = Math.min(Number(limit ?? 50), 200);
         const { getEntries } = await import('../services/ledger.js');
         const [balance, entries] = await Promise.all([
             getBalance((wallet as any).id).catch(() => null),
-            getEntries((wallet as any).id, { limit: Math.min(Number(limit ?? 50), 200), cursorAt: cursor }),
+            getEntries((wallet as any).id, { limit: pageSize, cursorAt: cursor }),
         ]);
         return {
             wallet,
@@ -2155,6 +2165,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             holds_minor:     balance?.activeHoldsMinor   ?? 0,
             available_minor: balance?.availableMinor     ?? 0,
             entries,
+            nextCursor: entries.length === pageSize ? entries.at(-1)?.created_at ?? null : null,
         };
     });
 
@@ -4607,6 +4618,44 @@ const route: FastifyPluginAsync = async (fastify) => {
 
 
     // ── feature flags ──
+    fastify.get('/kyc-policy', async () => ({ policy: await getKycPolicy() }));
+
+    fastify.put('/kyc-policy', async (req, reply) => {
+        const parsed = kycPolicySchema.safeParse((req.body as any)?.policy ?? req.body);
+        if (!parsed.success) return reply.code(400).send({ error: 'validation_error', message: parsed.error.message });
+        const policy = await updateKycPolicy(parsed.data, req.actor!.userId);
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', action: 'kyc_policy.updated', targetType: 'system_settings', targetId: 'kyc_policy', after: policy });
+        return { ok: true, policy };
+    });
+
+    fastify.get('/kyc-tier-settings', async () => ({ settings: await getKycTierSettings() }));
+
+    fastify.get('/kyc-tier-settings/history', async (req) => {
+        const limit = Math.min(Number((req.query as any)?.limit ?? 20), 100);
+        return { history: await getKycTierPolicyHistory(limit) };
+    });
+
+    fastify.put('/kyc-tier-settings', async (req, reply) => {
+        const parsed = kycTierSettingsUpdateSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return reply.code(400).send({
+                error: 'validation_error',
+                message: parsed.error.message,
+                details: parsed.error.flatten(),
+            });
+        }
+        const settings = await updateKycTierSettings(parsed.data, req.actor!.userId);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            action: 'kyc_tier_settings.updated',
+            targetType: 'system_settings',
+            targetId: 'kyc_tier_settings',
+            after: settings as unknown as Record<string, unknown>,
+        });
+        return { ok: true, settings };
+    });
+
     fastify.get('/feature-flags', async () => {
         return { flags: await listFlags() };
     });

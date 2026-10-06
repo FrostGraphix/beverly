@@ -28,6 +28,7 @@ import {
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
+import { assertWalletDailyDebitLimitAllowed } from './kyc-policy.js';
 import { logAction } from './audit.js';
 import {
     abandonWalletIdempotency,
@@ -244,8 +245,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         idempotency_key: idemKey,
         created_by: input.vendorUserId,
     }).select('*').single();
-    if (createErr) throw new VendingError(createErr.message, 'create_order_failed');
-    let po = createdRow as PurchaseOrder;
+    if (createErr || !createdRow) throw new VendingError(createErr?.message ?? 'Failed to create order', 'create_order_failed');
+    let po: any = createdRow;
+    // check daily debit limit
+    try {
+        await assertWalletDailyDebitLimitAllowed(wallet.id, preview.grossAmountMinor);
+    } catch (e: any) {
+        await markFailed(po.id, e.code ?? 'daily_debit_cap_exceeded', e.message);
+        throw new VendingError(e.message, e.code ?? 'daily_debit_cap_exceeded');
+    }
 
     // place hold
     let hold;

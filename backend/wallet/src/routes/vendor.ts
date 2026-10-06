@@ -73,6 +73,7 @@ import {
 import { revokePortalSession } from '../services/portal-session.js';
 import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } from '../services/vendor-password-change.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
+import { getKycPolicy } from '../services/kyc-policy.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import { assertOemVendAvailable, OemQuotaCircuitError } from '../services/oem-quota-circuit.js';
 
@@ -337,6 +338,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    fastify.get('/kyc/policy', { preHandler: fastify.requireVendor() }, async () => ({ policy: await getKycPolicy() }));
+
     fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const body = z.object({
             document_type: z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie']),
@@ -369,7 +372,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier2/submit', { preHandler: fastify.requireVendor() }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(3).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({

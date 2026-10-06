@@ -30,6 +30,7 @@ import {
 } from './sms-guardrails.js';
 import { notifyTokenPurchased, sendNotification } from './notifications.js';
 import { assertStationVendAllowed, StationVendScopeError } from './station-vend-scope.js';
+import { assertWalletDailyDebitLimitAllowed, WalletDebitLimitError } from './kyc-policy.js';
 
 export class CustomerPurchaseError extends Error {
     constructor(message: string, public code: string) {
@@ -351,6 +352,17 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         await adminClient.from('purchase_orders').update({ wallet_id: wallet.id }).eq('id', po.id);
         po = { ...po, wallet_id: wallet.id };
 
+        // Check wallet daily debit limit
+        try {
+            await assertWalletDailyDebitLimitAllowed(wallet.id, preview.grossAmountMinor);
+        } catch (e: any) {
+            await adminClient.from('purchase_orders').update({
+                status: 'failed',
+                failure_reason: `limit_exceeded: ${e.message}`.slice(0, 500),
+            }).eq('id', po.id);
+            throw new CustomerPurchaseError(e.message, e.code ?? 'daily_debit_cap_exceeded');
+        }
+
         // Hold
         let hold;
         try {
@@ -661,6 +673,19 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         enforceCustomerMeterStation(approvedMeter.stationId, meter.stationId);
     }
     const preview = await previewPurchaseWithPolicy(amountMinor, meter.tariffId);
+    if (customerId) {
+        const wallet = await findWalletByOwner('customer', customerId);
+        if (wallet) {
+            try {
+                await assertWalletDailyDebitLimitAllowed(wallet.id, preview.grossAmountMinor);
+            } catch (e: any) {
+                if (e instanceof WalletDebitLimitError) {
+                    throw new CustomerPurchaseError(e.message, e.code);
+                }
+                throw e;
+            }
+        }
+    }
     const declared = customerId ? await declaredMeterType(customerId, meter.meterId) : null;
     const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
     return {
