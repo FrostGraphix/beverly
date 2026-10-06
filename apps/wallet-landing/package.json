@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@beverly/tokens": "workspace:*",
-    "vue": "^3.4.31"
+    "vue": "^3.5.42"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.5",

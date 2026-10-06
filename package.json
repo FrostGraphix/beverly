@@ -75,7 +75,7 @@
     "pinia": "^3.0.4",
     "puppeteer-core": "^25.1.0",
     "qrcode-generator": "1.5.2",
-    "vue": "^3.5.24",
+    "vue": "^3.5.42",
     "vue-router": "^4.6.3",
     "workbox-window": "^7.1.0"
   },
@@ -100,7 +100,10 @@
     "fast-uri@>=3.0.0 <3.1.8": "3.1.8",
     "fast-uri@>=4.0.0 <4.1.5": "4.1.5",
     "fastify@<5.12.1": "5.12.1",
-    "qs@<6.16.0": "6.16.0"
+    "qs@<6.16.0": "6.16.0",
+    "source-map-js@<1.2.2": "1.2.2",
+    "fast-copy@<3.1.0": "3.1.0",
+    "@fastify/busboy@<3.2.2": "3.2.2"
   },
   "pnpm": {
     "overrides": {
@@ -114,7 +117,10 @@
       "fast-uri@>=3.0.0 <3.1.8": "3.1.8",
       "fast-uri@>=4.0.0 <4.1.5": "4.1.5",
       "fastify@<5.12.1": "5.12.1",
-      "qs@<6.16.0": "6.16.0"
+      "qs@<6.16.0": "6.16.0",
+      "source-map-js@<1.2.2": "1.2.2",
+      "fast-copy@<3.1.0": "3.1.0",
+      "@fastify/busboy@<3.2.2": "3.2.2"
     }
   },
   "description": "Beverly - Your Smart Power Partner.",
