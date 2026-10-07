@@ -1,8 +1,13 @@
 # OEM pipeline execution status
 
-Status: **Local contract sandbox implemented; provider-controlled gates remain**. Updated 2026-10-06.
+Status: **Read-only integration remains draft; provider-controlled gates remain**. Updated 2026-10-07.
 
 ## Latest checkpoint
+
+- 2026-10-07 correction: direct restore-project reads show 3,073 active meters on the **sandbox draft** installation and zero meters on the production draft installation. Earlier text calling this a production-installation import was incorrect. Neither installation is active.
+- A live Koios historical query returned 200 rows on its first page. All 200 site/serial/customer tuples match sandbox inventory. The observed nested meter schema differs materially from the documented simplified schema. Normalization now accepts those verified fields and quarantines unclassified meter states. It does not infer energy or credit semantics.
+- A reversible database migration adds an installation/site/serial/customer ownership check before telemetry storage. A certificate-verified restore-database transaction accepted a valid tuple, rejected a wrong customer, and rolled back. The migration was then applied, and its trigger was verified. Production credential storage has no SparkMeter row. The keyring cannot currently be read through available Vercel access.
+- The daily scheduler remains unsuitable for this observed volume. Its 20-page cap cannot complete a seven-day all-site historical query. Keep installations draft until bounded partitioning, checkpoint recovery, deployment checks, and credential provisioning are verified. Financial writes also require SparkMeter's written ambiguous-payment contract and an isolated certified write target.
 
 - 2026-10-06 safe-live preparation: authenticated ACOB Koios reads returned HTTP 200 for customers, organizations, ten sites, and one site's freshness. Its filtered live-reading query returned zero readings; physical meter behavior remains unverified. A complete provider scan observed 3,112 customers, 3,073 metered customers, 3,073 meters, and 39 excluded meterless customers.
 - The existing scoped importer passed a restore-database rehearsal, then populated the production *draft* installation through its atomic snapshot function. Both returned 3,073 customers, 3,073 meters, and zero stale rows. An independent production read-only query confirmed 3,073 active customers, 3,073 active meters, zero orphan meters, and `draft` installation status. No provider payment, relay, or other financial write occurred.

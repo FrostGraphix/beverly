@@ -49,3 +49,11 @@ Do not infer whether `energy` is a lifetime counter or interval total solely fro
 ## Still unverified
 
 Reading correction/version semantics, interval-versus-counter interpretation, credit balance units, guarantees after missing intervals, offline firmware cutoff, and ambiguous financial payment retry/reconciliation remain unverified. V2 read POST operations must not be conflated with financial write POST operations.
+
+## Nonempty historical response correction (2026-10-07)
+
+An authenticated, read-only ACOB request returned 200 historical rows and a continuation cursor for 2026-10-06 through 2026-10-07. The actual wire fields differ from the simplified schema above: `site` contains the site UUID; `meter.serial_number` contains the meter serial; `meter.customer.id` contains the customer UUID; `type` is `reading`; and states include `ElectricalMeterStateOn`, `ElectricalMeterStateOff`, `ElectricalMeterStateTamper`, and `ElectricalMeterStateMeterDisabled`. The first 200 rows matched active installation-scoped inventory by site, serial, and customer. The inventory belongs to the **sandbox draft** installation, not the production draft installation. Production inventory remains empty.
+
+Only `ElectricalMeterStateOn` and `ElectricalMeterStateOff` map to canonical on/off. Other states quarantine until authoritative semantics are established. `energy` remains semantically unknown. The response includes `kilowatt_hours`, but its relationship to `energy` is unverified. Credit balance does not appear in these rows. No payment or relay mutation occurred.
+
+This nonempty result supersedes the earlier empty-response observation. It does not prove complete backfill, live relay status, or physical cutoff. A seven-day all-site query exceeds the current 20-page scheduler budget; volume-safe partitioning and recovery remain required before activating telemetry synchronization.
