@@ -176,18 +176,17 @@ function ensureDatabase() {
 async function cacheApiResponse(entry) {
   return runWithFallback(
     () => localDatabase.cacheApiResponse(entry),
-    () => supabase.restRequest("/api_cache?on_conflict=method,path,request_key", {
+    () => supabase.restRequest("/rpc/put_bounded_api_cache", {
       method: "POST",
-      prefer: "resolution=merge-duplicates",
       body: {
-        id: crypto.randomUUID(),
-        method: String(entry.method || "GET").toUpperCase(),
-        path: String(entry.path || "/"),
-        request_key: String(entry.requestKey || ""),
-        status_code: Number(entry.status || 200),
-        response_json: sanitizeValue(entry.body || {}),
-        source: String(entry.source || "unknown"),
-        updated_at: nowIso()
+        p_method: String(entry.method || "GET").toUpperCase(),
+        p_path: String(entry.path || "/"),
+        p_request_key: String(entry.requestKey || ""),
+        p_status_code: Number(entry.status || 200),
+        p_response_json: sanitizeValue(entry.body || {}),
+        p_source: String(entry.source || "unknown"),
+        p_expires_at: entry.expiresAt,
+        p_origin: String(entry.origin || "request")
       }
     })
   );
@@ -200,7 +199,7 @@ async function readCachedApiResponse(entry) {
       const method = encodeURIComponent(String(entry.method || "GET").toUpperCase());
       const path = encodeURIComponent(String(entry.path || "/"));
       const requestKey = encodeURIComponent(String(entry.requestKey || ""));
-      const rows = await supabase.restRequest(`/api_cache?method=eq.${method}&path=eq.${path}&request_key=eq.${requestKey}&select=status_code,response_json,source&limit=1`);
+      const rows = await supabase.restRequest(`/api_cache?method=eq.${method}&path=eq.${path}&request_key=eq.${requestKey}&expires_at=gt.${encodeURIComponent(nowIso())}&select=status_code,response_json,source&limit=1`);
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row) return null;
       return {

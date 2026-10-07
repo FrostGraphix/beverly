@@ -36,6 +36,53 @@ function cutoffIso(days, now = new Date()) {
   return date.toISOString();
 }
 
+function storagePressure(bytes, quotaMb, warnPercent) {
+  const quotaBytes = Number(quotaMb) * 1000000;
+  const usedBytes = bytes == null ? NaN : Number(bytes);
+  const threshold = Number(warnPercent);
+  if (!Number.isFinite(quotaBytes) || quotaBytes <= 0 || !Number.isFinite(usedBytes)
+    || usedBytes < 0 || !Number.isFinite(threshold) || threshold <= 0 || threshold > 100) {
+    throw new Error("Database storage monitoring configuration is invalid");
+  }
+  const usedPercent = Math.round((usedBytes / quotaBytes) * 10000) / 100;
+  return { usedBytes, quotaMb: Number(quotaMb), usedPercent,
+    warning: (usedBytes / quotaBytes) * 100 >= threshold };
+}
+
+async function monitorDatabaseStorage(options = {}) {
+  if (!governanceEnabled() || !supabase.serviceConfigured()) {
+    return { ok: false, reason: "Supabase governance disabled" };
+  }
+  const usage = await supabase.restRequest("/rpc/consumption_database_usage", {
+    method: "POST", retryable: true, body: {}
+  });
+  const row = Array.isArray(usage) ? usage[0] : usage;
+  const pressure = storagePressure(row?.bytes, process.env.DATABASE_QUOTA_MB,
+    process.env.DATABASE_QUOTA_WARN_PERCENT || 70);
+  if (!pressure.warning || options.dryRun === true) {
+    return { ok: true, ...pressure, notificationsCreated: 0 };
+  }
+  const staff = await supabase.restRequest("/users?select=auth_user_id&role_key=eq.super-admin&auth_user_id=not.is.null");
+  const recipients = [...new Set((Array.isArray(staff) ? staff : [])
+    .map((user) => user.auth_user_id).filter(Boolean))];
+  const date = new Date(options.now || Date.now()).toISOString().slice(0, 10);
+  const title = "Database storage needs attention";
+  const body = `Database storage is at ${pressure.usedPercent}% of the ${pressure.quotaMb} MB budget. Review storage usage and retention before the limit is reached.`;
+  for (const recipientId of recipients) {
+    await supabase.restRequest("/notifications?on_conflict=recipient_type,recipient_id,dedupe_key", {
+      method: "POST",
+      prefer: "resolution=ignore-duplicates,return=minimal",
+      body: {
+        recipient_type: "staff", recipient_id: recipientId, customer_id: null,
+        type: "system", title, body, read: false,
+        metadata: { path: "/profile", usedBytes: pressure.usedBytes },
+        dedupe_key: `database-storage:${date}`
+      }
+    });
+  }
+  return { ok: true, ...pressure, notificationsCreated: recipients.length };
+}
+
 async function deleteOlderThan(table, column, cutoff, dryRun) {
   if (dryRun) {
     return { table, deleted: 0, cutoff, dryRun: true };
@@ -194,14 +241,16 @@ async function rolePermissionAudit() {
 }
 
 async function runGovernance(options = {}) {
-  const [cleanup, permissions] = await Promise.all([
+  const [cleanup, permissions, storageResult] = await Promise.all([
     runRetentionCleanup(options),
-    rolePermissionAudit()
+    rolePermissionAudit(),
+    monitorDatabaseStorage(options).then((value) => ({ value }), (error) => ({ error: error.message }))
   ]);
   return {
-    ok: cleanup.ok && permissions.ok,
+    ok: cleanup.ok && permissions.ok && !storageResult.error && storageResult.value.ok,
     cleanup,
-    permissions
+    permissions,
+    storage: storageResult.error ? { ok: false, error: storageResult.error } : storageResult.value
   };
 }
 
@@ -217,6 +266,7 @@ function governancePlan() {
     audits: [
       "role permission audit",
       "cache expiry cleanup",
+      "database storage pressure alert",
       "snapshot retention cleanup",
       "export retention cleanup",
       "receipt retention cleanup"
@@ -230,6 +280,8 @@ module.exports = {
   governancePlan,
   retentionPolicy,
   rolePermissionAudit,
+  storagePressure,
+  monitorDatabaseStorage,
   runGovernance,
   runRetentionCleanup
 };
