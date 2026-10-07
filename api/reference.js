@@ -75,6 +75,7 @@ const {
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync, runScheduledConsumptionSync } = require("../backend/src/services/consumption-sync-service");
+const { cacheAdmission } = require("../backend/src/services/api-cache-policy");
 const { syncOemDimensions } = require("../backend/src/services/oem-dimension-sync-service");
 const {
   listReports: listArchiveReports,
@@ -1948,15 +1949,22 @@ function syntheticSampleResponse(sourcePathname, requestData, facadePathname) {
   };
 }
 
-async function cacheResponseIfNeeded(request, pathname, requestData, result) {
-  if (!apiCacheEnabled() || !isCacheableRequest(pathname, request.method) || result.status >= 400) return;
+async function cacheResponseIfNeeded(request, pathname, requestData, result, origin = "request") {
+  if (!apiCacheEnabled() || !isCacheableRequest(pathname, request.method)) return;
+  const admission = cacheAdmission({
+    pathname, method: request.method, status: result.status, body: result.body,
+    requiresLiveRead, isWriteRequest
+  });
+  if (!admission) return;
   await cacheApiResponse({
     method: request.method || "GET",
     path: pathname,
     requestKey: buildCacheKey(request, requestData),
     status: result.status,
     source: result.body?._proxy?.source || "unknown",
-    body: result.body
+    body: result.body,
+    expiresAt: admission.expiresAt,
+    origin
   });
 }
 
@@ -4930,7 +4938,7 @@ async function runRefreshTarget(target) {
       result = sampleReadResponse(target.path, refreshData);
     }
     if (!result) return { ok: false };
-    await cacheResponseIfNeeded(refreshRequest, target.path, refreshData, result);
+    await cacheResponseIfNeeded(refreshRequest, target.path, refreshData, result, `refresh:${target.name}`);
     await writeSnapshot({
       pathname: target.path,
       requestKey: buildCacheKey(refreshRequest, refreshData),
