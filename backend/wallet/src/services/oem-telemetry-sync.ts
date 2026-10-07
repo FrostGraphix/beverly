@@ -16,7 +16,9 @@ export interface SparkMeterTelemetryTarget {
 interface SyncDependencies {
     fetchPage(input: SparkMeterTelemetryTarget & { dateFrom: string; dateTo: string; cursor?: string }): Promise<TelemetryPage>;
     persistPage(installationId: string, mode: 'historical', scopeKey: string, page: TelemetryPage): Promise<{ readings: number; quarantine: number }>;
+    wait?: (milliseconds: number) => Promise<void>;
 }
+export interface TelemetryReplayOptions { readonly date?: string; readonly site?: string }
 export interface TelemetrySyncSummary {
     installations: number;
     pages: number;
@@ -28,27 +30,36 @@ export interface TelemetrySyncSummary {
 const dependencies: SyncDependencies = {
     fetchPage: (input) => fetchSparkMeterTelemetryPage({ ...input, mode: 'historical' }),
     persistPage: (installationId, mode, scopeKey, page) => persistTelemetryPage(installationId, mode, scopeKey, page),
+    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 };
 
-/** Replay seven UTC dates during each daily, bounded Koios synchronization. */
+/** Synchronize one UTC date; authenticated operators can replay recent dates. */
 export async function runSparkMeterTelemetrySync(
     targets: readonly SparkMeterTelemetryTarget[],
     deps: SyncDependencies = dependencies,
+    options: TelemetryReplayOptions = {},
 ): Promise<TelemetrySyncSummary> {
-    const summary: TelemetrySyncSummary = { installations: targets.length, pages: 0, readings: 0, quarantine: 0, failures: [] };
-    const now = Date.now();
-    const dateFrom = new Date(now - 6 * 86_400_000).toISOString().slice(0, 10);
-    const dateTo = new Date(now).toISOString().slice(0, 10);
-    for (const target of targets) {
+    const today = new Date().toISOString().slice(0, 10);
+    const date = options.date ?? new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    if (!z.string().date().safeParse(date).success
+        || date < new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)
+        || date > today) throw new Error('OEM telemetry date outside replay window');
+    if (options.site && !z.string().uuid().safeParse(options.site).success) throw new Error('OEM telemetry site outside installation');
+    const site = options.site;
+    const selected = site ? targets.filter((target) => target.sites.includes(site)) : targets;
+    if (options.site && selected.length === 0) throw new Error('OEM telemetry site outside installation');
+    const summary: TelemetrySyncSummary = { installations: selected.length, pages: 0, readings: 0, quarantine: 0, failures: [] };
+    for (const target of selected) {
         const seen = new Set<string>();
         let cursor: string | undefined;
         try {
-            if (target.sites.length === 0 || target.sites.length * 7 > 90) {
+            const sites = options.site ? [options.site] : target.sites;
+            if (sites.length === 0 || sites.length > 90) {
                 throw new Error('telemetry_site_day_budget_exceeded');
             }
-            const scopeKey = `${dateFrom}:${dateTo}:${target.sites.join(',')}`;
+            const scopeKey = `${date}:${date}:${sites.join(',')}`;
             for (let pageNumber = 0; pageNumber < 20; pageNumber += 1) {
-                const page = await deps.fetchPage({ ...target, dateFrom, dateTo, cursor });
+                const page = await deps.fetchPage({ ...target, sites, dateFrom: date, dateTo: date, cursor });
                 const stored = await deps.persistPage(target.installationId, 'historical', scopeKey, page);
                 summary.pages += 1;
                 summary.readings += stored.readings;
@@ -58,6 +69,7 @@ export async function runSparkMeterTelemetrySync(
                 seen.add(page.nextCursor);
                 cursor = page.nextCursor;
                 if (pageNumber === 19) throw new Error('telemetry_page_budget_exhausted');
+                await deps.wait?.(1700);
             }
         } catch (error) {
             const reason = error instanceof Error && /^telemetry_/.test(error.message) ? error.message : 'telemetry_sync_failed';
@@ -78,7 +90,7 @@ const installationRows = z.array(z.object({
 })).max(100);
 
 /** Discover active SparkMeter installations and synchronize historical telemetry. */
-export async function syncActiveSparkMeterTelemetry(): Promise<TelemetrySyncSummary> {
+export async function syncActiveSparkMeterTelemetry(options: TelemetryReplayOptions = {}): Promise<TelemetrySyncSummary> {
     const { data, error } = await adminClient.from('oem_installations')
         .select('id, base_url, approved_hostnames, config_version, tenants!inner(status), oem_manufacturers!inner(slug), oem_config_revisions(revision, configuration)')
         .eq('status', 'active').eq('tenants.status', 'active').eq('oem_manufacturers.slug', 'sparkmeter')
@@ -90,11 +102,23 @@ export async function syncActiveSparkMeterTelemetry(): Promise<TelemetrySyncSumm
         const revision = row.oem_config_revisions.find((item) => item.revision === row.config_version);
         const organizationId = z.string().uuid().safeParse(revision?.configuration.organization_id);
         if (!organizationId.success) throw new Error('OEM telemetry target configuration invalid');
-        // ponytail: 10,000 active meters covers current inventory; paginate when installations exceed this ceiling.
-        const meters = await adminClient.from('oem_inventory_meters').select('site_id')
-            .eq('oem_installation_id', row.id).eq('status', 'active').not('site_id', 'is', null).limit(10_000);
-        const sites = [...new Set((meters.data ?? []).map((meter) => meter.site_id).filter((site): site is string => Boolean(site)))];
-        if (meters.error || sites.length === 0 || sites.length > 200) throw new Error('OEM telemetry sites unavailable');
+        const siteIds = new Set<string>();
+        for (let page = 0; page <= 10; page += 1) {
+            const meters = await adminClient.from('oem_inventory_meters').select('site_id')
+                .eq('oem_installation_id', row.id).eq('status', 'active')
+                .order('id', { ascending: true }).range(page * 1000, page * 1000 + 999);
+            if (meters.error || !meters.data || (page === 10 && meters.data.length > 0)) {
+                throw new Error('OEM telemetry sites unavailable');
+            }
+            for (const meter of meters.data) {
+                if (!meter.site_id) throw new Error('OEM telemetry sites unavailable');
+                siteIds.add(meter.site_id);
+            }
+            if (meters.data.length < 1000) break;
+        }
+        const sites = [...siteIds];
+        if (sites.length === 0 || sites.length > 90) throw new Error('OEM telemetry sites unavailable');
+        if (options.site && !sites.includes(options.site)) continue;
         const credentials = await loadInstallationCredentials({ id: row.id, tenantId: '', status: 'active' });
         if (credentials.authStrategy !== 'api_key_pair') throw new Error('OEM telemetry credentials invalid');
         targets.push({
@@ -102,5 +126,5 @@ export async function syncActiveSparkMeterTelemetry(): Promise<TelemetrySyncSumm
             organizationId: organizationId.data, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, sites,
         });
     }
-    return runSparkMeterTelemetrySync(targets);
+    return runSparkMeterTelemetrySync(targets, dependencies, options);
 }

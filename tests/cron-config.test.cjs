@@ -31,6 +31,7 @@ assert(api.includes("runRefreshJob"), "refresh runner missing");
 assert(api.includes("writeDailyMeterRows"), "refresh runner must store daily meter rows");
 assert(api.includes("runConsumptionSync"), "smart consumption sync missing");
 assert(api.includes("syncActiveSparkMeterTelemetry"), "OEM telemetry runner missing");
+assert.match(api, /syncActiveSparkMeterTelemetry\(\{\s*date:\s*query\.date,\s*site:\s*query\.site\s*\}\)/, "OEM cron replay filters missing");
 assert(api.includes("[consumption-sync-start]"), "consumption sync start logs missing");
 assert(api.includes("[consumption-sync-done]"), "consumption sync completion logs missing");
 assert(api.includes("[consumption-sync-error]"), "consumption sync failure logs missing");

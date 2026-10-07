@@ -2819,7 +2819,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return { status: 401, body: { code: 401, msg: "Unauthorized", reason: "Unauthorized", data: null, result: null, _proxy: { source: "cron-auth", pathname } } };
     }
     const { syncActiveSparkMeterTelemetry } = await import("../backend/wallet/dist/services/oem-telemetry-sync.js");
-    return localJobResponse(await syncActiveSparkMeterTelemetry());
+    const query = cronQuery(request.url);
+    return localJobResponse(await syncActiveSparkMeterTelemetry({ date: query.date, site: query.site }));
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/sync-oem-dimensions") {
     if (!cronAuthorized(request)) {
