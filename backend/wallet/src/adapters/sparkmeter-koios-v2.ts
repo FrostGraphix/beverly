@@ -55,7 +55,8 @@ export async function fetchSparkMeterTelemetryPage(input: SparkMeterTelemetryReq
         if (attempt === 2 || (response.status !== 429 && response.status < 500)) {
             throw new Error(`SparkMeter telemetry request failed: HTTP ${response.status}`);
         }
-        const retryAfter = Number(response.headers.get('Retry-After'));
+        const retryHeader = response.headers.get('Retry-After');
+        const retryAfter = retryHeader === null ? NaN : Number(retryHeader);
         await wait(Number.isFinite(retryAfter) ? Math.min(5_000, Math.max(0, retryAfter * 1_000)) : 250 * (2 ** attempt));
     }
     throw new Error('SparkMeter telemetry retry budget exhausted');

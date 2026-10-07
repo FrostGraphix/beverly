@@ -34,4 +34,35 @@ describe('SparkMeter Koios v2 telemetry client', () => {
         });
         expect(fetchFn).toHaveBeenCalledTimes(2);
     });
+
+    it('backs off when Retry-After is absent', async () => {
+        const fetchFn = vi.fn()
+            .mockResolvedValueOnce(new Response('{}', { status: 429 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ data: [], pagination: { count: 0, has_more: false, cursor: null } }), { status: 200 }));
+        const wait = vi.fn().mockResolvedValue(undefined);
+        await fetchSparkMeterTelemetryPage({
+            baseUrl: 'https://www.sparkmeter.cloud', approvedHostnames: ['www.sparkmeter.cloud'],
+            organizationId: 'org', apiKey: 'key', apiSecret: 'secret', sites: ['11111111-1111-4111-8111-111111111111'],
+            mode: 'live', fetchFn, validateEndpoint: vi.fn().mockResolvedValue('https://www.sparkmeter.cloud/'), wait,
+        });
+        expect(wait).toHaveBeenCalledWith(250);
+    });
+
+    it('sends documented historical date filters', async () => {
+        const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            data: [], pagination: { count: 0, has_more: false, cursor: null },
+        }), { status: 200 }));
+        await fetchSparkMeterTelemetryPage({
+            baseUrl: 'https://www.sparkmeter.cloud', approvedHostnames: ['www.sparkmeter.cloud'],
+            organizationId: '64bfd8cd-d361-4368-98c9-c0ea3730559d', apiKey: 'key', apiSecret: 'secret',
+            sites: ['11111111-1111-4111-8111-111111111111'], mode: 'historical',
+            dateFrom: '2026-10-01', dateTo: '2026-10-07', fetchFn,
+            validateEndpoint: vi.fn().mockResolvedValue('https://www.sparkmeter.cloud/'),
+        });
+        expect(fetchFn.mock.calls[0]?.[0]).toBe('https://www.sparkmeter.cloud/api/v2/organizations/64bfd8cd-d361-4368-98c9-c0ea3730559d/data/historical');
+        expect(JSON.parse(fetchFn.mock.calls[0]?.[1]?.body as string)).toEqual({
+            per_page: 200,
+            filters: { sites: ['11111111-1111-4111-8111-111111111111'], date_range: { from: '2026-10-01', to: '2026-10-07' } },
+        });
+    });
 });

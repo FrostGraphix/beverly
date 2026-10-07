@@ -9,6 +9,13 @@ const providerReading = z.object({
     power_factor_avg: z.number().nullable().optional(), credit_wallet_balance: z.number().nullable().optional(),
     state: z.string(), type: z.string(),
 }).passthrough();
+const observedReading = z.object({
+    site: z.string().min(1),
+    meter: z.object({ serial_number: z.string().min(1), customer: z.object({ id: z.string().min(1) }).nullable() }),
+    timestamp: z.string(), energy: z.number().nullable().optional(),
+    voltage_avg: z.number().nullable().optional(), current_avg: z.number().nullable().optional(),
+    power_factor_avg: z.number().nullable().optional(), state: z.string(), type: z.literal('reading'),
+}).passthrough();
 const providerPage = z.object({
     data: z.array(z.unknown()).max(200),
     pagination: z.object({ count: z.number().int().nonnegative(), has_more: z.boolean(), cursor: z.string().nullable() }),
@@ -33,26 +40,31 @@ export function normalizeSparkMeterTelemetryPage(input: unknown): TelemetryPage 
     const readings: StoredTelemetryReading[] = [];
     const quarantine: { reason: string; providerPayload: unknown }[] = [];
     for (const candidate of page.data) {
-        const parsed = providerReading.safeParse(candidate);
-        if (!parsed.success) {
+        const legacy = providerReading.safeParse(candidate);
+        const observed = observedReading.safeParse(candidate);
+        if (!legacy.success && !observed.success) {
             quarantine.push({ reason: 'invalid_provider_reading', providerPayload: candidate });
             continue;
         }
         try {
+            const reading = observed.success ? observed.data : legacy.data!;
+            const state = observed.success
+                ? ({ ElectricalMeterStateOn: 'on', ElectricalMeterStateOff: 'off' } as Record<string, string>)[reading.state]
+                : reading.state;
             const canonical = requireTelemetryReading({
-                externalSiteId: parsed.data.site_id,
-                externalMeterId: parsed.data.meter_id,
-                externalCustomerId: parsed.data.customer_id,
-                timestamp: parsed.data.timestamp,
-                energyKwh: parsed.data.energy,
-                voltageAvg: parsed.data.voltage_avg,
-                currentAvg: parsed.data.current_avg,
-                powerFactorAvg: parsed.data.power_factor_avg,
-                providerCreditBalance: parsed.data.credit_wallet_balance,
-                state: parsed.data.state,
-                type: parsed.data.type,
+                externalSiteId: observed.success ? observed.data.site : legacy.data!.site_id,
+                externalMeterId: observed.success ? observed.data.meter.serial_number : legacy.data!.meter_id,
+                externalCustomerId: observed.success ? observed.data.meter.customer?.id : legacy.data!.customer_id,
+                timestamp: reading.timestamp,
+                energyKwh: reading.energy,
+                voltageAvg: reading.voltage_avg,
+                currentAvg: reading.current_avg,
+                powerFactorAvg: reading.power_factor_avg,
+                providerCreditBalance: legacy.success ? legacy.data.credit_wallet_balance : undefined,
+                state,
+                type: observed.success ? (observed.data.meter.customer ? 'customer' : 'unknown') : legacy.data!.type,
             });
-            readings.push({ ...canonical, providerPayload: parsed.data });
+            readings.push({ ...canonical, providerPayload: reading });
         } catch {
             quarantine.push({ reason: 'invalid_provider_reading', providerPayload: candidate });
         }

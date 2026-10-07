@@ -2,6 +2,31 @@ import { describe, expect, it, vi } from 'vitest';
 import { normalizeSparkMeterTelemetryPage, persistTelemetryPage } from '../oem-telemetry.js';
 
 describe('OEM telemetry', () => {
+    it('normalizes observed Koios v2 historical readings', () => {
+        const page = normalizeSparkMeterTelemetryPage({
+            data: [{
+                site: 'site-1', meter: { id: 'provider-uuid', serial_number: 'SM-1', customer: { id: 'customer-1' } },
+                timestamp: '2026-10-06T21:00:00+00:00', energy: 12.5, voltage_avg: 230,
+                current_avg: 1.2, power_factor_avg: 0.9, state: 'ElectricalMeterStateOn', type: 'reading',
+            }],
+            pagination: { count: 1, has_more: false, cursor: null },
+        });
+        expect(page.quarantine).toHaveLength(0);
+        expect(page.readings[0]).toMatchObject({
+            externalSiteId: 'site-1', externalMeterId: 'SM-1', externalCustomerId: 'customer-1',
+            state: 'on', type: 'customer', energyKwh: 12.5,
+        });
+    });
+
+    it('quarantines undocumented meter states', () => {
+        const page = normalizeSparkMeterTelemetryPage({
+            data: [{ site: 'site-1', meter: { serial_number: 'SM-1', customer: { id: 'customer-1' } },
+                timestamp: '2026-10-06T21:00:00+00:00', state: 'ElectricalMeterStateTamper', type: 'reading' }],
+            pagination: { count: 1, has_more: false, cursor: null },
+        });
+        expect(page.readings).toHaveLength(0);
+        expect(page.quarantine).toHaveLength(1);
+    });
     it('normalizes verified fields and quarantines malformed rows', () => {
         const page = normalizeSparkMeterTelemetryPage({
             data: [
