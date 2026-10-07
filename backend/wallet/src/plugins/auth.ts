@@ -18,6 +18,7 @@
  *   requireKycTier(n)  — customer with kyc_tier >= n
  */
 import fp from 'fastify-plugin';
+import { isKycEnabled } from '../services/kyc-policy.js';
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
@@ -330,6 +331,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
         return async (req: FastifyRequest, reply: FastifyReply) => {
             await (fastify.requireCustomer() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
             if (reply.sent) return undefined;
+            if (!await isKycEnabled('customer')) return undefined;
             if ((req.actor?.kycTier ?? 0) < min) {
                 return reply.code(403).send({
                     error: 'kyc_tier_required',

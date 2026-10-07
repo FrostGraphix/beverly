@@ -121,8 +121,9 @@ export function assertEnergyVendReady(now = Date.now()): void {
 // Phase 6 unification: resolves the target OEM's base URL + auth header from the
 // shared oem_manufacturers/oem_credentials registry (see oem-registry.ts) when
 // `oemId` is given or the default (Calinmeter) row is seeded there. Production
-// must use that registry identity. The legacy environment pair is available only
-// when the registry is explicitly disabled, preventing accidental 0001 vending.
+// prefers that registry identity. The default OEM can use the legacy environment
+// pair when its registry credential is unavailable. Explicit OEM routing fails
+// closed instead of vending against the wrong provider.
 export async function resolveEnergyTarget(oemId?: string, stationId?: string | null): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
     void stationId;
     const oemConfig = await resolveOemConfig(oemId);
@@ -130,7 +131,7 @@ export async function resolveEnergyTarget(oemId?: string, stationId?: string | n
     if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
         return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
     }
-    if (oemId || (env.NODE_ENV === 'production' && !env.OEM_REGISTRY_DISABLED)) {
+    if (oemId) {
         throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     }
     return {
