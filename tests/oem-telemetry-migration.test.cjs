@@ -27,3 +27,4 @@ assert.match(reads, /p_limit < 1 or p_limit > 100/);
 assert.doesNotMatch(reads, /provider_payload/);
 assert.match(readsRollback, /drop function if exists public\.list_authorized_oem_telemetry/);
 console.log("OEM telemetry migration contract passed");
+require('./oem-telemetry-ownership-migration.test.cjs');
