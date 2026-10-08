@@ -32,7 +32,7 @@ function checkVercelDeployPreflight(options = {}) {
   const warnings = [];
 
   const nodeEngine = packageJson.engines?.node;
-  if (nodeEngine !== "22.x") failures.push("package.json engines.node must stay pinned to 22.x");
+  if (nodeEngine !== "24.x") failures.push("package.json engines.node must stay pinned to 24.x");
   if (packageJson.packageManager !== "pnpm@10.28.0") {
     failures.push("package.json packageManager must pin pnpm@10.28.0 for Vercel deploy parity");
   }
@@ -44,6 +44,9 @@ function checkVercelDeployPreflight(options = {}) {
 
   if (vercelJson.buildCommand !== "npm run build") failures.push("vercel.json buildCommand must be npm run build");
   if (vercelJson.outputDirectory !== "dist") failures.push("vercel.json outputDirectory must be dist");
+  if (vercelJson.env?.ENABLE_EXPERIMENTAL_COREPACK !== "1") {
+    failures.push("vercel.json must enable Corepack so Vercel uses pinned pnpm 10.28.0");
+  }
 
   const cronCount = Array.isArray(vercelJson.crons) ? vercelJson.crons.length : 0;
   if (cronCount > 0 && !vercelJson.crons.every((entry) => {
