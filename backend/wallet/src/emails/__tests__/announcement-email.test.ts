@@ -13,6 +13,8 @@ describe('admin announcement email', () => {
         expect(email.html).toContain('name="color-scheme" content="light dark"');
         expect(email.html).toContain('@media (prefers-color-scheme: dark)');
         expect(email.html).toContain('class="beverly-logo-shell"');
+        expect(email.html).toContain('background:#ffffff;border-radius:12px;');
+        expect(email.html).toContain('width="52" height="52" alt="Beverly"');
     });
 
     it('preserves paragraphs and formats numbered instructions', () => {
