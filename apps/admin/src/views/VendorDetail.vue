@@ -116,6 +116,7 @@ function hydrateEditForm() {
 
 async function startEditing() {
     hydrateEditForm();
+    tab.value = 'overview';
     editing.value = true;
     if (stations.value.length) return;
     try {
@@ -174,6 +175,7 @@ const detailPage = ref(1);
 const detailPageSize = ref(10);
 const detailView = ref<'table' | 'list'>('table');
 const detailTypeFilter = ref('all');
+const detailGatewayFilter = ref('all');
 const detailDateFrom = ref('');
 const detailDateTo = ref('');
 
@@ -225,6 +227,8 @@ const detailFilteredRows = computed(() => {
         const createdAt = new Date(row.created_at).getTime();
         return (!query || detailExportColumns.value.some((column) => String(column.value(row) ?? '').toLowerCase().includes(query)))
             && (detailTypeFilter.value === 'all' || rowType === detailTypeFilter.value)
+            && (tab.value !== 'funding' || detailGatewayFilter.value === 'all'
+                || String(row.gateway ?? row.channel ?? '').toLowerCase() === detailGatewayFilter.value)
             && (from === null || createdAt >= from)
             && (to === null || createdAt <= to);
     });
@@ -238,6 +242,8 @@ const detailStatusOptions = computed(() => [...new Set(detailExportRows.value.ma
 const detailFilterOptions = computed(() => [...new Set(detailExportRows.value.map((row) => String(
     tab.value === 'wallet' ? row.entry_type ?? row.type ?? '' : row.status ?? '',
 ).toLowerCase()).filter(Boolean))].map((value) => ({ value, label: value.replace(/_/g, ' ') })));
+const detailGatewayOptions = computed(() => [...new Set(funding.value.map((row) => String(row.gateway ?? row.channel ?? '').toLowerCase()).filter(Boolean))]
+    .map((value) => ({ value, label: value.replace(/_/g, ' ') })));
 
 async function loadAllHistory(path: string, key: string) {
     let cursor: string | null = null;
@@ -306,6 +312,7 @@ async function switchTab(t: Tab) {
     tab.value = t;
     detailSearch.value = '';
     detailTypeFilter.value = 'all';
+    detailGatewayFilter.value = 'all';
     detailDateFrom.value = '';
     detailDateTo.value = '';
     detailPage.value = 1;
@@ -421,7 +428,7 @@ function txBadge(s: string) {
     return ({ delivered: 'success', completed: 'success', token_issued: 'success', failed: 'danger', refunded: 'info' } as Record<string, string>)[s] ?? 'neutral';
 }
 function fundBadge(s: string) {
-    return ({ success: 'success', initiated: 'warn', pending: 'warn', failed: 'danger', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
+    return ({ success: 'success', succeeded: 'success', approved: 'success', initiated: 'warn', pending: 'warn', proof_uploaded: 'warn', under_review: 'warn', failed: 'danger', rejected: 'danger', abandoned: 'neutral' } as Record<string, string>)[String(s).toLowerCase()] ?? 'neutral';
 }
 function staffBadge(s: string) {
     return ({ active: 'success', suspended: 'warn', inactive: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
@@ -480,6 +487,7 @@ onMounted(loadDetail);
         </div>
         <div class="head-actions">
           <div class="head-action-buttons">
+            <button v-if="canManageVendors" class="bw-btn" @click="startEditing">Edit</button>
             <button
               v-if="canManageVendors && detail.vendor.status === 'pending'"
               class="bw-btn primary"
@@ -502,6 +510,7 @@ onMounted(loadDetail);
             >Reactivate</button>
           </div>
           <MobileActionMenu label="Vendor actions">
+            <button v-if="canManageVendors" class="mobile-action-item" @click="startEditing">Edit vendor details</button>
             <button
               v-if="canManageVendors && detail.vendor.status === 'pending'"
               class="mobile-action-item primary"
@@ -594,6 +603,10 @@ onMounted(loadDetail);
           <select v-model="detailTypeFilter" class="bw-input" :aria-label="`Filter ${tab} by type`" @change="detailPage = 1">
             <option value="all">All {{ tab === 'wallet' ? 'types' : 'statuses' }}</option>
             <option v-for="option in detailFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <select v-if="tab === 'funding'" v-model="detailGatewayFilter" class="bw-input" aria-label="Filter funding by gateway" @change="detailPage = 1">
+            <option value="all">All gateways</option>
+            <option v-for="option in detailGatewayOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
           </select>
           <label class="vendor-date-filter">From<input v-model="detailDateFrom" type="date" class="bw-input" @change="detailPage = 1" /></label>
           <label class="vendor-date-filter">To<input v-model="detailDateTo" type="date" class="bw-input" @change="detailPage = 1" /></label>

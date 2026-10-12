@@ -24,6 +24,7 @@ overrides:
   fast-copy: 4.1.2
   source-map-js: 1.2.2
   vue: 3.5.43
+  fast-jwt: 6.3.4
 
 importers:
 
