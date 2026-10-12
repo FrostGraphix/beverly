@@ -28,6 +28,7 @@ const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const state = ref<KycState | null>(null);
+const documentPolicy = ref<any>(null);
 const loading = ref(true);
 const error = ref('');
 const notice = ref('');
@@ -51,11 +52,15 @@ const policy = computed(() => state.value?.policy ?? null);
 const pending = computed(() => state.value?.kyc_status === 'pending' || state.value?.review?.status === 'pending');
 const changesRequested = computed(() => state.value?.kyc_status === 'rejected' || state.value?.review?.status === 'rejected');
 const reviewNote = computed(() => String(state.value?.review?.reviewer_note ?? '').trim());
-const needsAddress = computed(() => requestedTier.value === 2);
+const requirement = computed(() => documentPolicy.value?.customer?.[requestedTier.value === 1 ? 'tier1' : 'tier2'] ?? { identity: ['national_id', 'voters_card', 'passport', 'drivers_license'], selfie: true, address: requestedTier.value === 2 ? ['utility_bill', 'bank_statement'] : [] });
+const needsIdentity = computed(() => requirement.value.identity.length > 0);
+const needsSelfie = computed(() => requirement.value.selfie === true);
+const needsAddress = computed(() => requirement.value.address.length > 0);
 const upgradeRequested = computed(() => {
   const target = String(route.query.upgrade ?? route.query.reason ?? '').toLowerCase();
-  return target === `tier${requestedTier.value}` || target === `tier_${requestedTier.value}`;
+  return target === 'required' || target === `tier${requestedTier.value}` || target === `tier_${requestedTier.value}`;
 });
+const forcedKyc = computed(() => String(route.query.reason ?? '').toLowerCase() === 'required');
 const reusableDocuments = computed(() => (state.value?.documents ?? []).filter((document) => (
   document.kyc_tier === requestedTier.value && Boolean(document.uploaded_at) && !document.review_request_id
 )));
@@ -66,7 +71,8 @@ const selectedFileCount = computed(() => [identityFile.value, selfieFile.value, 
 const hasIdentity = computed(() => Boolean(savedIdentity.value || identityFile.value));
 const hasSelfie = computed(() => Boolean(savedSelfie.value || selfieFile.value));
 const hasAddress = computed(() => Boolean(savedAddress.value || addressFile.value));
-const canSubmit = computed(() => hasIdentity.value && hasSelfie.value && (!needsAddress.value || hasAddress.value));
+const requiredFileCount = computed(() => Number(needsIdentity.value) + Number(needsSelfie.value) + Number(needsAddress.value));
+const canSubmit = computed(() => (!needsIdentity.value || hasIdentity.value) && (!needsSelfie.value || hasSelfie.value) && (!needsAddress.value || hasAddress.value));
 
 function tierLimitLabel(level: number) {
   const cap = level === 0 ? policy.value?.tier0DailyLimitMinor
@@ -100,7 +106,14 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    state.value = await api.get<KycState>('/api/v1/customer/kyc/status');
+    const [current, rules] = await Promise.all([
+      api.get<KycState>('/api/v1/customer/kyc/status'),
+      api.get<{ policy: any }>('/api/v1/customer/kyc/policy'),
+    ]);
+    state.value = current;
+    documentPolicy.value = rules.policy;
+    if (!requirement.value.identity.includes(identityDocumentType.value)) identityDocumentType.value = requirement.value.identity[0] ?? 'national_id';
+    if (!requirement.value.address.includes(addressDocumentType.value)) addressDocumentType.value = requirement.value.address[0] ?? 'utility_bill';
   } catch (cause: any) {
     error.value = cause?.message ?? 'Your verification status could not be loaded.';
   } finally {
@@ -209,8 +222,8 @@ onMounted(load);
     <header class="kyc-hero">
       <div>
         <p class="eyebrow">Account verification</p>
-        <h1>Verification, when you need it</h1>
-        <p>Start using your wallet now. Upgrade only for higher limits.</p>
+        <h1>{{ forcedKyc ? 'Complete your verification' : 'Verification, when you need it' }}</h1>
+        <p>{{ forcedKyc ? 'KYC is required for your account before you continue.' : 'Start using your wallet now. Upgrade only for higher limits.' }}</p>
       </div>
       <button class="bw-btn" type="button" :disabled="loading || submitting" @click="load">Refresh</button>
     </header>
@@ -260,7 +273,7 @@ onMounted(load);
 
       <section v-else class="bw-card submission-card">
         <div class="section-head">
-          <div><p class="eyebrow">Optional upgrade</p><h2>Request Tier {{ requestedTier }}</h2></div>
+          <div><p class="eyebrow">{{ forcedKyc ? 'Required verification' : 'Optional upgrade' }}</p><h2>Request Tier {{ requestedTier }}</h2></div>
           <span class="bw-badge warn">Beverly review</span>
         </div>
         <p class="instructions">{{ needsAddress ? 'Provide identity, a current selfie, and recent address evidence.' : 'Provide identity and a current selfie. Address evidence starts at Tier 2.' }}</p>
@@ -269,16 +282,16 @@ onMounted(load);
 
         <form @submit.prevent="submitEvidence">
           <div class="upload-grid">
-            <label class="upload-field">
+            <label v-if="needsIdentity" class="upload-field">
               <strong>Government identity</strong><span>NIN slip, passport, licence, or voter card.</span>
               <template v-if="savedIdentity"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
               <template v-else>
-                <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type" :disabled="submitting"><option value="national_id">NIN slip</option><option value="voters_card">Voter card</option><option value="passport">Passport</option><option value="drivers_license">Driver's licence</option></select>
+                <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type" :disabled="submitting"><option v-for="type in requirement.identity" :key="type" :value="type">{{ type === 'national_id' ? 'NIN slip' : type.replace(/_/g, ' ') }}</option></select>
                 <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Government identity file" :disabled="submitting" @change="selectFile('identity', $event)" />
                 <small>{{ identityFile ? `Selected: ${identityFile.name}` : 'Choose a file' }}</small>
               </template>
             </label>
-            <label class="upload-field">
+            <label v-if="needsSelfie" class="upload-field">
               <strong>Current selfie</strong><span>Use a clear photo. Avoid filters.</span>
               <template v-if="savedSelfie"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
               <template v-else>
@@ -290,19 +303,19 @@ onMounted(load);
               <strong>Address evidence</strong><span>Use a recent utility bill or bank statement.</span>
               <template v-if="savedAddress"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
               <template v-else>
-                <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting"><option value="utility_bill">Utility bill</option><option value="bank_statement">Bank statement</option></select>
+                <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting"><option v-for="type in requirement.address" :key="type" :value="type">{{ type.replace(/_/g, ' ') }}</option></select>
                 <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Address evidence file" :disabled="submitting" @change="selectFile('address', $event)" />
                 <small>{{ addressFile ? `Selected: ${addressFile.name}` : 'Choose a file' }}</small>
               </template>
             </label>
           </div>
-          <p class="selection-summary" role="status" aria-live="polite">{{ [savedIdentity || identityFile, savedSelfie || selfieFile, ...(needsAddress ? [savedAddress || addressFile] : [])].filter(Boolean).length }} of {{ needsAddress ? 3 : 2 }} required files ready.</p>
+          <p class="selection-summary" role="status" aria-live="polite">{{ [needsIdentity && (savedIdentity || identityFile), needsSelfie && (savedSelfie || selfieFile), needsAddress && (savedAddress || addressFile)].filter(Boolean).length }} of {{ requiredFileCount }} required files ready.</p>
           <p class="privacy">Private storage. File validated. Maximum 10 MB.</p>
           <div v-if="progress" class="bw-alert info" role="status" aria-live="polite">{{ progress }}</div>
           <div class="form-actions">
             <button class="bw-btn primary" type="submit" :disabled="submitting || !canSubmit">{{ submitting ? 'Submitting…' : `Submit Tier ${requestedTier} review` }}</button>
             <button v-if="selectedFileCount" class="bw-btn" type="button" :disabled="submitting" @click="saveForLater">Save and finish later</button>
-            <button class="text-button" type="button" :disabled="submitting" @click="cancelUpgrade">Not now</button>
+            <button v-if="!forcedKyc" class="text-button" type="button" :disabled="submitting" @click="cancelUpgrade">Not now</button>
           </div>
         </form>
       </section>

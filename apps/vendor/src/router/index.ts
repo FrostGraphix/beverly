@@ -1,5 +1,16 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
+import { api } from '../lib/api';
+
+let kycRequirement: { required: boolean; expires: number } | null = null;
+async function isKycRequired(): Promise<boolean> {
+    if (kycRequirement && kycRequirement.expires > Date.now()) return kycRequirement.required;
+    try {
+        const result = await api.get<{ required: boolean }>('/api/v1/vendor/kyc/policy');
+        kycRequirement = { required: result.required, expires: Date.now() + 30_000 };
+        return result.required;
+    } catch { return false; }
+}
 
 function portalHistoryBase(configuredBase: string): string {
     if (typeof window !== 'undefined') {
@@ -80,6 +91,9 @@ router.beforeEach(async (to) => {
         !auth.user?.vend_credential_configured
     ) {
         return { name: 'vend-access', query: { redirect: to.fullPath } };
+    }
+    if (auth.isAuthenticated && await isKycRequired() && Number(auth.user?.kyc_tier ?? 0) < 2 && to.name !== 'kyc') {
+        return { name: 'kyc', query: { reason: 'required' } };
     }
     return true;
 });

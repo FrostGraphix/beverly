@@ -7,13 +7,17 @@ export const KYC_DOCUMENT_TYPES = ['national_id', 'voters_card', 'passport', 'dr
 export const KYC_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const;
 
 const requirementSchema = z.object({
-    identity: z.array(z.enum(['national_id', 'voters_card', 'passport', 'drivers_license'])).min(1),
+    identity: z.array(z.enum(['national_id', 'voters_card', 'passport', 'drivers_license'])),
     selfie: z.boolean(),
     address: z.array(z.enum(['utility_bill', 'bank_statement'])),
-});
+}).refine((value) => value.identity.length > 0 || value.selfie || value.address.length > 0, 'Enable at least one KYC evidence requirement.');
 export const kycPolicySchema = z.object({
     customer_enabled: z.boolean(),
     vendor_enabled: z.boolean(),
+    customer_scope: z.enum(['all', 'new']).default('all'),
+    vendor_scope: z.enum(['all', 'new']).default('all'),
+    customer_enforced_from: z.string().datetime().nullable().default(null),
+    vendor_enforced_from: z.string().datetime().nullable().default(null),
     allowed_mime_types: z.array(z.enum(KYC_MIME_TYPES)).min(1),
     customer: z.object({ tier1: requirementSchema, tier2: requirementSchema }),
     vendor: z.object({ tier2: requirementSchema }),
@@ -23,6 +27,10 @@ export type KycPolicy = z.infer<typeof kycPolicySchema>;
 export const DEFAULT_KYC_POLICY: KycPolicy = {
     customer_enabled: true,
     vendor_enabled: true,
+    customer_scope: 'all',
+    vendor_scope: 'all',
+    customer_enforced_from: null,
+    vendor_enforced_from: null,
     allowed_mime_types: [...KYC_MIME_TYPES],
     customer: {
         tier1: { identity: ['national_id', 'voters_card', 'passport', 'drivers_license'], selfie: true, address: [] },
@@ -39,7 +47,11 @@ export async function getKycPolicy(): Promise<KycPolicy> {
     } catch { return DEFAULT_KYC_POLICY; }
 }
 export async function updateKycPolicy(policy: KycPolicy, actorId: string): Promise<KycPolicy> {
+    const current = await getKycPolicy();
     const value = kycPolicySchema.parse(policy);
+    const now = new Date().toISOString();
+    if (value.customer_enabled && value.customer_scope === 'new' && (!current.customer_enabled || current.customer_scope !== 'new' || !value.customer_enforced_from)) value.customer_enforced_from = now;
+    if (value.vendor_enabled && value.vendor_scope === 'new' && (!current.vendor_enabled || current.vendor_scope !== 'new' || !value.vendor_enforced_from)) value.vendor_enforced_from = now;
     const { error } = await adminClient.from('system_settings').upsert({ key: SETTING_KEY, value, updated_at: new Date().toISOString(), updated_by: actorId });
     if (error) throw new KycReviewError('Could not save KYC policy.', 'kyc_policy_save_failed', 503);
     return value;
@@ -62,6 +74,20 @@ export async function isKycEnabled(subjectType: KycSubjectType): Promise<boolean
     return subjectType === 'customer' ? policy.customer_enabled : policy.vendor_enabled;
 }
 
+export async function isKycRequiredForSubject(subjectType: KycSubjectType, subjectId: string): Promise<boolean> {
+    const policy = await getKycPolicy();
+    const enabled = subjectType === 'customer' ? policy.customer_enabled : policy.vendor_enabled;
+    if (!enabled) return false;
+    const scope = subjectType === 'customer' ? policy.customer_scope : policy.vendor_scope;
+    if (scope === 'all') return true;
+    const enforcedFrom = subjectType === 'customer' ? policy.customer_enforced_from : policy.vendor_enforced_from;
+    if (!enforcedFrom) return true;
+    const table = subjectType === 'customer' ? 'customers' : 'vendor_organizations';
+    const { data, error } = await adminClient.from(table).select('created_at').eq('id', subjectId).maybeSingle();
+    if (error || !(data as any)?.created_at) return true;
+    return new Date((data as any).created_at).getTime() >= new Date(enforcedFrom).getTime();
+}
+
 export async function assertKycUploadAllowed(input: { subjectType: KycSubjectType; tier: 1 | 2; documentType: KycDocumentType; mimeType: string }): Promise<void> {
     const policy = await getKycPolicy();
     if (!(input.subjectType === 'customer' ? policy.customer_enabled : policy.vendor_enabled)) throw new KycReviewError('KYC is currently unavailable.', 'kyc_disabled', 409);
@@ -76,7 +102,7 @@ export async function assertKycEvidenceMeetsPolicy(input: { subjectType: KycSubj
     if (!(input.subjectType === 'customer' ? policy.customer_enabled : policy.vendor_enabled)) throw new KycReviewError('KYC is currently unavailable.', 'kyc_disabled', 409);
     const requirement = requirements(policy, input.subjectType, input.tier);
     const types = new Set(input.documentTypes);
-    if (!requirement.identity.some((type) => types.has(type))) throw new KycReviewError('Choose one approved identity document.', 'identity_document_required');
+    if (requirement.identity.length && !requirement.identity.some((type) => types.has(type))) throw new KycReviewError('Choose one approved identity document.', 'identity_document_required');
     if (requirement.selfie && !types.has('selfie')) throw new KycReviewError('A selfie is required.', 'selfie_required');
     if (requirement.address.length && !requirement.address.some((type) => types.has(type))) throw new KycReviewError('Choose one approved address document.', 'address_document_required');
 }
