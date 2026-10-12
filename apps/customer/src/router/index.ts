@@ -1,5 +1,16 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { api } from '../lib/api';
+
+let kycRequirement: { required: boolean; expires: number } | null = null;
+async function isKycRequired(): Promise<boolean> {
+    if (kycRequirement && kycRequirement.expires > Date.now()) return kycRequirement.required;
+    try {
+        const result = await api.get<{ required: boolean }>('/api/v1/customer/kyc/policy');
+        kycRequirement = { required: result.required, expires: Date.now() + 30_000 };
+        return result.required;
+    } catch { return false; }
+}
 
 function portalHistoryBase(configuredBase: string): string {
     if (typeof window !== 'undefined') {
@@ -68,8 +79,12 @@ router.beforeEach(async (to) => {
     if (to.meta.guest && auth.isAuthenticated) {
         return { name: 'home' };
     }
+    const kycRequired = auth.isAuthenticated && await isKycRequired();
+    if (kycRequired && (auth.customer?.kyc_tier ?? 0) < 1 && to.name !== 'kyc') {
+        return { name: 'kyc', query: { reason: 'required' } };
+    }
     const requiredKyc = Number(to.meta.kyc ?? 0);
-    if (requiredKyc > 0 && (auth.customer?.kyc_tier ?? 0) < requiredKyc) {
+    if (kycRequired && requiredKyc > 0 && (auth.customer?.kyc_tier ?? 0) < requiredKyc) {
         return { name: 'kyc', query: { reason: `tier_${requiredKyc}` } };
     }
     if (to.name === 'buy-token') {

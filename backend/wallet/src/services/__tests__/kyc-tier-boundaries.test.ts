@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     assertWalletDailyDebitLimitAllowed,
+    DEFAULT_KYC_POLICY,
+    isKycRequiredForSubject,
     WalletDebitLimitError,
     kycTierSettingsUpdateSchema,
 } from '../kyc-policy.js';
@@ -269,5 +271,29 @@ describe('KYC Tier Debit Limit Boundary Enforcement', () => {
                 assertWalletDailyDebitLimitAllowed('wallet-test-1', 30_000_100),
             ).rejects.toThrow(WalletDebitLimitError);
         });
+    });
+});
+
+describe('KYC rollout scope', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('grandfathers subjects created before a new-users activation cutoff', async () => {
+        const policy = { ...DEFAULT_KYC_POLICY, customer_scope: 'new' as const, customer_enforced_from: '2026-10-12T12:00:00.000Z' };
+        fromMock.mockImplementation((table: string) => ({
+            select: () => ({ eq: () => ({ maybeSingle: async () => table === 'system_settings'
+                ? { data: { value: policy }, error: null }
+                : { data: { created_at: '2026-10-11T12:00:00.000Z' }, error: null } }) }),
+        }));
+        await expect(isKycRequiredForSubject('customer', 'customer-1')).resolves.toBe(false);
+    });
+
+    it('requires KYC for subjects created after a new-users activation cutoff', async () => {
+        const policy = { ...DEFAULT_KYC_POLICY, customer_scope: 'new' as const, customer_enforced_from: '2026-10-12T12:00:00.000Z' };
+        fromMock.mockImplementation((table: string) => ({
+            select: () => ({ eq: () => ({ maybeSingle: async () => table === 'system_settings'
+                ? { data: { value: policy }, error: null }
+                : { data: { created_at: '2026-10-13T12:00:00.000Z' }, error: null } }) }),
+        }));
+        await expect(isKycRequiredForSubject('customer', 'customer-2')).resolves.toBe(true);
     });
 });
