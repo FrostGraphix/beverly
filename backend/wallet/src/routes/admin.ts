@@ -2195,14 +2195,30 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/vendors/:id/funding', async (req) => {
         const id = (req.params as { id: string }).id;
         const { limit, cursor } = req.query as { limit?: string; cursor?: string };
-        let query = adminClient.from('payment_transactions').select('*')
+        const pageSize = Math.min(Number(limit ?? 50), 200);
+        let paymentsQuery = adminClient.from('payment_transactions').select('*')
             .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
             .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 50), 200));
-        if (cursor) query = query.lt('created_at', cursor);
-        const { data } = await query;
-        const rows = data ?? [];
-        const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
+            .limit(pageSize);
+        let requestsQuery = adminClient.from('funding_requests').select('*')
+            .eq('vendor_organization_id', id)
+            .in('channel', ['bank_transfer', 'manual'])
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (cursor) {
+            paymentsQuery = paymentsQuery.lt('created_at', cursor);
+            requestsQuery = requestsQuery.lt('created_at', cursor);
+        }
+        const [{ data: payments, error: paymentsError }, { data: requests, error: requestsError }] = await Promise.all([
+            paymentsQuery,
+            requestsQuery,
+        ]);
+        if (paymentsError) throw paymentsError;
+        if (requestsError) throw requestsError;
+        const rows = [...(payments ?? []), ...(requests ?? [])]
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+            .slice(0, pageSize);
+        const nextCursor = rows.length === pageSize ? rows.at(-1)?.created_at ?? null : null;
         return { funding: rows, nextCursor };
     });
 
