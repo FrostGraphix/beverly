@@ -1,6 +1,15 @@
 # OEM pipeline execution status
 
-Status: **Read-only integration remains draft; provider-controlled gates remain**. Updated 2026-10-07.
+Status: **Read-only integration remains draft; provider-controlled gates remain**. Updated 2026-10-12.
+
+## 2026-10-12 release investigation
+
+- Authenticated SparkMeter Koios v1 read-only customer request returned HTTP 200 and one JSON record. This verifies the configured key pair works for that endpoint; it does not verify portal login, Koios v2 access, payment permissions, or financial retry semantics.
+- Certificate-verified, read-only Beverly production database query found the SparkMeter production installation still `draft`, with 3,073 active scoped meters, zero telemetry readings, and zero installation credential rows. The separate sandbox installation remains `draft`, with zero active meters, readings, and credential rows. No database or provider mutations occurred.
+- Vercel project `beverly` reports Node `22.x` and a `READY` production deployment from main commit `15c77b01`. This OEM branch is 97 commits ahead and nine commits behind current `origin/main`; the current production deployment does not establish that this branch is deployed. Protected production `/api/health` and `/api/ready` requests returned HTTP 401; `/api/cron/oem-telemetry` returned HTTP 502 without authentication. These results do not certify application health or ingestion.
+- Vercel project environment-variable listing still returns HTTP 403. No authenticated `vercel` CLI is installed, so the mapped fallback is unavailable. Do not infer secret provisioning or change existing keyrings. The current credential row count confirms SparkMeter's installation-scoped credentials remain unprovisioned.
+- Node 22.23.3 `npm run test:oem`, `npm run test:security`, `npm run typecheck`, and the full root `npm test` regression passed. `npm run build` passed all six affected builds, but its Windows Corepack launcher used Node 24.13.1 despite a Node 22 executable at the parent process front of PATH. This run alone is not supported-runtime build evidence. Existing branch CI and Node 22 evidence remain recorded above.
+- Go-live remains blocked: reconcile the OEM branch with current main, obtain Vercel environment access or authorized CLI access, provision encrypted installation credentials without exposing secrets, verify authenticated deployed read-only ingestion and downstream telemetry, and secure SparkMeter's written ambiguous-write contract plus isolated certified write target before enabling financial dispatch. No production activation or promotion was attempted.
 
 ## Latest checkpoint
 
