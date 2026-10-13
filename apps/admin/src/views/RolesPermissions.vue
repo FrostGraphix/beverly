@@ -332,6 +332,25 @@ async function doSuspension(user: StaffRow, suspended: boolean) {
     } catch (e: any) { toast(e?.message ?? 'Could not update user status', 'err'); }
     finally { saving.value = false; }
 }
+function requestStaffDeletion(user: StaffRow) {
+    if (!canManage.value || !user.auth_user_id || saving.value || user.auth_user_id === auth.user?.id) return;
+    confirm.value = {
+        title: 'Delete staff user permanently',
+        body: `Permanently delete ${user.user_name || user.email}? They will lose sign-in access, active sessions, MFA factors, profile data, and assigned access.\n\nTheir immutable audit history will remain available. This cannot be undone.`,
+        label: 'Delete permanently', danger: true,
+        fn: () => doStaffDeletion(user),
+    };
+}
+async function doStaffDeletion(user: StaffRow) {
+    saving.value = true;
+    try {
+        await api.del(`/api/v1/admin/access/users/${user.auth_user_id}`, { confirmation: 'DELETE' });
+        expandedStaff.value = expandedStaff.value.filter((key) => key !== staffKey(user));
+        toast(`${user.user_name || user.email} was permanently deleted.`);
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not delete staff user', 'err'); }
+    finally { saving.value = false; }
+}
 function requestPasswordReset(user: StaffRow) {
     if (!canManage.value || !user.auth_user_id || saving.value) return;
     confirm.value = {
@@ -1046,6 +1065,7 @@ onMounted(() => { void load(); });
               <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
                 {{ u.suspended ? 'Reactivate user' : 'Suspend user' }}
               </button>
+              <button class="bw-btn danger" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
             </div>
           </article>
         </div>
