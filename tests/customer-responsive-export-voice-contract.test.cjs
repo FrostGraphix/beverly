@@ -29,6 +29,18 @@ for (const portal of ["admin", "vendor", "customer"]) {
   assert.ok(!component.includes("alert('Speech recognition"), `${portal} must use inline recoverable feedback instead of alerts`);
 }
 
+const adminAssistant = read("apps/admin/src/components/acobot/AcobotWidget.vue");
+for (const dragBehavior of [
+  '@pointerdown="startDragging"',
+  '@pointermove="dragWidget"',
+  'setPointerCapture(event.pointerId)',
+  'Math.hypot(deltaX, deltaY) < 4',
+  'window.innerWidth - width - edge',
+  "localStorage.setItem('beverly-admin-ai-position'",
+]) {
+  assert.ok(adminAssistant.includes(dragBehavior), `admin assistant must retain ${dragBehavior}`);
+}
+
 for (const behavior of [
   "activeRecognition.abort()",
   "activeRecognition.stop()",
