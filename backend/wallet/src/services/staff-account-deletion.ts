@@ -25,10 +25,22 @@ export async function deleteStaffAccount(opts: {
     if (opts.targetUserId === opts.actorUserId) {
         throw new StaffDeletionError('self_deletion_denied', 'You cannot delete your own account. Ask another Super Admin to remove it.');
     }
-    const { data: profile, error: profileError } = await client.from('users')
+    let { data: profile, error: profileError } = await client.from('users')
         .select('auth_user_id, user_id, user_name, email, role_key, station_id, station_ids')
         .or(`auth_user_id.eq.${opts.targetUserId},user_id.eq.${opts.targetUserId}`)
         .maybeSingle();
+    if (!profile && !profileError) {
+        const { data: authIdentity, error: authError } = await client.auth.admin.getUserById(opts.targetUserId);
+        const email = authIdentity?.user?.email?.trim().toLowerCase();
+        if (!authError && email) {
+            const fallback = await client.from('users')
+                .select('auth_user_id, user_id, user_name, email, role_key, station_id, station_ids')
+                .ilike('email', email)
+                .maybeSingle();
+            profile = fallback.data;
+            profileError = fallback.error;
+        }
+    }
     if (profileError || !profile) throw new StaffDeletionError('staff_not_found', 'Staff account was not found.');
     if (profile.auth_user_id && profile.auth_user_id !== opts.targetUserId) {
         throw new StaffDeletionError('staff_identity_mismatch', 'The staff profile does not belong to the requested authentication account.');

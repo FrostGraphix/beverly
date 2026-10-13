@@ -23,6 +23,7 @@ function query(result: { data?: unknown; error?: unknown }) {
         update: vi.fn(() => chain),
         or: vi.fn(() => chain),
         eq: vi.fn(() => chain),
+        ilike: vi.fn(() => chain),
         is: vi.fn(() => chain),
         maybeSingle: vi.fn(async () => ({ data: result.data ?? null, error: result.error ?? null })),
         then: (resolve: any, reject: any) => Promise.resolve({ data: result.data ?? null, error: result.error ?? null }).then(resolve, reject),
@@ -32,11 +33,12 @@ function query(result: { data?: unknown; error?: unknown }) {
 
 describe('staff account deletion service', () => {
     const deleteUser = vi.fn();
+    const getUserById = vi.fn();
     const writeAudit = vi.fn();
     let profiles: Record<string, ReturnType<typeof query>>;
 
     const client: any = {
-        auth: { admin: { deleteUser } },
+        auth: { admin: { deleteUser, getUserById } },
         from: vi.fn((table: string) => profiles[table]),
     };
 
@@ -45,7 +47,9 @@ describe('staff account deletion service', () => {
         profiles = {
             users: query({ data: targetProfile }),
         };
+        client.from.mockImplementation((table: string) => profiles[table]);
         deleteUser.mockResolvedValue({ error: null });
+        getUserById.mockResolvedValue({ data: { user: null }, error: null });
         writeAudit.mockResolvedValue(true);
     });
 
@@ -106,6 +110,23 @@ describe('staff account deletion service', () => {
         expect(profileQuery.update).toHaveBeenCalledWith({ auth_user_id: targetUserId });
         expect(profileQuery.eq).toHaveBeenCalledWith('user_id', targetUserId);
         expect(profileQuery.is).toHaveBeenCalledWith('auth_user_id', null);
+        expect(deleteUser).toHaveBeenCalledWith(targetUserId, false);
+    });
+
+    it('finds a legacy profile by its authentication email', async () => {
+        const missingById = query({ data: null });
+        const legacyByEmail = query({ data: { ...targetProfile, auth_user_id: null, user_id: actorUserId } });
+        profiles.users = missingById;
+        client.from.mockImplementationOnce(() => missingById).mockImplementation(() => legacyByEmail);
+        getUserById.mockResolvedValue({ data: { user: { id: targetUserId, email: 'Ada@ACOBLighting.com' } }, error: null });
+
+        await expect(deleteStaffAccount({ client, writeAudit, actorUserId, targetUserId })).resolves.toEqual({
+            userId: targetUserId,
+            deleted: true,
+        });
+
+        expect(legacyByEmail.ilike).toHaveBeenCalledWith('email', 'ada@acoblighting.com');
+        expect(legacyByEmail.update).toHaveBeenCalledWith({ auth_user_id: targetUserId });
         expect(deleteUser).toHaveBeenCalledWith(targetUserId, false);
     });
 

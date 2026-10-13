@@ -229,8 +229,11 @@ onMounted(() => {
 .an-more { display: flex; justify-content: center; margin-top: var(--s-4); }
 @media (max-width: 640px) {
   .an-head { display: grid; }
-  .device-notifications { align-items: stretch; flex-direction: column; }
-  .device-actions > * { flex: 1; }
+  .device-notifications { align-items: center; flex-direction: row; }
+  .device-actions { flex: 0 0 auto; }
+  .notification-switch { width: 46px; height: 26px; padding: 3px; }
+  .notification-switch span { width: 18px; height: 18px; }
+  .notification-switch[aria-checked="true"] span { transform: translateX(20px); }
   .an-row { grid-template-columns: 9px minmax(0, 1fr); }
   .an-row time { grid-column: 2; }
 }

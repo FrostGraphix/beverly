@@ -1180,11 +1180,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         const permissions = permissionResult.data;
         const staffRows = staffResult.data;
         const authById = new Map((authUsers.data?.users ?? []).map((user) => [user.id, user]));
+        const authByEmail = new Map((authUsers.data?.users ?? []).filter((user) => user.email).map((user) => [user.email!.trim().toLowerCase(), user]));
         const staff = (staffRows ?? []).map((row: any) => {
-            const authUser = authById.get(row.auth_user_id ?? row.user_id);
+            const authUser = authById.get(row.auth_user_id ?? row.user_id) ?? authByEmail.get(String(row.email ?? '').trim().toLowerCase());
             return {
                 ...row,
-                auth_user_id: row.auth_user_id ?? row.user_id ?? null,
+                auth_user_id: authUser?.id ?? row.auth_user_id ?? row.user_id ?? null,
                 email: row.email ?? authUser?.email ?? null,
                 user_name: row.user_name ?? authUser?.user_metadata?.full_name ?? authUser?.email ?? 'Staff user',
                 last_sign_in_at: authUser?.last_sign_in_at ?? null,
