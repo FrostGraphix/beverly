@@ -8,8 +8,6 @@ import { effectiveTierLimit, getKycTierPolicy } from './kyc-tier-policy.js';
 const KYC_BUCKET = 'wallet-kyc-documents';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
-const IDENTITY_TYPES = new Set(['national_id', 'voters_card', 'passport', 'drivers_license']);
-const ADDRESS_TYPES = new Set(['utility_bill', 'bank_statement']);
 
 export type KycSubjectType = 'customer' | 'vendor';
 export type KycDecision = 'approved' | 'rejected';
@@ -136,13 +134,7 @@ export async function submitKycReview(input: {
 }) {
     const documentIds = [...new Set(input.documentIds ?? [])];
     {
-        const minimumDocuments = input.requestedTier === 2 ? 3 : 2;
-        if (documentIds.length < minimumDocuments) {
-            throw new KycReviewError(
-                input.requestedTier === 2 ? 'Identity, selfie, and address evidence are required.' : 'Identity and selfie documents are required.',
-                'documents_required',
-            );
-        }
+        if (!documentIds.length) throw new KycReviewError('KYC evidence is required.', 'documents_required');
         const column = ownerColumn(input.subjectType);
         const { data: documents, error } = await adminClient.from('kyc_documents')
             .select('id, doc_type, uploaded_at, review_request_id')
@@ -153,13 +145,8 @@ export async function submitKycReview(input: {
         if ((documents ?? []).some((doc: any) => !doc.uploaded_at)) {
             throw new KycReviewError('Complete each upload first.', 'documents_not_ready');
         }
-        const types = new Set((documents ?? []).map((doc: any) => doc.doc_type));
-        if (![...types].some((type) => IDENTITY_TYPES.has(String(type))) || !types.has('selfie')) {
-            throw new KycReviewError('Identity and selfie documents are required.', 'documents_required');
-        }
-        if (input.requestedTier === 2 && ![...types].some((type) => ADDRESS_TYPES.has(String(type)))) {
-            throw new KycReviewError('Address evidence is required for Tier 2.', 'address_document_required');
-        }
+        const { assertKycEvidenceMeetsPolicy } = await import('./kyc-policy.js');
+        await assertKycEvidenceMeetsPolicy({ subjectType: input.subjectType, tier: input.requestedTier, documentTypes: (documents ?? []).map((doc: any) => String(doc.doc_type)) });
     }
 
     const rpcName = input.requestedTier === 2 ? 'submit_kyc_enhanced_review' : 'submit_kyc_evidence_review';

@@ -88,7 +88,7 @@ import { revokePortalSession } from '../services/portal-session.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { verifiedPrincipalAmount, verifyTransaction } from '../adapters/paystack.js';
 import { initiateBankProofFunding, listCustomerFunding, uploadBankFundingProof, removeBankFundingProof, FundingError } from '../services/funding.js';
-import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import { pushConfig, removePushSubscription, savePushSubscription } from '../services/push-notifications.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -655,7 +655,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({
@@ -671,7 +671,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier2/submit', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(3).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({
@@ -1726,15 +1726,6 @@ const customer: FastifyPluginAsync = async (fastify) => {
         const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
         await removePushSubscription({ actorType: 'customer', actorId: req.actor!.customerId!, endpoint });
         return { ok: true };
-    });
-
-    fastify.post('/push/test', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        if (!pushConfig().available) return reply.code(503).send({ error: 'push_unavailable' });
-        const delivery = await sendWebPush('customer', req.actor!.customerId!, {
-            title: 'Beverly notifications enabled', body: 'Your device can receive wallet updates.',
-            url: '/notifications', tag: `customer-test:${req.actor!.customerId}`,
-        }, 'customer');
-        return { ok: delivery.sent > 0, delivery };
     });
 
     // ── Notifications inbox ───────────────────────────────────────────────────

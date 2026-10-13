@@ -459,7 +459,6 @@ const OPEN_ADMIN_ROUTES = new Set([
     'GET /push/config',
     'POST /push/subscription',
     'DELETE /push/subscription',
-    'POST /push/test',
 ]);
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
@@ -1036,35 +1035,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
         await removePushSubscription({ actorType: 'staff', actorId: req.actor!.userId, endpoint });
         return { ok: true };
-    });
-
-    fastify.post('/push/test', async (req, reply) => {
-        const { portal } = z.object({ portal: z.enum(['admin', 'crm']) }).parse(req.body ?? {});
-        if (!pushConfig().available) {
-            return reply.code(503).send({ error: 'push_unavailable', message: 'Push notifications are not configured.' });
-        }
-        const now = new Date().toISOString();
-        await insertAnnouncementNotifications([{
-            customer_id: null,
-            recipient_type: 'staff',
-            recipient_id: req.actor!.userId,
-            type: 'push_test',
-            title: 'Beverly notifications enabled',
-            body: 'This device can receive operational updates.',
-            metadata: { path: '/notifications', portal },
-            read: false,
-            created_at: now,
-        }]);
-        const delivery = await sendWebPush('staff', req.actor!.userId, {
-            title: 'Beverly notifications enabled',
-            body: 'This device can receive operational updates.',
-            url: portal === 'admin' ? './notifications' : './',
-            tag: `beverly-${portal}-push-test`,
-        }, portal);
-        if (!delivery.sent) {
-            return reply.code(409).send({ error: 'push_subscription_missing', message: 'No active subscription exists for this device.' });
-        }
-        return { ok: true, delivery };
     });
 
     fastify.post('/logout', async (req) => {

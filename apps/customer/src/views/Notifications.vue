@@ -59,19 +59,6 @@ async function toggleDeviceNotifications() {
     }
 }
 
-async function sendDeviceTest() {
-    if (deviceBusy.value || deviceState.value !== 'enabled') return;
-    deviceBusy.value = true;
-    deviceError.value = '';
-    try {
-        await customerPushNotifications.test();
-    } catch (error: any) {
-        deviceError.value = error?.message ?? 'Test notification failed.';
-    } finally {
-        deviceBusy.value = false;
-    }
-}
-
 // Inbox
 const items       = ref<Notification[]>([]);
 const unreadCount = ref(0);
@@ -343,11 +330,7 @@ onMounted(async () => {
       <p style="font-weight:600">Device notifications</p>
       <p class="bw-page-sub">Receive Beverly updates outside the app.</p>
       <p v-if="deviceError" class="bw-alert danger">{{ deviceError }}</p>
-      <button class="bw-btn" type="button" :disabled="deviceBusy || deviceState === 'unsupported' || deviceState === 'blocked' || deviceState === 'unavailable'" @click="toggleDeviceNotifications">
-        {{ deviceBusy ? 'Updating…' : deviceState === 'enabled' ? 'Turn off' : 'Turn on' }}
-      </button>
-      <button v-if="deviceState === 'enabled'" class="bw-btn" type="button" :disabled="deviceBusy" @click="sendDeviceTest">Send test</button>
-      <span style="margin-left: var(--s-2)">{{ deviceState }}</span>
+      <button class="notification-switch" type="button" role="switch" :aria-checked="deviceState === 'enabled'" :aria-label="deviceState === 'enabled' ? 'Turn off device notifications' : 'Turn on device notifications'" :disabled="deviceBusy || ['unsupported', 'blocked', 'unavailable'].includes(deviceState)" @click="toggleDeviceNotifications"><span /></button>
     </section>
     <!-- Header -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: var(--s-4)">
@@ -566,6 +549,7 @@ onMounted(async () => {
   color: var(--brand);
 }
 .notification-filter:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.notification-switch{width:52px;height:30px;padding:3px;border:1px solid var(--border);border-radius:999px;background:var(--surface-2);cursor:pointer}.notification-switch span{display:block;width:22px;height:22px;border-radius:50%;background:var(--text-muted);transition:.16s}.notification-switch[aria-checked="true"]{border-color:var(--brand);background:var(--brand)}.notification-switch[aria-checked="true"] span{transform:translateX(22px);background:#03110a}.notification-switch:focus-visible{outline:2px solid var(--brand);outline-offset:3px}.notification-switch:disabled{cursor:not-allowed;opacity:.5}
 
 /* Inbox items */
 .notif-item {

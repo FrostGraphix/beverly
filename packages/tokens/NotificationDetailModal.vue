@@ -234,8 +234,8 @@ onBeforeUnmount(() => {
 .notification-detail-enter-from .notification-detail__dialog,
 .notification-detail-leave-to .notification-detail__dialog { opacity: 0; transform: translateY(18px) scale(.985); }
 @media (max-width: 640px) {
-    .notification-detail__scrim { place-items: end center; padding: 0; }
-    .notification-detail__dialog { max-height: 90dvh; border-radius: 26px 26px 0 0; }
+    .notification-detail__scrim { place-items: end center; padding: 12px; }
+    .notification-detail__dialog { max-height: calc(100dvh - 24px); border-radius: 24px; }
     .notification-detail__header { padding: 22px 20px 18px; }
     .notification-detail__content { padding: 20px; }
     .notification-detail__item { grid-template-columns: 38px minmax(0, 1fr); padding: var(--s-2); }

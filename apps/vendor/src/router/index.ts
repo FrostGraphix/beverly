@@ -32,12 +32,12 @@ const routes: RouteRecordRaw[] = [
     { path: '/vend-access',     name: 'vend-access',    component: () => import('../views/VendAccess.vue'),    meta: { auth: true } },
     { path: '/',                name: 'dashboard',      component: () => import('../views/Dashboard.vue'),     meta: { auth: true } },
     { path: '/wallet',          name: 'wallet',         component: () => import('../views/Wallet.vue'),        meta: { auth: true } },
-    { path: '/wallet/fund',     name: 'fund',           component: () => import('../views/Fund.vue'),          meta: { auth: true } },
+    { path: '/wallet/fund',     name: 'fund',           component: () => import('../views/Fund.vue'),          meta: { auth: true, kyc: 2 } },
     { path: '/wallet/funding',  name: 'funding-history',component: () => import('../views/FundingHistory.vue'),meta: { auth: true } },
-    { path: '/vend',            name: 'vend',           component: () => import('../views/Vend.vue'),          meta: { auth: true } },
+    { path: '/vend',            name: 'vend',           component: () => import('../views/Vend.vue'),          meta: { auth: true, kyc: 2 } },
     { path: '/meter-orders',    name: 'meter-orders',   component: () => import('../views/MeterOrders.vue'),   meta: { auth: true } },
     { path: '/meter-orders/new',name: 'meter-order-new',component: () => import('../views/MeterOrderCreate.vue'),meta: { auth: true } },
-    { path: '/remote-send',     name: 'remote-send',    component: () => import('../views/RemoteSend.vue'),    meta: { auth: true } },
+    { path: '/remote-send',     name: 'remote-send',    component: () => import('../views/RemoteSend.vue'),    meta: { auth: true, kyc: 2 } },
     { path: '/transactions',    name: 'transactions',   component: () => import('../views/Transactions.vue'),  meta: { auth: true } },
     { path: '/receipts',        name: 'receipts',       component: () => import('../views/Receipts.vue'),      meta: { auth: true } },
     { path: '/statement',       name: 'statement',      component: () => import('../views/Statement.vue'),     meta: { auth: true } },
@@ -92,8 +92,7 @@ router.beforeEach(async (to) => {
     ) {
         return { name: 'vend-access', query: { redirect: to.fullPath } };
     }
-    if (auth.isAuthenticated && await isKycRequired() && Number(auth.user?.kyc_tier ?? 0) < 2 && to.name !== 'kyc') {
-        return { name: 'kyc', query: { reason: 'required' } };
-    }
+    const requiredKyc = Number(to.meta.kyc ?? 0);
+    if (auth.isAuthenticated && requiredKyc > 0 && await isKycRequired() && Number(auth.user?.kyc_tier ?? 0) < requiredKyc) return { name: 'kyc', query: { reason: `tier_${requiredKyc}` } };
     return true;
 });

@@ -13,5 +13,4 @@ export const customerPushNotifications = createPushNotifications('customer', {
         });
     },
     remove: (endpoint) => api.del(`/api/v1/customer/push/subscription?endpoint=${encodeURIComponent(endpoint)}`),
-    test: () => api.post('/api/v1/customer/push/test', {}),
 });

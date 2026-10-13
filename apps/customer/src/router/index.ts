@@ -80,9 +80,6 @@ router.beforeEach(async (to) => {
         return { name: 'home' };
     }
     const kycRequired = auth.isAuthenticated && await isKycRequired();
-    if (kycRequired && (auth.customer?.kyc_tier ?? 0) < 1 && to.name !== 'kyc') {
-        return { name: 'kyc', query: { reason: 'required' } };
-    }
     const requiredKyc = Number(to.meta.kyc ?? 0);
     if (kycRequired && requiredKyc > 0 && (auth.customer?.kyc_tier ?? 0) < requiredKyc) {
         return { name: 'kyc', query: { reason: `tier_${requiredKyc}` } };

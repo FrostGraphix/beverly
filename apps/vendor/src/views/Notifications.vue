@@ -10,7 +10,6 @@ import {
     disableDeviceNotifications,
     enableDeviceNotifications,
     syncDeviceNotifications,
-    testDeviceNotifications,
     type DeviceNotificationState,
 } from '../lib/push-notifications';
 
@@ -173,19 +172,6 @@ async function toggleDeviceNotifications() {
     }
 }
 
-async function sendDeviceTest() {
-    if (deviceBusy.value || deviceState.value !== 'enabled') return;
-    deviceBusy.value = true;
-    deviceError.value = '';
-    try {
-        await testDeviceNotifications();
-    } catch (err: any) {
-        deviceError.value = err?.message ?? 'Test notification failed.';
-    } finally {
-        deviceBusy.value = false;
-    }
-}
-
 onMounted(() => {
     void loadInbox();
     deviceState.value = deviceNotificationState();
@@ -231,17 +217,7 @@ onMounted(() => {
         <p>{{ deviceCopy }}</p>
         <small v-if="deviceError" role="alert">{{ deviceError }}</small>
       </div>
-      <button
-        v-if="!['unsupported', 'unavailable', 'blocked'].includes(deviceState)"
-        type="button"
-        class="bw-btn device-alerts-action"
-        :class="{ primary: deviceState === 'default' }"
-        :disabled="deviceBusy"
-        @click="toggleDeviceNotifications"
-      >
-        {{ deviceBusy ? 'Updating...' : deviceState === 'enabled' ? 'Turn off' : 'Turn on' }}
-      </button>
-      <button v-if="deviceState === 'enabled'" type="button" class="bw-btn device-alerts-action" :disabled="deviceBusy" @click="sendDeviceTest">Send test</button>
+      <button v-if="!['unsupported', 'unavailable', 'blocked'].includes(deviceState)" type="button" class="notification-switch" role="switch" :aria-checked="deviceState === 'enabled'" :aria-label="deviceState === 'enabled' ? 'Turn off device notifications' : 'Turn on device notifications'" :disabled="deviceBusy" @click="toggleDeviceNotifications"><span /></button>
     </section>
 
     <div v-if="error" class="bw-alert danger" style="margin-bottom: var(--s-3)">{{ error }}</div>
@@ -347,6 +323,7 @@ onMounted(() => {
     color: var(--brand);
 }
 .notification-filter:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.notification-switch{width:52px;height:30px;padding:3px;border:1px solid var(--border);border-radius:999px;background:var(--surface-2);cursor:pointer}.notification-switch span{display:block;width:22px;height:22px;border-radius:50%;background:var(--text-muted);transition:.16s}.notification-switch[aria-checked="true"]{border-color:var(--brand);background:var(--brand)}.notification-switch[aria-checked="true"] span{transform:translateX(22px);background:#03110a}.notification-switch:focus-visible{outline:2px solid var(--brand);outline-offset:3px}.notification-switch:disabled{cursor:not-allowed;opacity:.5}
 .device-alerts {
     display: flex;
     align-items: center;

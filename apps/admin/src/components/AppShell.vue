@@ -413,8 +413,8 @@ onBeforeUnmount(() => {
 
         <span class="bw-spacer" />
 
-        <!-- Notification bell -->
-        <RouterLink to="/notifications" class="bw-icon-btn notification-button" title="Notifications" :aria-label="unreadNotifications ? `${unreadNotifications} unread notifications` : 'Notifications'" style="border: none">
+        <div class="bw-topbar-actions">
+        <RouterLink to="/notifications" class="bw-icon-btn topbar-utility notification-button" title="Notifications" :aria-label="unreadNotifications ? `${unreadNotifications} unread notifications` : 'Notifications'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -422,7 +422,7 @@ onBeforeUnmount(() => {
           <span v-if="unreadNotifications" class="notification-badge" aria-hidden="true">{{ unreadNotifications > 99 ? '99+' : unreadNotifications }}</span>
         </RouterLink>
 
-        <RouterLink to="/support" class="bw-icon-btn" title="Support" aria-label="Support" style="border: none">
+        <RouterLink to="/support" class="bw-icon-btn topbar-utility" title="Support" aria-label="Support">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
             <path d="M5 13h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Z" />
@@ -520,6 +520,7 @@ onBeforeUnmount(() => {
             </div>
           </transition>
         </div>
+        </div>
       </header>
 
       <main class="bw-content">
@@ -535,7 +536,7 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-.notification-button { position: relative; }
+.bw-topbar-actions{display:flex;align-items:center;gap:8px}.topbar-utility{position:relative;border:0!important;background:transparent!important;box-shadow:none!important}.notification-button { position: relative; }
 .notification-badge {
   position: absolute;
   top: 4px;
