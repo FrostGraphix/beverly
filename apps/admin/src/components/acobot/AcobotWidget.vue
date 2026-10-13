@@ -1,11 +1,15 @@
 <template>
-  <div class="beverly-ai-widget-wrapper">
+  <div ref="widgetWrapper" class="beverly-ai-widget-wrapper" :class="{ dragging: isDragging }" :style="widgetPositionStyle">
     <!-- Responsive Floating Trigger Button with Extensive Outline Bot Head & Signal Ring SVG -->
     <button
       type="button"
       class="beverly-ai-trigger-btn"
       :class="{ active: isOpen }"
-      @click="toggleWidget"
+      @click="handleTriggerClick"
+      @pointerdown="startDragging"
+      @pointermove="dragWidget"
+      @pointerup="stopDragging"
+      @pointercancel="stopDragging"
       title="Beverly AI Operations Assistant"
       aria-label="Toggle Beverly AI Assistant"
     >
@@ -276,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, onMounted } from 'vue';
+import { ref, nextTick, computed, onBeforeUnmount, onMounted } from 'vue';
 import { api } from '../../lib/api';
 import { useStaffAuthStore } from '../../stores/auth';
 import { formatAiMessage } from '@beverly/tokens/ai-message';
@@ -304,6 +308,14 @@ const inputPrompt = ref('');
 const isThinking = ref(false);
 const currentTheme = ref<'dark' | 'light' | 'executive'>('dark');
 const messageContainer = ref<HTMLElement | null>(null);
+const widgetWrapper = ref<HTMLElement | null>(null);
+const widgetPosition = ref<{ x: number; y: number } | null>(null);
+const isDragging = ref(false);
+const dragStart = { pointerX: 0, pointerY: 0, widgetX: 0, widgetY: 0 };
+let suppressTriggerClick = false;
+const widgetPositionStyle = computed(() => widgetPosition.value
+  ? { left: `${widgetPosition.value.x}px`, top: `${widgetPosition.value.y}px`, right: 'auto', bottom: 'auto' }
+  : undefined);
 const {
   isListening,
   speakResponses,
@@ -340,7 +352,78 @@ onMounted(() => {
     const activeDOM = document.documentElement.getAttribute('data-theme') as 'dark' | 'light' | 'executive';
     if (activeDOM) currentTheme.value = activeDOM;
   }
+  restoreWidgetPosition();
+  window.addEventListener('resize', clampWidgetPosition);
 });
+
+onBeforeUnmount(() => window.removeEventListener('resize', clampWidgetPosition));
+
+function clampPosition(x: number, y: number) {
+  const rect = widgetWrapper.value?.getBoundingClientRect();
+  const width = rect?.width ?? 0;
+  const height = rect?.height ?? 0;
+  const edge = 8;
+  return {
+    x: Math.min(Math.max(edge, x), Math.max(edge, window.innerWidth - width - edge)),
+    y: Math.min(Math.max(edge, y), Math.max(edge, window.innerHeight - height - edge)),
+  };
+}
+
+function restoreWidgetPosition() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('beverly-admin-ai-position') ?? 'null');
+    if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) {
+      widgetPosition.value = clampPosition(saved.x, saved.y);
+    }
+  } catch {
+    localStorage.removeItem('beverly-admin-ai-position');
+  }
+}
+
+function clampWidgetPosition() {
+  if (!widgetPosition.value) return;
+  widgetPosition.value = clampPosition(widgetPosition.value.x, widgetPosition.value.y);
+  localStorage.setItem('beverly-admin-ai-position', JSON.stringify(widgetPosition.value));
+}
+
+function startDragging(event: PointerEvent) {
+  if (event.button !== 0) return;
+  const rect = widgetWrapper.value?.getBoundingClientRect();
+  if (!rect) return;
+  dragStart.pointerX = event.clientX;
+  dragStart.pointerY = event.clientY;
+  dragStart.widgetX = rect.left;
+  dragStart.widgetY = rect.top;
+  isDragging.value = false;
+  event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture(event.pointerId);
+}
+
+function dragWidget(event: PointerEvent) {
+  if (!(event.currentTarget instanceof HTMLElement) || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+  const deltaX = event.clientX - dragStart.pointerX;
+  const deltaY = event.clientY - dragStart.pointerY;
+  if (!isDragging.value && Math.hypot(deltaX, deltaY) < 4) return;
+  isDragging.value = true;
+  suppressTriggerClick = true;
+  widgetPosition.value = clampPosition(dragStart.widgetX + deltaX, dragStart.widgetY + deltaY);
+}
+
+function stopDragging(event: PointerEvent) {
+  if (!(event.currentTarget instanceof HTMLElement) || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+  event.currentTarget.releasePointerCapture(event.pointerId);
+  if (isDragging.value && widgetPosition.value) {
+    localStorage.setItem('beverly-admin-ai-position', JSON.stringify(widgetPosition.value));
+  }
+  isDragging.value = false;
+}
+
+function handleTriggerClick() {
+  if (suppressTriggerClick) {
+    suppressTriggerClick = false;
+    return;
+  }
+  toggleWidget();
+}
 
 function cycleTheme() {
   if (currentTheme.value === 'dark') {
@@ -547,6 +630,8 @@ onMounted(() => {
   right: var(--s-5, 20px);
   z-index: var(--z-modal, 1000);
   font-family: var(--font-sans);
+  touch-action: none;
+  user-select: none;
 }
 
 /* Universal Outline SVG Icon Rules */
@@ -601,6 +686,11 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(28px) saturate(190%);
   transition: all var(--dur-base) var(--ease-out);
   overflow: hidden;
+}
+
+.beverly-ai-widget-wrapper.dragging .beverly-ai-trigger-btn {
+  cursor: grabbing;
+  transition: none;
 }
 
 .beverly-ai-glow-pulse {
