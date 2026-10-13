@@ -16,6 +16,7 @@ import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconc
 import { getBalance, captureHold, releaseHold } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { auditFromRequest, logAction } from '../services/audit.js';
+import { deleteStaffAccount, StaffDeletionError } from '../services/staff-account-deletion.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
 import { listStationDirectory, invalidateStationsCache, TokenEngineError, generateCreditToken, lookupMeter } from '../services/token-engine.js';
 import { resendRemoteSendOrder } from '../services/vending.js';
@@ -473,6 +474,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
     'POST /access/users/:userId/reset-password': 'wallet.access.manage',
     'POST /access/users/:userId/revoke-sessions': 'wallet.access.manage',
+    'DELETE /access/users/:userId': 'wallet.access.manage',
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
@@ -1606,6 +1608,32 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'access.user.sessions_revoked', targetType: 'staff_user', targetId: userId,
         });
         return { ok: true, userId };
+    });
+
+    fastify.delete('/access/users/:userId', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = z.string().uuid().parse((req.params as { userId: string }).userId);
+        z.object({ confirmation: z.literal('DELETE') }).parse(req.body);
+        try {
+            const requestAudit = auditFromRequest(req);
+            const result = await deleteStaffAccount({
+                targetUserId: userId,
+                actorUserId: req.actor!.userId,
+                actorRole: req.actor!.role,
+                auditContext: {
+                    ip: requestAudit.ip,
+                    userAgent: requestAudit.userAgent,
+                    correlationId: requestAudit.correlationId,
+                },
+            });
+            return { ok: true, ...result };
+        } catch (error) {
+            if (error instanceof StaffDeletionError) {
+                const status = error.code === 'staff_not_found' ? 404 : error.code === 'self_deletion_denied' ? 400 : error.code === 'audit_unavailable' ? 503 : 409;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     // ── stations directory (live from energy backend, 5-min cache) ──
