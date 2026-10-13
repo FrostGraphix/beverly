@@ -75,7 +75,7 @@ import { passwordSessionId, replaceVendorPassword, VendorPasswordChangeError } f
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
 import { getKycTierPolicy, KycTierPolicyError } from '../services/kyc-tier-policy.js';
 import { getKycPolicy, isKycRequiredForSubject } from '../services/kyc-policy.js';
-import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import { pushConfig, removePushSubscription, savePushSubscription } from '../services/push-notifications.js';
 import { assertOemVendAvailable, OemQuotaCircuitError } from '../services/oem-quota-circuit.js';
 
 function bearerToken(req: FastifyRequest): string {
@@ -378,7 +378,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier1/submit', { preHandler: fastify.requireVendor() }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(2).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({
@@ -405,7 +405,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/kyc/tier2/submit', { preHandler: fastify.requireVendor() }, async (req, reply) => {
-        const body = z.object({ document_ids: z.array(z.string().uuid()).min(3).max(6) }).safeParse(req.body);
+        const body = z.object({ document_ids: z.array(z.string().uuid()).min(1).max(6) }).safeParse(req.body);
         if (!body.success) return reply.code(400).send({ error: 'invalid_documents', message: body.error.message });
         try {
             const review = await submitKycReview({
@@ -508,17 +508,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!orgId) throw fastify.httpErrors.forbidden('Vendor organization required.');
         await removePushSubscription({ actorType: 'vendor', actorId: orgId, endpoint });
         return { ok: true };
-    });
-
-    fastify.post('/push/test', { preHandler: fastify.requireVendor() }, async (req, reply) => {
-        if (!pushConfig().available) return reply.code(503).send({ error: 'push_unavailable' });
-        const orgId = req.actor!.vendorOrganizationId;
-        if (!orgId) throw fastify.httpErrors.forbidden('Vendor organization required.');
-        const delivery = await sendWebPush('vendor', orgId, {
-            title: 'Beverly notifications enabled', body: 'Your device can receive vending updates.',
-            url: '/notifications', tag: `vendor-test:${orgId}`,
-        }, 'vendor');
-        return { ok: delivery.sent > 0, delivery };
     });
 
     fastify.get('/notifications', { preHandler: fastify.requireVendor() }, async (req) => {

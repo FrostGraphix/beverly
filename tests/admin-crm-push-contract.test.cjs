@@ -11,9 +11,10 @@ assert.match(migration, /force row level security/i);
 assert.match(migration, /revoke all .* anon, authenticated/i);
 
 const routes = read('backend/wallet/src/routes/admin.ts');
-for (const route of ['/push/config', '/push/subscription', '/push/test']) {
+for (const route of ['/push/config', '/push/subscription']) {
   assert.ok(routes.includes(route), `${route} must exist`);
 }
+assert.ok(!routes.includes("fastify.post('/push/test'"), '/push/test must stay removed');
 assert.match(routes, /actorId: req\.actor!\.userId/);
 
 const service = read('backend/wallet/src/services/push-notifications.ts');
@@ -31,7 +32,7 @@ for (const file of ['apps/admin/public/push-sw.js', 'public/push-sw.js']) {
 
 assert.match(read('apps/admin/vite.config.ts'), /importScripts: \['push-sw\.js'\]/);
 assert.match(read('vite.config.mjs'), /importScripts: \["push-sw\.js"\]/);
-assert.match(read('apps/admin/src/views/Notifications.vue'), /adminPushNotifications\.test\(\)/);
+assert.doesNotMatch(read('apps/admin/src/views/Notifications.vue'), /Send test|adminPushNotifications\.test\(\)/);
 assert.match(read('src/components/SettingsPage.vue'), /crmPushNotifications\.test\(\)/);
 
 console.log('Admin and CRM push contract passed.');

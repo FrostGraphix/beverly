@@ -4,7 +4,6 @@ export interface PushTransport {
     getConfig(): Promise<{ available: boolean; publicKey: string | null }>;
     save(subscription: PushSubscriptionJSON): Promise<void>;
     remove(endpoint: string): Promise<void>;
-    test(): Promise<void>;
 }
 
 function supported(): boolean {
@@ -82,6 +81,5 @@ export function createPushNotifications(portal: string, transport: PushTransport
             setDisabled(true);
             return 'default';
         },
-        test: () => transport.test(),
     };
 }

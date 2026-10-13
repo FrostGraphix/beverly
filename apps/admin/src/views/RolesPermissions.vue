@@ -1034,7 +1034,7 @@ onMounted(() => { void load(); });
               <label class="bw-label" style="margin-bottom:5px">Stations</label>
               <StationMultiSelect
                 :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []"
-                :disabled="saving || !canManage || !u.auth_user_id || u.role_key === 'super-admin'"
+                :disabled="saving || !canManage || !u.auth_user_id"
                 @update:model-value="updateStaffStations(u, $event)"
               />
             </div>

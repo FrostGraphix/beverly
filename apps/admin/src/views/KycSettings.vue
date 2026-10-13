@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import Stepper from '../components/Stepper.vue';
+import MessageSuccessHover from '../components/MessageSuccessHover.vue';
 import { api, naira, shortDate } from '../lib/api';
 
 interface Policy {
@@ -48,6 +49,11 @@ const savingAvailability = ref(false);
 const error = ref('');
 const notice = ref('');
 const requirementStep = ref(0);
+const feedback = ref({ open: false, tone: 'success' as 'success' | 'error', title: '', message: '' });
+
+function showFeedback(tone: 'success' | 'error', title: string, message: string) {
+  feedback.value = { open: true, tone, title, message };
+}
 
 function toggleEvidence(list: string[], value: string) {
   const index = list.indexOf(value);
@@ -131,9 +137,11 @@ async function saveAvailability() {
     const result = await api.put<{ policy: AvailabilityPolicy }>('/api/v1/admin/kyc-policy', { policy: availabilityPolicy.value });
     availabilityPolicy.value = result.policy;
     notice.value = 'KYC requirements updated for customers and vendors.';
+    showFeedback('success', 'KYC requirements saved', notice.value);
     requirementStep.value = 0;
   } catch (cause: any) {
     error.value = cause?.message ?? 'KYC requirements could not be saved.';
+    showFeedback('error', 'KYC save failed', error.value);
   } finally { savingAvailability.value = false; }
 }
 
@@ -153,9 +161,11 @@ async function save() {
     apply(result.policy);
     reason.value = '';
     notice.value = 'KYC limits updated. Policy-managed wallets now use the new limits.';
+    showFeedback('success', 'KYC limits saved', notice.value);
     await load();
   } catch (cause: any) {
     error.value = cause?.message ?? 'KYC settings could not be saved.';
+    showFeedback('error', 'KYC save failed', error.value);
   } finally { saving.value = false; }
 }
 
@@ -164,6 +174,7 @@ onMounted(load);
 
 <template>
   <AppShell title="KYC Settings">
+    <MessageSuccessHover :open="feedback.open" :tone="feedback.tone" :title="feedback.title" :message="feedback.message" @close="feedback.open = false" />
     <header class="page-head">
       <div>
         <p class="eyebrow">Compliance</p>
@@ -173,7 +184,6 @@ onMounted(load);
       <button class="bw-btn" :disabled="loading || saving" @click="load">Refresh</button>
     </header>
 
-    <div v-if="notice" class="bw-alert success" role="status">{{ notice }}</div>
     <div v-if="error" class="bw-alert danger" role="alert">{{ error }}</div>
 
     <section v-if="loading" class="bw-card empty">Loading KYC policy…</section>
@@ -314,4 +324,6 @@ onMounted(load);
 <style scoped>
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s-4);margin-bottom:var(--s-4)}.page-head h1{margin:0;font-size:var(--t-2xl)}.page-head p{margin:4px 0 0;color:var(--text-muted)}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:10px!important;font-weight:800;color:var(--brand)!important}.settings-card,.history-card{display:grid;gap:var(--s-4);margin-bottom:var(--s-4)}.intro{display:grid;gap:4px;padding:var(--s-3);border-radius:var(--r-md);background:oklch(from var(--info) l c h/.08);border:1px solid oklch(from var(--info) l c h/.25)}.intro span,.hint,.muted{color:var(--text-muted);font-size:var(--t-sm)}.availability-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3)}.availability-control{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-2)}.availability-control>span:first-child{display:grid;gap:4px}.availability-control small{color:var(--text-muted)}.tier-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3)}.tier-field{display:flex;flex-direction:column;gap:7px;padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-2)}.tier-field>span{color:var(--brand);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.tier-field small{color:var(--text-muted);min-height:36px}.currency-input{display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)}.currency-input span{font-weight:800;color:var(--text-muted)}.currency-input input{width:100%;border:0;background:transparent;color:var(--text);padding:10px 0;font:700 var(--t-base) var(--font-mono);outline:0}.toggle{display:flex;align-items:center;gap:8px;font-weight:700;margin-top:auto}.reason-label{display:grid;gap:8px;font-weight:700}.reason-label textarea{resize:vertical}.history-card h2{margin:0}.history-card ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}.history-card li{display:grid;gap:3px;padding-bottom:10px;border-bottom:1px solid var(--border)}.history-card li:last-child{border:0;padding-bottom:0}.history-card small{color:var(--text-muted)}.empty{text-align:center;padding:var(--s-8);color:var(--text-muted)}@media(max-width:700px){.page-head{align-items:flex-start;flex-direction:column}.page-head .bw-btn{width:100%}.availability-grid,.tier-grid{grid-template-columns:1fr}.tier-field small{min-height:0}}
 .scope-control{display:grid;gap:7px;font-weight:700}.step-pane{display:grid;gap:var(--s-4);min-height:300px}.step-heading{display:grid;gap:4px}.step-heading span{color:var(--brand);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.step-heading h2,.step-heading p{margin:0}.step-heading p{color:var(--text-muted);font-size:var(--t-sm)}.evidence-grid{display:grid;gap:var(--s-3)}.evidence-grid--two{grid-template-columns:repeat(2,minmax(0,1fr))}.evidence-grid--single{grid-template-columns:minmax(0,520px)}.evidence-grid fieldset{display:grid;gap:8px;margin:0;padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-2)}.evidence-grid legend{font-weight:800}.evidence-grid small{color:var(--text-muted);margin-bottom:4px}.evidence-grid label{display:flex;align-items:center;gap:8px}.wizard-nav{display:flex;align-items:center;justify-content:space-between;padding-top:var(--s-2);border-top:1px solid var(--border)}.review-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s-3)}.review-grid article{display:grid;gap:8px;padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-2)}.review-grid header{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3)}.review-grid button{border:0;background:transparent;color:var(--brand);font:inherit;font-weight:700;cursor:pointer}.review-grid p{margin:0;color:var(--text-muted);font-size:var(--t-sm);line-height:1.5}@media(max-width:900px){.evidence-grid--two,.review-grid{grid-template-columns:1fr}}@media(max-width:640px){.step-pane{min-height:0}.wizard-nav .bw-btn{min-width:112px}}
+.evidence-grid fieldset{gap:12px;padding:20px}.evidence-grid legend{padding:0 8px;color:var(--text)}.evidence-grid label{min-height:46px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);cursor:pointer;transition:border-color .16s,background .16s}.evidence-grid label:has(input:checked){border-color:var(--brand);background:color-mix(in srgb,var(--brand) 10%,var(--surface))}.evidence-grid input{accent-color:var(--brand)}
+@media(max-width:640px){.evidence-grid fieldset{padding:16px}.evidence-grid label{min-height:48px}}
 </style>

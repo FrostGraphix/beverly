@@ -31,13 +31,6 @@ const deviceState = ref<DeviceNotificationState>(adminPushNotifications.state())
 const deviceBusy = ref(false);
 const deviceMessage = ref('');
 const selectedNotification = ref<Notification | null>(null);
-const deviceLabel = computed(() => ({
-    enabled: 'Enabled on this device',
-    blocked: 'Blocked in browser settings',
-    unsupported: 'Unsupported by this browser',
-    unavailable: 'Unavailable until configured',
-    default: 'Off on this device',
-}[deviceState.value]));
 const filteredItems = computed(() => items.value.filter((item) =>
     filter.value === 'all' || (filter.value === 'read' ? item.read : !item.read)
 ));
@@ -122,21 +115,6 @@ async function toggleDeviceNotifications() {
     }
 }
 
-async function testDeviceNotifications() {
-    if (deviceBusy.value) return;
-    deviceBusy.value = true;
-    deviceMessage.value = '';
-    try {
-        await adminPushNotifications.test();
-        deviceMessage.value = 'Test notification sent.';
-        await load();
-    } catch (caught: any) {
-        deviceMessage.value = caught?.message ?? 'Test notification failed.';
-    } finally {
-        deviceBusy.value = false;
-    }
-}
-
 onMounted(() => {
     void load();
     void adminPushNotifications.sync().then((state) => { deviceState.value = state; }).catch(() => undefined);
@@ -161,14 +139,10 @@ onMounted(() => {
     <section class="bw-card device-notifications" aria-labelledby="device-notifications-title">
       <div>
         <strong id="device-notifications-title">Device notifications</strong>
-        <span>{{ deviceLabel }}</span>
         <small v-if="deviceMessage" aria-live="polite">{{ deviceMessage }}</small>
       </div>
       <div class="device-actions">
-        <button v-if="deviceState === 'enabled'" type="button" class="bw-btn" :disabled="deviceBusy" @click="testDeviceNotifications">Send test</button>
-        <button type="button" class="bw-btn primary" :disabled="deviceBusy || ['blocked', 'unsupported', 'unavailable'].includes(deviceState)" @click="toggleDeviceNotifications">
-          {{ deviceBusy ? 'Working...' : (deviceState === 'enabled' ? 'Turn off' : 'Turn on') }}
-        </button>
+        <button type="button" class="notification-switch" role="switch" :aria-checked="deviceState === 'enabled'" :aria-label="deviceState === 'enabled' ? 'Turn off device notifications' : 'Turn on device notifications'" :disabled="deviceBusy || ['blocked', 'unsupported', 'unavailable'].includes(deviceState)" @click="toggleDeviceNotifications"><span /></button>
       </div>
     </section>
 
@@ -234,6 +208,7 @@ onMounted(() => {
 .device-notifications > div:first-child { display: grid; gap: var(--s-1); }
 .device-notifications span, .device-notifications small { color: var(--text-muted); }
 .device-actions { display: flex; gap: var(--s-2); }
+.notification-switch{width:52px;height:30px;padding:3px;border:1px solid var(--border);border-radius:999px;background:var(--surface-2);cursor:pointer}.notification-switch span{display:block;width:22px;height:22px;border-radius:50%;background:var(--text-muted);transition:.16s}.notification-switch[aria-checked="true"]{border-color:var(--brand);background:var(--brand)}.notification-switch[aria-checked="true"] span{transform:translateX(22px);background:#03110a}.notification-switch:focus-visible{outline:2px solid var(--brand);outline-offset:3px}.notification-switch:disabled{cursor:not-allowed;opacity:.5}
 .notification-filter { min-height: 44px; padding: 0 var(--s-3); border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--t-sm); font-weight: 700; text-transform: capitalize; cursor: pointer; }
 .notification-mark-all { min-height: 44px; }
 .notification-filter.active { border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); background: color-mix(in srgb, var(--brand) 14%, var(--surface)); color: var(--brand); }

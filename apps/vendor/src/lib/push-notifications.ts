@@ -15,11 +15,9 @@ const vendorPush = createPushNotifications('vendor', {
         });
     },
     remove: (endpoint) => api.del(`/api/v1/vendor/push/subscription?endpoint=${encodeURIComponent(endpoint)}`),
-    test: () => api.post('/api/v1/vendor/push/test', {}),
 });
 
 export const deviceNotificationState = vendorPush.state;
 export const enableDeviceNotifications = vendorPush.enable;
 export const disableDeviceNotifications = vendorPush.disable;
 export const syncDeviceNotifications = vendorPush.sync;
-export const testDeviceNotifications = vendorPush.test;
