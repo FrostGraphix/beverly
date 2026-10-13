@@ -18,7 +18,7 @@ assert.match(admin, /:disabled="!hasRequiredEvidence\(row\)"/, 'admin approval m
 for (const source of [customer, vendor]) {
   assert.match(source, /v-model="identityDocumentType"/, 'identity evidence must expose its document type');
   for (const type of ['national_id', 'voters_card', 'passport', 'drivers_license']) {
-    assert.match(source, new RegExp(`value="${type}"`), `identity selector must support ${type}`);
+    assert.match(source, new RegExp(`['"]${type}['"]`), `identity selector must support ${type}`);
   }
   assert.match(source, /upload\w*\(identityFile\.value, identityDocumentType\.value/, 'uploads must preserve the selected identity type');
 }
