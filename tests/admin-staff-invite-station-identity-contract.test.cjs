@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 const adminRoutes = read('backend/wallet/src/routes/admin.ts');
+const staffProvisioning = read('backend/wallet/src/services/staff-provisioning.ts');
 const notifications = read('backend/wallet/src/services/admin-notifications.ts');
 const roles = read('apps/admin/src/views/RolesPermissions.vue');
 const vendors = read('apps/admin/src/views/Vendors.vue');
@@ -16,12 +17,14 @@ const exportMenu = read('packages/tokens/WalletExportMenu.vue');
 const exportMenuTypes = read('packages/tokens/WalletExportMenu.vue.d.ts');
 const exportWizard = read('packages/tokens/WalletExportWizard.vue');
 
-assert.match(adminRoutes, /const invitationDelivery = await notifyStaffInvitation/);
-assert.match(adminRoutes, /const emailReadiness = await staffInvitationReadiness/);
-assert.match(adminRoutes, /staff_invitation_delivery_failed/);
-assert.match(adminRoutes, /accountRolledBack: !rollbackFailed/);
-assert.match(adminRoutes, /invitationEmailStatus: invitationDelivery\.status/);
-assert.match(adminRoutes, /temporaryPassword: password, invitationDelivery/);
+assert.match(adminRoutes, /return await provisionStaff\(req\.body, req\.actor!, req\.log\)/);
+assert.doesNotMatch(adminRoutes, /auth\.admin\.createUser/);
+assert.match(staffProvisioning, /const invitationDelivery = await notifyStaffInvitation/);
+assert.match(staffProvisioning, /const emailReadiness = await staffInvitationReadiness/);
+assert.match(staffProvisioning, /staff_invitation_delivery_failed/);
+assert.match(staffProvisioning, /accountRolledBack: !cleanup\.failed/);
+assert.match(staffProvisioning, /invitationEmailStatus: invitationDelivery\.status/);
+assert.match(staffProvisioning, /temporaryPassword: password, invitationDelivery/);
 assert.match(notifications, /isResendConfigured\(\)/);
 assert.match(notifications, /export async function staffInvitationReadiness/);
 assert.match(notifications, /status: 'not_sent', reason: 'provider_error'/);
@@ -29,9 +32,9 @@ assert.match(roles, /Verification and welcome emails sent to \$\{invitedEmail\}/
 assert.match(roles, /Creation completes only after Resend confirms both the verification and welcome emails/);
 assert.match(roles, /allStations/);
 assert.match(roles, /All current and future stations/);
-assert.match(adminRoutes, /email_confirm: false/);
-assert.match(adminRoutes, /auth\.admin\.generateLink/);
-assert.match(adminRoutes, /@acoblighting\.com/);
+assert.match(staffProvisioning, /email_confirm: false/);
+assert.match(staffProvisioning, /auth\.admin\.generateLink/);
+assert.match(staffProvisioning, /@acoblighting\.com/);
 assert.match(notifications, /staffEmailVerificationEmail/);
 assert.match(notifications, /sendBatch/);
 

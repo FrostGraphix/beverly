@@ -53,6 +53,7 @@ function main() {
     "fastify.patch('/access/users/:userId/suspension'",
     "fastify.post('/access/users/:userId/reset-password'",
     "fastify.post('/access/users/:userId/revoke-sessions'",
+    "fastify.delete('/access/users/:userId'",
     "access.role.created",
     "access.role.updated",
     "access.role.deleted",
