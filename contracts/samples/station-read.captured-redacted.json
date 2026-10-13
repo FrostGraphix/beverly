@@ -1,0 +1,20 @@
+{
+  "code": 0,
+  "reason": "",
+  "result": {
+    "total": 11,
+    "data": [
+      { "stationId": "CAPTURED-01", "name": "Captured 01", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": "Observed remark" },
+      { "stationId": "CAPTURED-02", "name": "Captured 02", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-03", "name": "Captured 03", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-04", "name": "Captured 04", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-05", "name": "Captured 05", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-06", "name": "Captured 06", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": "Observed remark" },
+      { "stationId": "CAPTURED-07", "name": "Captured 07", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-08", "name": "Captured 08", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-09", "name": "Captured 09", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "CAPTURED-10", "name": "Captured 10", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null },
+      { "stationId": "ADMIN", "name": "Admin", "createId": "[redacted]", "createDate": "2024-01-01T00:00:00", "updateId": "[redacted]", "updateDate": "2024-01-01T00:00:00", "remark": null }
+    ]
+  }
+}

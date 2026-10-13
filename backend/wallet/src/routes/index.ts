@@ -14,6 +14,7 @@ import webhookRoutes from './webhooks.js';
 import customerRoutes from './customer.js';
 import acobotRoutes from './acobot.js';
 import localePreferenceRoutes from './locale-preferences.js';
+import oemRoutes from './oem.js';
 
 const routes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(healthRoutes);
@@ -30,6 +31,7 @@ const routes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(customerRoutes, { prefix: '/api/v1/customer' });
     await fastify.register(acobotRoutes,   { prefix: '/api/v1/acobot'   });
     await fastify.register(localePreferenceRoutes, { prefix: '/api/v1/preferences' });
+    await fastify.register(oemRoutes, { prefix: '/api/v1/oem' });
 };
 
 export default routes;

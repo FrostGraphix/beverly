@@ -35,17 +35,9 @@ const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "tmp", "p1");
 
 function connectionString() {
-  const raw =
-    process.env.SUPABASE_DB_URL ||
-    fs.readFileSync(path.join(root, "supabase", ".temp", "pooler-url"), "utf8").trim();
-  const password =
-    process.env.SUPABASE_DB_PASSWORD ||
-    process.env.SUPABASE_PASSWORD ||
-    process.env.POSTGRES_PASSWORD ||
-    process.env.PGPASSWORD;
-  const url = new URL(raw);
-  if (password) url.password = password;
-  return url.toString();
+  const value = String(process.env.SUPABASE_DB_URL || "").trim();
+  if (!value) throw new Error("SUPABASE_DB_URL is required");
+  return value;
 }
 
 // The live function's own predicate, reproduced exactly, so the "would delete"
@@ -145,9 +137,11 @@ COMPARISON
 }
 
 (async () => {
+  const caResponse = await fetch("https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt");
+  if (!caResponse.ok) throw new Error(`Supabase CA download failed: HTTP ${caResponse.status}`);
   const client = new Client({
     connectionString: connectionString(),
-    ssl: { rejectUnauthorized: false },
+    ssl: { ca: await caResponse.text(), rejectUnauthorized: true },
     statement_timeout: 900000,
   });
   await client.connect();

@@ -80,9 +80,9 @@ const schema = z.object({
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
     UPSTREAM_API_URL: z.string().url().optional(),
-    UPSTREAM_PASSWORD: z.string().default('ACOB_ADMIN'),
+    UPSTREAM_PASSWORD: z.string().optional(),
     UPSTREAM_BEARER_TOKEN: z.string().optional(),
-    ENERGY_AUTHORIZATION_PASSWORD: z.string().default('123456'),
+    ENERGY_AUTHORIZATION_PASSWORD: z.string().optional(),
     ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
         if (value === undefined || value === '') return undefined;
         if (typeof value === 'boolean') return value;
@@ -200,6 +200,13 @@ const schema = z.object({
             message: 'Production deployments require a dedicated APP_ENCRYPTION_KEY.',
         });
     }
+    if (values.NODE_ENV === 'production' && !values.OEM_CREDENTIALS_ENCRYPTION_KEY) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['OEM_CREDENTIALS_ENCRYPTION_KEY'],
+            message: 'Production deployments require OEM_CREDENTIALS_ENCRYPTION_KEY.',
+        });
+    }
     if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {
         if (!values.PAYSTACK_SECRET_KEY) {
             context.addIssue({
@@ -245,12 +252,12 @@ const nodeEnvironment = (appEnvironment === 'production' || process.env.VERCEL_E
 const rawSupabaseUrl = process.env.SUPABASE_URL
     || process.env.VITE_SUPABASE_URL
     || process.env.NEXT_PUBLIC_SUPABASE_URL
-    || 'https://qpoipyqgrjsjdvfqmxok.supabase.co';
+    || '';
 
 const expectedProjectRef = process.env.EXPECTED_SUPABASE_PROJECT_REF
     || (() => {
         try { return new URL(rawSupabaseUrl).hostname.split('.')[0]; }
-        catch { return 'qpoipyqgrjsjdvfqmxok'; }
+        catch { return ''; }
     })();
 
 const parsed = schema.safeParse({

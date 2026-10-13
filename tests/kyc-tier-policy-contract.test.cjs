@@ -27,6 +27,7 @@ assert.match(migration, /kyc_policy_managed boolean not null default false/);
 assert.match(migration, /alter column daily_limit_minor drop not null/);
 assert.match(hardeningMigration, /create or replace function public\.submit_kyc_evidence_review/);
 assert.match(hardeningMigration, /v_address_count integer := 0/);
+assert.match(hardeningMigration, /v_expected_documents < \(case when p_requested_tier = 2 then 3 else 2 end\)/);
 assert.match(hardeningMigration, /p_requested_tier = 2 and v_address_count < 1/);
 assert.match(hardeningMigration, /create or replace function public\.fn_create_hold/);
 assert.match(hardeningMigration, /create or replace function public\.fn_post_ledger_entry/);

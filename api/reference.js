@@ -1655,7 +1655,8 @@ async function fetchLiveStationDirectory(request) {
       {
         method: "POST",
         url: "/api/station/read",
-        headers: { ...(request?.headers || {}), "x-oem-id": oem.id },
+        headers: { ...(request?.headers || {}) },
+        __oemId: oem.id,
         __timeoutMs: request?.__timeoutMs,
       },
       "/api/station/read",
@@ -2820,6 +2821,14 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       ...cronQuery(request.url),
       mode: "backfill"
     }));
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/oem-telemetry") {
+    if (!cronAuthorized(request)) {
+      return { status: 401, body: { code: 401, msg: "Unauthorized", reason: "Unauthorized", data: null, result: null, _proxy: { source: "cron-auth", pathname } } };
+    }
+    const { syncActiveSparkMeterTelemetry } = await import("../backend/wallet/dist/services/oem-telemetry-sync.js");
+    const query = cronQuery(request.url);
+    return localJobResponse(await syncActiveSparkMeterTelemetry({ date: query.date, site: query.site }));
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/sync-oem-dimensions") {
     if (!cronAuthorized(request)) {
@@ -5415,6 +5424,7 @@ async function handler(request, response) {
       return;
     }
     if (isCanonicalWalletRequest(pathname)) {
+      setResponseHeader(response, "Cache-Control", "no-store");
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
       if (canonicalResult && (canonicalResult.status < 400 || !pathname.includes('/remote-send') || canonicalResult.status >= 400)) {

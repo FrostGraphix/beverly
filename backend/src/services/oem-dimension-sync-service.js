@@ -244,6 +244,9 @@ async function syncMeters(oemConfig, authHeader, customerMap, accountsResult, dr
  */
 async function syncOemDimensions({ oemSlug = DEFAULT_OEM_SLUG, dryRun = false, log = () => {} } = {}) {
   const oemConfig = await resolveOemConfig(oemSlug);
+  if (oemConfig && !oemConfig.isSeedDefault && oemConfig.slug !== DEFAULT_OEM_SLUG) {
+    throw new Error("Installation gateway required for non-default OEM synchronization");
+  }
   if (!oemConfig) throw new Error(`OEM not found in oem_manufacturers: ${oemSlug}`);
   if (!oemConfig.liveBaseUrl) {
     // Legacy env fallback -- kept only for the seeded Calinmeter row so this

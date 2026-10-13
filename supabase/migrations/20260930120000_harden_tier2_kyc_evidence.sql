@@ -36,7 +36,7 @@ begin
   end if;
 
   v_expected_documents := jsonb_array_length(coalesce(p_submission -> 'document_ids', '[]'::jsonb));
-  if v_expected_documents < case when p_requested_tier = 2 then 3 else 2 end then
+  if v_expected_documents < (case when p_requested_tier = 2 then 3 else 2 end) then
     raise exception using errcode = '22023', message = 'kyc_documents_required';
   end if;
   select * into v_request from public.kyc_review_requests

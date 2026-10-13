@@ -17,9 +17,9 @@ for (const line of envText.split(/\r?\n/)) {
 
 const client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-client.from('oem_credentials').select('*').limit(5).then(r => {
+client.from('oem_credentials').select('oem_id, auth_strategy, encryption_key_version, updated_at').limit(5).then(r => {
     if (r.error) { console.error('Error:', r.error.message); process.exit(1); }
-    console.log('oem_credentials rows (all):');
+    console.log('oem_credentials metadata:');
     console.log(JSON.stringify(r.data, null, 2));
     if (r.data && r.data.length > 0) {
         console.log('Column names:', Object.keys(r.data[0]).join(', '));
