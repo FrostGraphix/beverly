@@ -1,6 +1,13 @@
 # OEM pipeline execution status
 
-Status: **Read-only integration remains draft; provider-controlled gates remain**. Updated 2026-10-12.
+Status: **Read-only integration remains draft; provider-controlled gates remain**. Updated 2026-10-13.
+
+## 2026-10-13 release checkpoint
+
+- Reconciled this branch with `origin/main` through commit `60d8650f`, resolving the configuration, package, lockfile, and temporary-password conflicts. PR #153 at `758fbe5d` is mergeable and reports passing build, contract, frontend typecheck/build, wallet test, and Vercel Preview checks. E2E API integrity is skipped by CI; passing checks do not certify live ingestion.
+- Vercel environment-variable metadata access now works through the connected app. The returned listing is truncated, so the installation keyring's presence and usable value are **not verified**. The separate legacy `OEM_CREDENTIALS_ENCRYPTION_KEY` is visible by name; it cannot substitute for `OEM_INSTALLATION_ENCRYPTION_KEYS`. No secret was printed, changed, or provisioned.
+- After reconciliation, the full root regression, security suite, and root typecheck passed. The wallet suite initially timed out one unrelated email-gate test under parallel load; that test passed alone, then all 94 wallet files and 652 tests passed on rerun. The KYC wizard browser test passed after rebuilding its admin bundle. All six production builds passed, but the root build launcher again selected Node 24.13.1; the admin app also built under explicit Node 22.23.3. The previous checkpoint records all six builds under explicit Node 22.23.3 before the last KYC-only main merge.
+- Production remains inactive. The Beverly production database last showed zero installation credential rows and zero telemetry readings on 2026-10-12. No post-merge authenticated deployed ingestion, nonempty provider telemetry, downstream display, or certified financial write has been verified. Do not promote or activate on PR checks alone.
 
 ## 2026-10-12 release investigation
 
