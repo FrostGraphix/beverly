@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { useVendorAuthStore } from '../stores/auth';
 
 const auth = useVendorAuthStore();
+const route = useRoute();
 const state = ref<any>(null);
+const documentPolicy = ref<any>(null);
 const identityFile = ref<File | null>(null);
 const identityDocumentType = ref<'national_id' | 'voters_card' | 'passport' | 'drivers_license'>('national_id');
 const selfieFile = ref<File | null>(null);
@@ -19,6 +22,7 @@ const error = ref('');
 const notice = ref('');
 const fileError = ref('');
 const upgradeStarted = ref(false);
+const forcedKyc = computed(() => String(route.query.reason ?? '').toLowerCase() === 'required');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
@@ -28,13 +32,16 @@ const addressTypes = new Set(['utility_bill', 'bank_statement']);
 
 const tier = computed(() => Number(state.value?.kyc_tier ?? auth.user?.kyc_tier ?? 0));
 const requestedTier = computed<1 | 2>(() => tier.value === 0 ? 1 : 2);
-const needsAddress = computed(() => requestedTier.value === 2);
+const requirement = computed(() => documentPolicy.value?.vendor?.tier2 ?? { identity: ['national_id', 'voters_card', 'passport', 'drivers_license'], selfie: true, address: ['utility_bill', 'bank_statement'] });
+const needsIdentity = computed(() => requirement.value.identity.length > 0);
+const needsSelfie = computed(() => requirement.value.selfie === true);
+const needsAddress = computed(() => requirement.value.address.length > 0);
 const status = computed(() => state.value?.kyc_status ?? auth.user?.kyc_status ?? 'unverified');
 const pending = computed(() => status.value === 'pending' || state.value?.review?.status === 'pending');
 const reviewNote = computed(() => String(state.value?.review?.reviewer_note ?? '').trim());
 const changesRequested = computed(() => state.value?.review?.status === 'rejected');
 const selectedFileCount = computed(() => [identityFile.value, selfieFile.value, ...(needsAddress.value ? [addressFile.value] : [])].filter(Boolean).length);
-const requiredFileCount = computed(() => needsAddress.value ? 3 : 2);
+const requiredFileCount = computed(() => Number(needsIdentity.value) + Number(needsSelfie.value) + Number(needsAddress.value));
 const reusableDocuments = computed(() => (state.value?.documents ?? []).filter((document: any) => (
   document.kyc_tier === requestedTier.value && Boolean(document.uploaded_at) && !document.review_request_id
 )));
@@ -44,7 +51,7 @@ const savedAddress = computed(() => reusableDocuments.value.find((document: any)
 const hasIdentity = computed(() => Boolean(savedIdentity.value || identityFile.value));
 const hasSelfie = computed(() => Boolean(savedSelfie.value || selfieFile.value));
 const hasAddress = computed(() => Boolean(savedAddress.value || addressFile.value));
-const canSubmit = computed(() => hasIdentity.value && hasSelfie.value && (!needsAddress.value || hasAddress.value));
+const canSubmit = computed(() => (!needsIdentity.value || hasIdentity.value) && (!needsSelfie.value || hasSelfie.value) && (!needsAddress.value || hasAddress.value));
 const policy = computed(() => state.value?.policy ?? null);
 const businessName = computed(() => auth.user?.organization_name?.trim() || 'Your business');
 
@@ -83,7 +90,14 @@ async function load() {
   stateLoaded.value = false;
   error.value = '';
   try {
-    state.value = await api.get('/api/v1/vendor/kyc/status');
+    const [current, rules] = await Promise.all([
+      api.get('/api/v1/vendor/kyc/status'),
+      api.get<{ policy: any }>('/api/v1/vendor/kyc/policy'),
+    ]);
+    state.value = current;
+    documentPolicy.value = rules.policy;
+    if (!requirement.value.identity.includes(identityDocumentType.value)) identityDocumentType.value = requirement.value.identity[0] ?? 'national_id';
+    if (!requirement.value.address.includes(addressDocumentType.value)) addressDocumentType.value = requirement.value.address[0] ?? 'utility_bill';
     stateLoaded.value = true;
   }
   catch (cause: any) { error.value = cause?.message ?? 'KYC status failed.'; }
@@ -224,7 +238,7 @@ onMounted(load);
     <section v-else-if="tier >= 2" class="bw-card complete-card">
       <span class="complete-mark">✓</span><div><h2>Enhanced KYC complete</h2><p>Your vendor account reached Tier 2.</p></div>
     </section>
-    <section v-else-if="tier === 0 && !upgradeStarted && !changesRequested" class="bw-card complete-card">
+    <section v-else-if="tier === 0 && !forcedKyc && !upgradeStarted && !changesRequested" class="bw-card complete-card">
       <span class="complete-mark">✓</span>
       <div>
         <h2>Your vendor wallet is ready</h2>
@@ -233,26 +247,23 @@ onMounted(load);
       <button class="bw-btn primary" type="button" @click="upgradeStarted = true">Raise my limit</button>
     </section>
     <section v-else class="bw-card submission-card">
-      <div class="section-head"><div><span>Next verification</span><h2>Request Tier {{ requestedTier }}</h2></div><span class="bw-badge warn">Beverly review</span></div>
+      <div class="section-head"><div><span>{{ forcedKyc ? 'Required verification' : 'Next verification' }}</span><h2>Request Tier {{ requestedTier }}</h2></div><span class="bw-badge warn">Beverly review</span></div>
       <p class="instructions">{{ needsAddress ? 'Provide identity, a current selfie, and recent business address evidence.' : 'Provide identity and a current selfie to raise your configured daily limit.' }}</p>
       <form @submit.prevent="submit">
         <div class="upload-grid">
-          <label class="upload-field">
+          <label v-if="needsIdentity" class="upload-field">
             <strong>Government identity</strong>
             <span>NIN slip, passport, licence, or voter card.</span>
             <template v-if="savedIdentity"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
             <template v-else>
               <select v-model="identityDocumentType" class="bw-input" aria-label="Identity document type" :disabled="submitting">
-                <option value="national_id">NIN slip</option>
-                <option value="voters_card">Voter card</option>
-                <option value="passport">Passport</option>
-                <option value="drivers_license">Driver's licence</option>
+                <option v-for="type in requirement.identity" :key="type" :value="type">{{ type === 'national_id' ? 'NIN slip' : type.replace(/_/g, ' ') }}</option>
               </select>
               <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Government identity file" :disabled="submitting" @change="selectFile('identity', $event)" />
               <small>{{ identityFile ? `Selected: ${identityFile.name}` : 'Choose a file' }}</small>
             </template>
           </label>
-          <label class="upload-field">
+          <label v-if="needsSelfie" class="upload-field">
             <strong>Representative selfie</strong>
             <span>Use a clear photo. Avoid filters.</span>
             <template v-if="savedSelfie"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
@@ -266,15 +277,14 @@ onMounted(load);
             <template v-if="savedAddress"><small class="saved-file">✓ Saved securely. Ready for review.</small></template>
             <template v-else>
               <select v-model="addressDocumentType" class="bw-input" aria-label="Address document type" :disabled="submitting">
-                <option value="utility_bill">Utility bill</option>
-                <option value="bank_statement">Bank statement</option>
+                <option v-for="type in requirement.address" :key="type" :value="type">{{ type.replace(/_/g, ' ') }}</option>
               </select>
               <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" aria-label="Business address file" :disabled="submitting" @change="selectFile('address', $event)" />
               <small>{{ addressFile ? `Selected: ${addressFile.name}` : 'Choose a recent document' }}</small>
             </template>
           </label>
         </div>
-        <p class="selection-summary" role="status" aria-live="polite">{{ [savedIdentity || identityFile, savedSelfie || selfieFile, ...(needsAddress ? [savedAddress || addressFile] : [])].filter(Boolean).length }} of {{ requiredFileCount }} required files ready.</p>
+        <p class="selection-summary" role="status" aria-live="polite">{{ [needsIdentity && (savedIdentity || identityFile), needsSelfie && (savedSelfie || selfieFile), needsAddress && (savedAddress || addressFile)].filter(Boolean).length }} of {{ requiredFileCount }} required files ready.</p>
         <p class="privacy">Private storage. File validated. Maximum 10 MB.</p>
         <div v-if="fileError" class="bw-alert danger" role="alert">{{ fileError }}</div>
         <div v-if="progress" class="bw-alert info" role="status" aria-live="polite">{{ progress }}</div>

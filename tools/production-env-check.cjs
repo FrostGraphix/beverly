@@ -45,6 +45,8 @@ function checkProductionConfig(env = process.env) {
   const jwtSecret = String(env.JWT_SECRET || "");
   const encryptionKey = String(env.APP_ENCRYPTION_KEY || "");
   const corsOrigins = splitOrigins(env.CORS_ORIGINS);
+  const supabaseAnonKey = String(env.SUPABASE_ANON_KEY || "").trim();
+  const supabaseServiceRoleKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY || "").trim();
 
   if (production && defaultJwtSecrets.has(jwtSecret)) {
     failures.push("JWT_SECRET must be replaced in production");
@@ -60,6 +62,12 @@ function checkProductionConfig(env = process.env) {
   }
   if (production && !corsOrigins.length) {
     failures.push("CORS_ORIGINS must be set in production");
+  }
+  if (production && !supabaseServiceRoleKey) {
+    failures.push("SUPABASE_SERVICE_ROLE_KEY must be set in production");
+  }
+  if (production && supabaseServiceRoleKey && supabaseServiceRoleKey === supabaseAnonKey) {
+    failures.push("SUPABASE_SERVICE_ROLE_KEY must not reuse SUPABASE_ANON_KEY");
   }
   if (production && corsOrigins.some((origin) => origin === "*" || origin.includes("localhost") || origin.includes("127.0.0.1"))) {
     failures.push("CORS_ORIGINS must use production origins only");

@@ -1,6 +1,6 @@
 /**
  * Static asset serving.
- *   GET /assets/beverly-logo.png — the official Beverly lockup, referenced by
+ *   GET /assets/beverly-logo.png — the official Beverly mark, referenced by
  *   transactional emails (email clients need an absolute, publicly reachable
  *   URL — they cannot use the SPA's bundled /brand/* paths).
  */

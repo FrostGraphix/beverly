@@ -4,6 +4,9 @@ const state = vi.hoisted(() => ({
     captureHold: vi.fn(),
     deliveredUpdates: [] as Record<string, unknown>[],
     exceptions: [] as Record<string, unknown>[],
+    hold: { status: 'active', wallet_id: 'wallet-1', amount_minor: 1000 } as Record<string, unknown>,
+    debits: [] as Record<string, unknown>[],
+    orders: [] as Record<string, unknown>[],
 }));
 
 vi.mock('../../services/ledger.js', () => ({ captureHold: state.captureHold }));
@@ -27,25 +30,30 @@ vi.mock('../../db/supabase.js', () => ({
                     select: () => ({
                         eq: () => ({
                             not: () => ({
-                                limit: async () => ({
-                                    data: [{
-                                        id: 'order-1', hold_id: 'hold-1', meter_id: '1234',
-                                        created_by: 'customer-1', delivery_state: null, token: 'TOKEN',
-                                    }],
-                                }),
+                                or: () => ({ limit: async () => ({ data: state.orders.filter(
+                                    (order) => order.delivery_state == null || order.delivery_state === 'token_generated',
+                                ) }) }),
                             }),
                         }),
                     }),
                     update: (payload: Record<string, unknown>) => ({
-                        eq: async () => {
+                        eq: () => ({ eq: async () => {
                             state.deliveredUpdates.push(payload);
                             return { error: null };
-                        },
+                        } }),
                     }),
                 };
             }
             if (table === 'wallet_holds') {
-                return { select: () => ({ eq: () => ({ lt: async () => ({ data: [] }) }) }) };
+                return { select: () => ({ eq: () => ({
+                    lt: async () => ({ data: [] }),
+                    single: async () => ({ data: state.hold, error: null }),
+                }) }) };
+            }
+            if (table === 'wallet_ledger_entries') {
+                return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({
+                    eq: async () => ({ data: state.debits, error: null }),
+                }) }) }) }) };
             }
             if (table === 'operations_exceptions') {
                 return {
@@ -67,6 +75,10 @@ describe('purchase recovery scheduler', () => {
         state.captureHold.mockReset();
         state.deliveredUpdates.length = 0;
         state.exceptions.length = 0;
+        state.hold = { status: 'active', wallet_id: 'wallet-1', amount_minor: 1000 };
+        state.debits = [];
+        state.orders = [{ id: 'order-1', hold_id: 'hold-1', meter_id: '1234',
+            created_by: 'customer-1', delivery_state: null, token: 'TOKEN' }];
     });
 
     it('captures generated-token holds before marking delivery complete', async () => {
@@ -88,5 +100,29 @@ describe('purchase recovery scheduler', () => {
             target_id: 'order-1',
             status: 'open',
         }));
+    });
+
+    it('does not recapture an already captured hold with a matching debit', async () => {
+        state.hold.status = 'captured';
+        state.debits = [{ id: 'debit-1', wallet_id: 'wallet-1', amount_minor: 1000 }];
+        await sweepExpiredHolds();
+        expect(state.captureHold).not.toHaveBeenCalled();
+        expect(state.deliveredUpdates).toHaveLength(1);
+    });
+
+    it('does not mark delivery when a captured hold has no matching debit', async () => {
+        state.hold.status = 'captured';
+        await sweepExpiredHolds();
+        expect(state.deliveredUpdates).toHaveLength(0);
+        expect(state.exceptions).toHaveLength(1);
+    });
+
+    it('leaves remote-send purchases in their own delivery workflow', async () => {
+        state.orders[0].delivery_state = 'remote_send_pending_review';
+        state.hold.status = 'captured';
+        await sweepExpiredHolds();
+        expect(state.captureHold).not.toHaveBeenCalled();
+        expect(state.deliveredUpdates).toHaveLength(0);
+        expect(state.exceptions).toHaveLength(0);
     });
 });

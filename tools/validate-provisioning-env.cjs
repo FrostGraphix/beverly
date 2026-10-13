@@ -28,6 +28,9 @@ function validateProvisioningEnv(env = process.env) {
     ? requiredProductionKeys.filter((key) => !String(env[key] || "").trim())
     : [];
   const placeholders = requiredProductionKeys.filter((key) => /example|changeme|placeholder/i.test(String(env[key] || "")));
+  if (production && String(env.SUPABASE_SERVICE_ROLE_KEY || "") === String(env.SUPABASE_ANON_KEY || "")) {
+    placeholders.push("SUPABASE_SERVICE_ROLE_KEY must not reuse SUPABASE_ANON_KEY");
+  }
   return {
     production,
     requiredProductionKeys,

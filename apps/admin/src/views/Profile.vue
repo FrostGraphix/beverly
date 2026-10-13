@@ -342,6 +342,7 @@ onBeforeUnmount(() => {
 
 .profile-hero {
   position: relative;
+  z-index: 1;
   overflow: visible;
   display: flex;
   align-items: center;

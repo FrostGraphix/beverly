@@ -154,11 +154,15 @@ function layout(opts: LayoutOpts): string {
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
 
-        <!-- official Beverly lockup, embedded inline for reliable email delivery -->
+        <!-- The supplied Beverly mark sits on a fixed white tile. This keeps its
+             dark artwork readable when phone mail clients switch the surrounding
+             message to dark mode, without relying on image-inverting behaviour. -->
         <tr><td style="padding:0 4px 20px;">
-          <span class="beverly-logo-shell" style="display:inline-block;background:#ffffff;padding:8px 12px;border-radius:12px;">
-            <img src="${logoUrl()}" width="120" height="52" alt="Beverly" style="display:block;border:0;outline:none;text-decoration:none;width:120px;height:auto;">
-          </span>
+          <table class="beverly-logo-shell" role="presentation" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;">
+            <tr><td style="padding:8px;">
+              <img src="${logoUrl()}" width="52" height="52" alt="Beverly" style="display:block;border:0;outline:none;text-decoration:none;width:52px;height:52px;">
+            </td></tr>
+          </table>
         </td></tr>
 
         <!-- card -->

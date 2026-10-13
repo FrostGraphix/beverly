@@ -1172,7 +1172,8 @@ function cacheApiResponse(entry) {
     db.memoryStore.api_cache.set(key, {
       status: Number(entry.status || 200),
       source: String(entry.source || "unknown"),
-      body: sanitizeValue(entry.body || {})
+      body: sanitizeValue(entry.body || {}),
+      expiresAt: entry.expiresAt || new Date(Date.now() + 3600000).toISOString()
     });
     return;
   }
@@ -1207,16 +1208,23 @@ function readCachedApiResponse(entry) {
       path: String(entry.path || "/"),
       requestKey: String(entry.requestKey || "")
     });
-    return db.memoryStore.api_cache.get(key) || null;
+    const cached = db.memoryStore.api_cache.get(key);
+    if (!cached || Date.parse(cached.expiresAt) <= Date.now()) {
+      db.memoryStore.api_cache.delete(key);
+      return null;
+    }
+    return cached;
   }
   const row = db.prepare(`
     SELECT status_code, response_json, source
     FROM api_cache
     WHERE method = ? AND path = ? AND request_key = ?
+      AND updated_at > ?
   `).get(
     String(entry.method || "GET").toUpperCase(),
     String(entry.path || "/"),
-    String(entry.requestKey || "")
+    String(entry.requestKey || ""),
+    new Date(Date.now() - 3600000).toISOString()
   );
   if (!row) return null;
   return {

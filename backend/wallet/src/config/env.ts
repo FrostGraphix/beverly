@@ -121,15 +121,15 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    VENDOR_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
-    STAFF_PORTAL_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-admin/'),
+    VENDOR_PORTAL_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
+    STAFF_PORTAL_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-admin/'),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
     VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
     CUSTOMER_METER_ORDER_CALLBACK_URL: z.string().url().optional(),
 
     // Public app base URLs — used to build password-reset links in emails.
-    CUSTOMER_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-customer/'),
-    VENDOR_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
+    CUSTOMER_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-customer/'),
+    VENDOR_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
 
     // Firebase Cloud Messaging — push notifications
@@ -279,10 +279,12 @@ if (!parsed.success) {
     throw new Error(message);
 }
 
+const resolvedData = parsed.data;
+
 export const env = {
-    ...parsed.data,
-    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
-    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
+    ...resolvedData,
+    ENERGY_BACKEND_URL: resolvedData.UPSTREAM_API_URL || resolvedData.ENERGY_BACKEND_URL,
+    ENERGY_BEARER_TOKEN: resolvedData.UPSTREAM_BEARER_TOKEN || resolvedData.ENERGY_BEARER_TOKEN,
 };
 
 export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {
@@ -312,20 +314,6 @@ export const isDev = env.NODE_ENV === 'development';
 export function isCorsOriginAllowed(origin: string | undefined): boolean {
     if (!origin) return true;
     if (corsOrigins.includes(origin)) return true;
-
-    try {
-        const parsed = new URL(origin);
-        if (
-            (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-            (
-                parsed.hostname === 'beverly.acoblighting.com' ||
-                parsed.hostname.endsWith('.acoblighting.com') ||
-                parsed.hostname.endsWith('.vercel.app')
-            )
-        ) {
-            return true;
-        }
-    } catch { /* ignore */ }
 
     if (isDev) {
         try {

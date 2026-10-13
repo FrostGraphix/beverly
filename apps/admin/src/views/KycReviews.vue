@@ -141,7 +141,7 @@ onMounted(() => load());
         <h1>KYC tier reviews</h1>
         <p>Review identity evidence. Approve sequential tiers.</p>
       </div>
-      <button class="bw-btn" :disabled="loading" @click="load()">Refresh</button>
+      <div class="head-actions"><RouterLink v-if="canReview" to="/kyc-settings" class="bw-btn">KYC settings</RouterLink><button class="bw-btn" :disabled="loading" @click="load()">Refresh</button></div>
     </header>
 
     <div v-if="notice" class="bw-alert success" role="status">{{ notice }}</div>

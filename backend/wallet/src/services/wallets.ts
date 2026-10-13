@@ -66,7 +66,7 @@ export function assertWalletCanTransact(wallet: Pick<Wallet, 'status'> | null | 
 export async function getOrCreateWallet(
     ownerType: OwnerType,
     ownerId: string,
-    opts: { dailyCapMinor?: number; monthlyCapMinor?: number } = {},
+    opts: { dailyCapMinor?: number; monthlyCapMinor?: number; kycPolicyManaged?: boolean } = {},
 ): Promise<Wallet> {
     const { data: existing } = await adminClient
         .from('wallets')
@@ -76,13 +76,32 @@ export async function getOrCreateWallet(
         .maybeSingle();
     if (existing) return existing as Wallet;
 
+    const managePolicy = opts.kycPolicyManaged ?? true;
+    let dailyCap = opts.dailyCapMinor ?? null;
+    let monthlyCap = opts.monthlyCapMinor ?? null;
+
+    if (managePolicy && dailyCap === null) {
+        try {
+            const { data: policy } = await adminClient
+                .from('kyc_tier_settings')
+                .select('tier0_daily_limit_minor')
+                .eq('singleton', true)
+                .maybeSingle();
+            dailyCap = policy?.tier0_daily_limit_minor ?? 20_000_000;
+        } catch {
+            dailyCap = 20_000_000;
+        }
+        monthlyCap = null;
+    }
+
     const { data, error } = await adminClient
         .from('wallets')
         .insert({
             owner_type: ownerType,
             owner_id: ownerId,
-            daily_debit_cap_minor: opts.dailyCapMinor ?? null,
-            monthly_debit_cap_minor: opts.monthlyCapMinor ?? null,
+            daily_debit_cap_minor: dailyCap,
+            monthly_debit_cap_minor: monthlyCap,
+            kyc_policy_managed: managePolicy,
         })
         .select('*')
         .single();

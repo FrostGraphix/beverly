@@ -53,6 +53,7 @@ import {
 } from '../services/customer-kyc.js';
 import { activateKycUpload, createKycUpload, currentKycState, KycReviewError, submitKycReview } from '../services/kyc-reviews.js';
 import { getKycTierPolicy, KycTierPolicyError } from '../services/kyc-tier-policy.js';
+import { getKycPolicy, isKycRequiredForSubject } from '../services/kyc-policy.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
     linkMeter, unlinkMeter, listCustomerMeters, listCustomerMeterLinkHistory, listCustomerPurchases, sendTokenSmsToCustomer,
@@ -609,6 +610,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
             throw error;
         }
     });
+
+    fastify.get('/kyc/policy', { preHandler: fastify.requireCustomer() }, async (req) => ({
+        policy: await getKycPolicy(),
+        required: await isKycRequiredForSubject('customer', req.actor!.customerId!),
+    }));
 
     fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const body = z.object({

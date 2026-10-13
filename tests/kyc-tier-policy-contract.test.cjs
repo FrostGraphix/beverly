@@ -43,12 +43,24 @@ assert.match(policy, /eq\('version', input\.expectedVersion\)/);
 assert.match(wallets, /getOrCreateOwnerKycWallet/);
 
 assert.match(adminRoutes, /'PUT \/kyc\/settings': 'wallet\.kyc\.settings\.manage'/);
+assert.match(adminRoutes, /'PUT \/kyc-policy': 'wallet\.kyc\.settings\.manage'/);
 assert.match(adminRoutes, /action: 'kyc\.policy\.updated'/);
 assert.match(adminRoutes, /from\('kyc_tier_policy_history'\)/);
 assert.match(rbac, /wallet\.kyc\.settings\.manage/);
 assert.match(settings, /expectedVersion: policy\.value\.version/);
 assert.match(settings, /No daily cap/);
 assert.match(settings, /reason\.value\.trim\(\)\.length >= 4/);
+assert.match(settings, /v-model="availabilityPolicy\.customer_enabled"/);
+assert.match(settings, /v-model="availabilityPolicy\.vendor_enabled"/);
+assert.match(settings, /Save KYC requirements/);
+assert.match(settings, /All unverified customers/);
+assert.match(settings, /New customers from activation/);
+assert.match(settings, /NIN \/ national ID/);
+assert.match(settings, /Customer Tier 1/);
+assert.match(settings, /Vendor Tier 2/);
+assert.match(read('backend/wallet/src/services/kyc-policy.ts'), /isKycRequiredForSubject/);
+assert.match(read('apps/customer/src/router/index.ts'), /reason: 'required'/);
+assert.match(read('apps/vendor/src/router/index.ts'), /reason: 'required'/);
 
 for (const route of ['/meters', '/wallet/fund', '/purchase/preview', '/purchase', '/purchase/step-up-verify']) {
   assert.match(customerRoutes, new RegExp(`'${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'.*requireKycTier\\(0\\)`));

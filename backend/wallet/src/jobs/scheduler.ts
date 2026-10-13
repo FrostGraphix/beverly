@@ -96,29 +96,53 @@ export async function reconcileGeneratedHoldOrders(): Promise<void> {
         .select('*')
         .eq('status', 'hold_active')
         .not('token', 'is', null)
+        // Remote-send orders have their own delivery lifecycle. They may already
+        // have a captured hold while meter delivery remains pending or failed.
+        .or('delivery_state.is.null,delivery_state.eq.token_generated')
         .limit(50);
 
     if (!rows?.length) return;
     let count = 0;
     for (const po of rows as any[]) {
         try {
-            if (po.hold_id) {
-                const { captureHold } = await import('../services/ledger.js');
-                const { ledgerKey } = await import('../services/idempotency.js');
-                await captureHold({
-                    holdId: po.hold_id,
-                    entryType: 'purchase_debit',
-                    referenceType: 'purchase_order',
-                    referenceId: po.id,
-                    idempotencyKey: ledgerKey('purchase', 'capture', po.id, 'reconcile-auto'),
-                    memo: `Auto Reconcile · ${po.meter_id}`,
-                    createdBy: po.created_by ?? 'system',
-                });
+            if (!po.hold_id) throw new Error('purchase hold is missing');
+            {
+                const { data: hold, error: holdError } = await adminClient
+                    .from('wallet_holds').select('wallet_id, amount_minor, status')
+                    .eq('id', po.hold_id).single();
+                if (holdError || !hold) throw new Error('purchase hold could not be verified');
+                if (hold.status === 'captured') {
+                    const { data: debits, error: debitError } = await adminClient
+                        .from('wallet_ledger_entries')
+                        .select('id, wallet_id, amount_minor')
+                        .eq('reference_type', 'purchase_order')
+                        .eq('reference_id', po.id)
+                        .eq('entry_type', 'purchase_debit')
+                        .eq('direction', 'debit');
+                    if (debitError || debits?.length !== 1 || debits[0].wallet_id !== hold.wallet_id
+                        || Number(debits[0].amount_minor) !== Number(hold.amount_minor)) {
+                        throw new Error('captured purchase hold has no matching debit');
+                    }
+                } else if (hold.status === 'active') {
+                    const { captureHold } = await import('../services/ledger.js');
+                    const { ledgerKey } = await import('../services/idempotency.js');
+                    await captureHold({
+                        holdId: po.hold_id,
+                        entryType: 'purchase_debit',
+                        referenceType: 'purchase_order',
+                        referenceId: po.id,
+                        idempotencyKey: ledgerKey('purchase', 'capture', po.id, 'reconcile-auto'),
+                        memo: `Auto Reconcile · ${po.meter_id}`,
+                        createdBy: po.created_by ?? 'system',
+                    });
+                } else {
+                    throw new Error(`purchase hold is ${hold.status}`);
+                }
             }
             const { error: updateError } = await adminClient.from('purchase_orders').update({
                 status: 'delivered',
                 delivery_state: po.delivery_state || 'token_generated',
-            }).eq('id', po.id);
+            }).eq('id', po.id).eq('status', 'hold_active');
             if (updateError) throw updateError;
             count++;
         } catch (error) {

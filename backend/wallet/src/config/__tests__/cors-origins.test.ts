@@ -17,4 +17,10 @@ describe('wallet portal CORS origins', () => {
     it('rejects unrelated origins', () => {
         expect(isCorsOriginAllowed('https://attacker.example')).toBe(false);
     });
+
+    it('allows only configured application origins outside development', () => {
+        expect(isCorsOriginAllowed('http://localhost:5173')).toBe(true);
+        expect(isCorsOriginAllowed('https://unrelated.vercel.app')).toBe(false);
+        expect(isCorsOriginAllowed('https://unrelated.acoblighting.com')).toBe(false);
+    });
 });
