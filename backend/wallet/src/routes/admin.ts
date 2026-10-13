@@ -33,7 +33,7 @@ import {
     getKycPolicy, kycPolicySchema, updateKycPolicy,
     getKycTierSettings, updateKycTierSettings, getKycTierPolicyHistory, kycTierSettingsUpdateSchema,
 } from '../services/kyc-policy.js';
-import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement, staffInvitationReadiness } from '../services/admin-notifications.js';
+import { notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
@@ -50,11 +50,11 @@ import adminReportsRoutes from './admin-reports.js';
 import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
 import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { adminConsumptionRoutes } from './admin-consumption.js';
-import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds, staffStations } from '../services/staff-station-scope.js';
 import { CUSTOM_ROLE_RESTRICTED_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
+import { deleteStaff, provisionStaff, StaffProvisioningError } from '../services/staff-provisioning.js';
 import { generateTemporaryPassword } from '../services/temporary-password.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -468,6 +468,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'DELETE /access/roles/:roleKey': 'wallet.access.manage',
     'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
     'POST /access/users': 'wallet.access.manage',
+    'DELETE /access/users/:userId': 'wallet.access.manage',
     'PATCH /access/users/:userId/role': 'wallet.access.manage',
     'PATCH /access/users/:userId/station': 'wallet.access.manage',
     'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
@@ -596,8 +597,8 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',
-    'GET /kyc-policy': 'wallet.kyc.review',
-    'PUT /kyc-policy': 'wallet.kyc.review',
+    'GET /kyc-policy': 'wallet.kyc.settings.manage',
+    'PUT /kyc-policy': 'wallet.kyc.settings.manage',
     'GET /kyc-tier-settings': 'wallet.kyc.settings.manage',
     'GET /kyc-tier-settings/history': 'wallet.kyc.settings.manage',
     'PUT /kyc-tier-settings': 'wallet.kyc.settings.manage',
@@ -1186,7 +1187,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-    fastify.get('/access', async () => {
+    fastify.get('/access', async (_req, reply) => {
         const [roleResult, permissionResult, initialStaffResult, authUsers] = await Promise.all([
             adminClient.from('roles').select('*').order('role_key', { ascending: true }),
             adminClient.from('permissions').select('*').order('role_key', { ascending: true }),
@@ -1199,10 +1200,14 @@ const route: FastifyPluginAsync = async (fastify) => {
         const roles = roleResult.data;
         const permissions = permissionResult.data;
         const staffRows = staffResult.data;
+        if (staffResult.error || authUsers.error) {
+            return reply.code(503).send({ error: 'staff_directory_unavailable', message: 'The staff directory could not be verified.' });
+        }
         const authById = new Map((authUsers.data?.users ?? []).map((user) => [user.id, user]));
-        const staff = (staffRows ?? []).map((row: any) => {
+        const staff = (staffRows ?? []).flatMap((row: any) => {
             const authUser = authById.get(row.auth_user_id ?? row.user_id);
-            return {
+            if (!authUser) return [];
+            return [{
                 ...row,
                 auth_user_id: row.auth_user_id ?? row.user_id ?? null,
                 email: row.email ?? authUser?.email ?? null,
@@ -1211,7 +1216,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 confirmed_at: authUser?.confirmed_at ?? null,
                 suspended: Boolean(authUser?.banned_until && new Date(authUser.banned_until).getTime() > Date.now()),
                 auth_role: authUser?.user_metadata?.role_key ?? authUser?.app_metadata?.role_key ?? authUser?.user_metadata?.role ?? null,
-            };
+            }];
         });
         return {
             catalog: PERMISSION_CATALOG,
@@ -1356,140 +1361,26 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/access/users', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
-        const schema = z.object({
-            email: z.string().email(),
-            fullName: z.string().min(2),
-            roleKey: z.string().trim().min(2).max(80),
-            stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
-            allStations: z.boolean().default(false),
-            temporaryPassword: z.string().min(12).max(128).optional(),
-        }).refine((value) => value.allStations || value.stationIds.length > 0, {
-            message: 'Choose at least one station or All stations.',
-            path: ['stationIds'],
-        });
-        const body = schema.parse(req.body);
-        if (body.temporaryPassword) {
-            const policyError = vendorPasswordError(body.temporaryPassword);
-            if (policyError) return reply.code(422).send({ error: 'weak_temporary_password', message: policyError });
-        }
-        if (!isCorporateStaffEmail(body.email)) {
-            return reply.code(400).send({
-                error: 'invalid_staff_email_domain',
-                message: 'Staff accounts must use an @acoblighting.com or @org.acoblighting.com email address.',
-            });
-        }
-        const stationIds = body.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(body.stationIds);
-        const primaryStationId = body.allStations ? null : stationIds[0];
-        const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', body.roleKey).maybeSingle();
-        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
-        const emailReadiness = await staffInvitationReadiness();
-        if (!emailReadiness.ready) {
-            return reply.code(503).send({
-                error: 'staff_invitation_unavailable',
-                message: emailReadiness.reason === 'not_configured'
-                    ? 'Staff invitations are unavailable because email delivery is not configured.'
-                    : 'Staff invitations are temporarily disabled. Enable staff invitation emails before creating an account.',
-            });
-        }
-        const password = body.temporaryPassword ?? generateTemporaryPassword();
-        const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
-            email: body.email.toLowerCase(),
-            password,
-            email_confirm: false,
-            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName, station_id: primaryStationId, station_ids: stationIds, all_stations: body.allStations },
-        });
-        if (authErr || !authData.user) {
-            return reply.code(400).send({ error: 'user_create_failed', message: authErr?.message ?? 'Could not create staff user.' });
-        }
-        const { error: rowErr } = await adminClient.from('users').upsert({
-            auth_user_id: authData.user.id,
-            user_id: authData.user.id,
-            user_name: body.fullName,
-            email: body.email.toLowerCase(),
-            role_key: body.roleKey,
-            station_id: primaryStationId,
-            station_ids: stationIds,
-            password_reset_required: true,
-            password_changed_at: null,
-            password_session_id: null,
-        }, { onConflict: 'user_id' });
-        if (rowErr) {
-            await adminClient.auth.admin.deleteUser(authData.user.id);
-            return reply.code(400).send({ error: 'staff_profile_failed', message: rowErr.message });
-        }
-        const { data: verificationLink, error: verificationLinkError } = await adminClient.auth.admin.generateLink({
-            type: 'magiclink',
-            email: body.email.toLowerCase(),
-            options: { redirectTo: env.STAFF_PORTAL_URL },
-        });
-        const actionLink = verificationLink?.properties?.action_link;
-        if (verificationLinkError || !actionLink) {
-            await adminClient.from('users').delete().eq('user_id', authData.user.id);
-            await adminClient.auth.admin.deleteUser(authData.user.id);
-            return reply.code(502).send({
-                error: 'staff_verification_link_failed',
-                message: 'The email verification link could not be created, so the staff account was not created.',
-            });
-        }
-        const permissionRows = body.roleKey === 'super-admin'
-            ? PERMISSION_CATALOG.map((item) => item.key)
-            : ((await adminClient.from('permissions').select('route_hash').eq('role_key', body.roleKey)).data ?? []).map((item: any) => item.route_hash);
-        const granted = new Set(permissionRows);
-        const permissionLabels = PERMISSION_CATALOG.filter((item) => granted.has(item.key)).map((item) => item.label);
-        const invitationDelivery = await notifyStaffInvitation({
-            email: body.email.toLowerCase(),
-            fullName: body.fullName,
-            temporaryPassword: password,
-            roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey,
-            verificationUrl: actionLink,
-            permissionLabels,
-            stationScope: body.allStations ? 'All current and future stations' : stationIds.join(', '),
-            idempotencyKey: `staff-invite-${authData.user.id}`,
-        });
-        if (invitationDelivery.status !== 'sent') {
-            const profileCleanup = await adminClient.from('users').delete().eq('user_id', authData.user.id);
-            const authCleanup = await adminClient.auth.admin.deleteUser(authData.user.id);
-            const rollbackFailed = Boolean(profileCleanup.error || authCleanup.error);
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType: 'staff',
-                actorRole: req.actor!.role,
-                action: 'access.user.create_failed',
-                targetType: 'staff_user',
-                targetId: authData.user.id,
-                after: {
-                    email: body.email.toLowerCase(),
-                    invitationEmailFailureReason: invitationDelivery.reason ?? 'provider_error',
-                    accountRolledBack: !rollbackFailed,
-                },
-            }).catch(() => undefined);
-            if (rollbackFailed) {
-                req.log.error({ profileCleanup: profileCleanup.error, authCleanup: authCleanup.error, userId: authData.user.id }, 'Staff invite delivery and rollback failed');
-                return reply.code(500).send({
-                    error: 'staff_invitation_cleanup_required',
-                    message: 'Invitation delivery failed and the incomplete account needs administrator review.',
-                });
+        try {
+            return await provisionStaff(req.body, req.actor!, req.log);
+        } catch (error) {
+            if (error instanceof StaffProvisioningError) {
+                return reply.code(error.statusCode).send({ error: error.code, message: error.message });
             }
-            return reply.code(502).send({
-                error: 'staff_invitation_delivery_failed',
-                message: 'The invitation email was not delivered, so the staff account was not created. Try again.',
-            });
+            throw error;
         }
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
-            action: 'access.user.create',
-            targetType: 'staff_user',
-            targetId: authData.user.id,
-            after: {
-                email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds, allStations: body.allStations,
-                invitationEmailStatus: invitationDelivery.status,
-                invitationEmailMessageId: invitationDelivery.messageId ?? null,
-            },
-        });
+    });
 
-        return { ok: true, userId: authData.user.id, temporaryPassword: password, invitationDelivery };
+    fastify.delete('/access/users/:userId', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        try {
+            return await deleteStaff((req.params as { userId: string }).userId, req.actor!, req.log);
+        } catch (error) {
+            if (error instanceof StaffProvisioningError) {
+                return reply.code(error.statusCode).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     fastify.patch('/access/users/:userId/role', async (req, reply) => {
@@ -2188,14 +2079,30 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/vendors/:id/funding', async (req) => {
         const id = (req.params as { id: string }).id;
         const { limit, cursor } = req.query as { limit?: string; cursor?: string };
-        let query = adminClient.from('payment_transactions').select('*')
+        const pageSize = Math.min(Number(limit ?? 50), 200);
+        let paymentsQuery = adminClient.from('payment_transactions').select('*')
             .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
             .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 50), 200));
-        if (cursor) query = query.lt('created_at', cursor);
-        const { data } = await query;
-        const rows = data ?? [];
-        const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
+            .limit(pageSize);
+        let requestsQuery = adminClient.from('funding_requests').select('*')
+            .eq('vendor_organization_id', id)
+            .in('channel', ['bank_transfer', 'manual'])
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (cursor) {
+            paymentsQuery = paymentsQuery.lt('created_at', cursor);
+            requestsQuery = requestsQuery.lt('created_at', cursor);
+        }
+        const [{ data: payments, error: paymentsError }, { data: requests, error: requestsError }] = await Promise.all([
+            paymentsQuery,
+            requestsQuery,
+        ]);
+        if (paymentsError) throw paymentsError;
+        if (requestsError) throw requestsError;
+        const rows = [...(payments ?? []), ...(requests ?? [])]
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+            .slice(0, pageSize);
+        const nextCursor = rows.length === pageSize ? rows.at(-1)?.created_at ?? null : null;
         return { funding: rows, nextCursor };
     });
 

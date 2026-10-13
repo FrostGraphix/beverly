@@ -72,7 +72,7 @@ assert.match(login, /reasonMfa/);
 assert.match(login, /\/api\/v1\/admin\/mfa\/status/);
 assert.match(login, /\/api\/v1\/admin\/mfa\/challenge\/verify/);
 assert.match(login, /isMfaRequired/);
-assert.match(login, /signInFailureMessage/);
+assert.match(login, /\/api\/v1\/admin\/auth\/password-login/);
 assert.match(login, /Authentication service is temporarily unavailable/);
 assert.match(login, /step\.value = 'challenge'/);
 assert.match(login, /await auth\.refreshSession\(\);/);

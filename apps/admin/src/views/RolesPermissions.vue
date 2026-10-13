@@ -368,6 +368,25 @@ async function doSessionRevocation(user: StaffRow) {
 function viewAuditTrail(user: StaffRow) {
     router.push({ path: '/audit', query: { actor: user.auth_user_id ?? undefined } });
 }
+function requestStaffDeletion(user: StaffRow) {
+    if (!canManage.value || !user.auth_user_id || user.auth_user_id === auth.user?.id || saving.value) return;
+    confirm.value = {
+        title: 'Delete staff user permanently',
+        body: `Permanently delete ${user.user_name || user.email}? Their profile, login, and active sessions will be removed. This cannot be undone.`,
+        label: 'Delete permanently', danger: true, fn: () => doStaffDeletion(user),
+    };
+}
+async function doStaffDeletion(user: StaffRow) {
+    saving.value = true;
+    try {
+        await api.del(`/api/v1/admin/access/users/${user.auth_user_id}`);
+        staff.value = staff.value.filter((row) => staffKey(row) !== staffKey(user));
+        expandedStaff.value = expandedStaff.value.filter((key) => key !== staffKey(user));
+        toast(`${user.user_name || user.email} deleted permanently.`);
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not delete staff user', 'err'); }
+    finally { saving.value = false; }
+}
 
 function openInvite() {
     inviteStep.value = 1;
@@ -1046,6 +1065,7 @@ onMounted(() => { void load(); });
               <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
                 {{ u.suspended ? 'Reactivate user' : 'Suspend user' }}
               </button>
+              <button class="bw-btn danger" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete permanently</button>
             </div>
           </article>
         </div>

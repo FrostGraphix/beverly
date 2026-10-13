@@ -21,9 +21,6 @@ const sessionEndedMsg = computed(() => {
 const reasonMfa = computed(() => String(route.query.reason ?? '') === 'mfa_required');
 const showSessionEnded = computed(() => sessionEnded.value && !email.value && !password.value && !error.value);
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
 const step = ref<'password' | 'challenge'>('password');
 const email = ref('');
 const password = ref('');
@@ -52,19 +49,11 @@ function readableError(err: unknown, fallback: string): string {
         return 'Authentication service is temporarily unavailable. Retry shortly.';
     }
     if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        return 'Access Denied: Vendor and Customer accounts cannot sign in to Beverly Wallet Admin. Please use your designated portal.';
+        return err.message || 'Invalid email or password.';
     }
     if (err instanceof ApiError) return err.message || fallback;
     if (err instanceof Error) return err.message || fallback;
     return fallback;
-}
-
-function signInFailureMessage(data: any, status: number): string {
-    const message = String(data?.error_description ?? data?.message ?? data?.msg ?? '').trim();
-    if (status >= 500 || /^internal server error$/i.test(message)) {
-        return 'Authentication service is temporarily unavailable. Retry shortly.';
-    }
-    return message || 'Sign-in failed. Check your details and retry.';
 }
 
 function isMfaRequired(err: unknown): boolean {
@@ -95,23 +84,10 @@ async function signIn() {
         error.value = 'Email and password are required.';
         return;
     }
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        error.value = 'Authentication is not configured. Contact your administrator.';
-        return;
-    }
     loading.value = true;
     error.value = null;
     try {
-        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-            body: JSON.stringify({ email: normalizedEmail, password: password.value }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            error.value = signInFailureMessage(data, res.status);
-            return;
-        }
+        const data = await api.post<any>('/api/v1/admin/auth/password-login', { email: normalizedEmail, password: password.value });
         const accessToken: string = data.access_token;
         if (!accessToken || !data.user?.id) {
             error.value = 'Sign-in response was incomplete. Try again.';
@@ -120,10 +96,10 @@ async function signIn() {
         auth.setSession(accessToken, {
             id: data.user.id,
             email: data.user.email ?? null,
-            full_name: data.user.user_metadata?.full_name ?? null,
-            role: data.user?.user_metadata?.role_key ?? data.user?.user_metadata?.role ?? 'staff',
-            profile_picture_url: data.user?.user_metadata?.profile_picture_url ?? null,
-            password_reset_required: false,
+            full_name: data.user.full_name ?? null,
+            role: data.user.role,
+            profile_picture_url: null,
+            password_reset_required: data.user.password_reset_required === true,
         });
         try {
             await auth.refreshSession();
@@ -149,8 +125,8 @@ async function signIn() {
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
         else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
         await afterAuthenticated();
-    } catch {
-        error.value = 'Network error. Please try again.';
+    } catch (err) {
+        error.value = readableError(err, 'Network error. Please try again.');
     } finally {
         loading.value = false;
     }

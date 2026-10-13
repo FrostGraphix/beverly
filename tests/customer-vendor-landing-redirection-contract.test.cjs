@@ -35,7 +35,7 @@ function main() {
 
   // 3. Verify total deactivation of automatic routing & session sniffing
   assert.match(adminRouter, /portalHistoryBase/);
-  assert.match(adminLogin, /Access Denied: Vendor and Customer accounts cannot sign in to Beverly Wallet Admin/);
+  assert.match(adminLogin, /\/api\/v1\/admin\/auth\/password-login/);
   assert.doesNotMatch(customerLogin, /hasStaffSession/);
   assert.doesNotMatch(vendorLogin, /hasStaffSession/);
   assert.doesNotMatch(landingChooser, /hasStaffSession/);
