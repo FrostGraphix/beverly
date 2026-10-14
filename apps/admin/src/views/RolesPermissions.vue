@@ -1029,7 +1029,7 @@ onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void loa
                 <select
                   class="bw-select"
                   :value="staffDraft(u).roleKey"
-                  :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
+                  :disabled="saving || !canManage || !u.auth_user_id"
                   @change="staffDrafts[staffKey(u)].roleKey = ($event.target as HTMLSelectElement).value"
                 >
                   <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
@@ -1041,22 +1041,22 @@ onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void loa
               <label class="bw-label" style="margin-bottom:5px">Stations</label>
               <StationMultiSelect
                 :model-value="staffDraft(u).stationIds"
-                :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
+                :disabled="saving || !canManage || !u.auth_user_id"
                 @update:model-value="staffDrafts[staffKey(u)].stationIds = $event"
               />
             </div>
 
             <div v-if="isStaffExpanded(u)" class="ac-staff-actions">
-              <button class="bw-btn primary" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">
+              <button class="bw-btn primary" :disabled="!canManage || saving || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">
                 {{ saving ? 'Saving…' : 'Save Changes' }}
               </button>
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
-              <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
+              <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
                 {{ u.suspended ? 'Reactivate user' : 'Suspend user' }}
               </button>
-              <button class="bw-btn danger" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
+              <button class="bw-btn danger" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
             </div>
           </article>
         </div>
@@ -1082,22 +1082,22 @@ onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void loa
                     <div class="ac-table-detail-grid">
                       <div class="ac-staff-role">
                         <label class="bw-label">Role</label>
-                        <select class="bw-select" :value="staffDraft(u).roleKey" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @change="staffDrafts[staffKey(u)].roleKey = ($event.target as HTMLSelectElement).value">
+                        <select class="bw-select" :value="staffDraft(u).roleKey" :disabled="saving || !canManage || !u.auth_user_id" @change="staffDrafts[staffKey(u)].roleKey = ($event.target as HTMLSelectElement).value">
                           <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
                         </select>
                       </div>
                       <div class="ac-staff-role">
                         <label class="bw-label">Stations</label>
-                        <StationMultiSelect :model-value="staffDraft(u).stationIds" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @update:model-value="staffDrafts[staffKey(u)].stationIds = $event" />
+                        <StationMultiSelect :model-value="staffDraft(u).stationIds" :disabled="saving || !canManage || !u.auth_user_id" @update:model-value="staffDrafts[staffKey(u)].stationIds = $event" />
                       </div>
                     </div>
                     <div class="ac-staff-actions">
-                      <button class="bw-btn primary" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
-                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
-                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
-                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
-                      <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">{{ u.suspended ? 'Reactivate user' : 'Suspend user' }}</button>
-                      <button class="bw-btn danger" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
+                      <button class="bw-btn primary" :disabled="!canManage || saving || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
+                      <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">{{ u.suspended ? 'Reactivate user' : 'Suspend user' }}</button>
+                      <button class="bw-btn danger" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
                     </div>
                   </td>
                 </tr>

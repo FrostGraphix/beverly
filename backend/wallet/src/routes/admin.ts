@@ -463,6 +463,7 @@ const OPEN_ADMIN_ROUTES = new Set([
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /access': 'wallet.access.manage',
+    'GET /access/staff-status': 'wallet.access.manage',
     'POST /access/roles': 'wallet.access.manage',
     'PATCH /access/roles/:roleKey': 'wallet.access.manage',
     'DELETE /access/roles/:roleKey': 'wallet.access.manage',

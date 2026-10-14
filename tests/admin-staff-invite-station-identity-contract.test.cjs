@@ -18,6 +18,7 @@ const exportMenuTypes = read('packages/tokens/WalletExportMenu.vue.d.ts');
 const exportWizard = read('packages/tokens/WalletExportWizard.vue');
 
 assert.match(adminRoutes, /return await provisionStaff\(req\.body, req\.actor!, req\.log\)/);
+assert.match(adminRoutes, /'GET \/access\/staff-status': 'wallet\.access\.manage'/);
 assert.doesNotMatch(adminRoutes, /auth\.admin\.createUser/);
 assert.match(staffProvisioning, /const invitationDelivery = await notifyStaffInvitation/);
 assert.match(staffProvisioning, /const emailReadiness = await staffInvitationReadiness/);
@@ -32,6 +33,7 @@ assert.match(roles, /Invitation sent to \$\{invitedEmail\}/);
 assert.match(roles, /One secure invitation lets the staff member create their password/);
 assert.match(roles, /allStations/);
 assert.match(roles, /All current and future stations/);
+assert.doesNotMatch(roles, /:disabled="[^"]*!staffStatusReady/);
 assert.match(staffProvisioning, /email_confirm: true/);
 assert.match(staffProvisioning, /auth\.admin\.generateLink/);
 assert.match(staffProvisioning, /@acoblighting\.com/);
