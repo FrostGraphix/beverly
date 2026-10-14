@@ -160,7 +160,7 @@ Proof:
 ### 5. Runtime version mismatch
 
 Claim:
-- Engine is Node `22.x`.
+- Engine is Node `24.x`.
 
 Reality:
 - CI now runs Node `22`.
@@ -390,7 +390,7 @@ These blocked production before this pass.
 |---|---|---|---|
 | Login test selector | `button.login-button` | `BaseButton.auth-submit login-button` | Fixed compatibility |
 | Architecture source of truth | `docs/ARCHITECTURE.md` | root `ARCHITECTURE.md` | Design and boundary drift |
-| Node version | `22.x` engine | CI `22`, audit `24.13.1` | CI fixed, local still newer |
+| Node version | `24.x` engine | CI/local pin `24.13.1`; Vercel uses its patched 24.x runtime | Runtime parity enforced |
 | Production readiness claim | docs | local gates pass, release gates fail | Public smoke and CI needed |
 | Supabase persistence claim | architecture | mapped locally, not deployed | Deployed smoke needed |
 

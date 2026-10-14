@@ -19,7 +19,7 @@ function assertIncludes(source, value, label) {
 assertIncludes(workflow, "PREVIEW_TARGET_URL", "workflow");
 assertIncludes(workflow, "PRODUCTION_TARGET_URL", "workflow");
 assertIncludes(workflow, "VERCEL_PROTECTION_BYPASS", "workflow");
-assertIncludes(workflow, 'node-version: "22"', "workflow");
+assertIncludes(workflow, 'node-version: "24.13.1"', "workflow");
 assertIncludes(workflow, "npm run smoke:vercel", "workflow");
 assertIncludes(workflow, "workflow_dispatch:", "workflow");
 assertIncludes(workflow, "pnpm install --frozen-lockfile", "workflow");

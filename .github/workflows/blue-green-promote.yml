@@ -18,7 +18,7 @@ permissions:
   deployments: write
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24.13.1'
 
 jobs:
   # ── PROMOTE: health-gate a candidate deployment ───────────────────────────
