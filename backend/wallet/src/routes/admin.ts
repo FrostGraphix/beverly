@@ -1167,17 +1167,40 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.get('/access', async () => {
-        const [roleResult, permissionResult, initialStaffResult, authUsers] = await Promise.all([
+        const [roleResult, permissionResult, initialStaffResult] = await Promise.all([
             adminClient.from('roles').select('*').order('role_key', { ascending: true }),
             adminClient.from('permissions').select('*').order('role_key', { ascending: true }),
             adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
-            adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 }),
         ]);
         const staffResult = missingColumn(initialStaffResult.error, 'station_ids')
             ? await adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, created_at, updated_at').order('updated_at', { ascending: false }).limit(300)
             : initialStaffResult;
         const roles = roleResult.data;
         const permissions = permissionResult.data;
+        const staff = (staffResult.data ?? []).map((row: any) => ({
+            ...row,
+            auth_user_id: row.auth_user_id ?? row.user_id ?? null,
+            last_sign_in_at: null,
+            confirmed_at: null,
+            suspended: false,
+        }));
+        return {
+            catalog: PERMISSION_CATALOG,
+            roles: roles ?? [],
+            permissions: permissions ?? [],
+            staff,
+            defaults: DEFAULT_ROLE_PERMISSIONS,
+        };
+    });
+
+    fastify.get('/access/staff-status', async () => {
+        const [initialStaffResult, authUsers] = await Promise.all([
+            adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
+            adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+        ]);
+        const staffResult = missingColumn(initialStaffResult.error, 'station_ids')
+            ? await adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, created_at, updated_at').order('updated_at', { ascending: false }).limit(300)
+            : initialStaffResult;
         const staffRows = staffResult.data;
         const authById = new Map((authUsers.data?.users ?? []).map((user) => [user.id, user]));
         const authByEmail = new Map((authUsers.data?.users ?? []).filter((user) => user.email).map((user) => [user.email!.trim().toLowerCase(), user]));
@@ -1194,13 +1217,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 auth_role: authUser?.user_metadata?.role_key ?? authUser?.app_metadata?.role_key ?? authUser?.user_metadata?.role ?? null,
             };
         });
-        return {
-            catalog: PERMISSION_CATALOG,
-            roles: roles ?? [],
-            permissions: permissions ?? [],
-            staff,
-            defaults: DEFAULT_ROLE_PERMISSIONS,
-        };
+        return { staff };
     });
 
     fastify.put('/access/roles/:roleKey/permissions', async (req, reply) => {

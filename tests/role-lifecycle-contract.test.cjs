@@ -47,6 +47,12 @@ assert.match(migration, /grant execute .* to service_role/g, "Only backend servi
 assert.match(view, /title: 'Delete custom role'/, "Deletion must require confirmation");
 assert.match(view, /editorCriticalPermissions/, "Critical grants must require confirmation");
 assert.match(view, /await load\(\)/, "The interface must refresh after mutations");
+assert.match(routes, /fastify\.get\('\/access\/staff-status'/, "Slow authentication status must load separately");
+const baseAccessRoute = routes.slice(routes.indexOf("fastify.get('/access'"), routes.indexOf("fastify.get('/access/staff-status'"));
+assert.doesNotMatch(baseAccessRoute, /listUsers/, "Base access data must not wait for authentication enumeration");
+assert.match(view, /staffView === 'table'/, "Staff must support table view");
+assert.match(view, /class="ac-staff-table"/, "Staff table must remain rendered semantically");
+assert.match(view, /void loadStaffStatus\(version\)/, "Staff status enrichment must not block first paint");
 assert.match(adminVite, /registerType: 'autoUpdate'/, "Deployed permission fixes must activate automatically");
 assert.match(adminVite, /skipWaiting: true/, "Updated admin workers must not remain waiting");
 assert.match(adminVite, /clientsClaim: true/, "Updated admin workers must control existing pages");
