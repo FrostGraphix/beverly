@@ -228,6 +228,26 @@ async function recordQuotaPause(stationIds, mode, quota) {
     prefer: "return=minimal",
     body: rows.length === 1 ? rows[0] : rows,
   });
+  // A durable run alone is invisible to the freshness contract, which reads
+  // station state. Persist the pause there too so operators and vendor-facing
+  // reports explain that ingestion stopped for capacity protection rather than
+  // implying a successful current sync.
+  const stateRows = stationIds.map((stationId) => ({
+    station_id: stationId,
+    last_mode: mode,
+    last_status: "quota_paused",
+    last_started_at: measuredAt,
+    last_finished_at: measuredAt,
+    last_error: `Database usage ${quota.usedPercent}% reached ${quota.reason}`,
+    updated_at: measuredAt,
+  }));
+  if (stateRows.length) {
+    await supabase.restRequest("/consumption_sync_station_state?on_conflict=station_id", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=minimal",
+      body: stateRows.length === 1 ? stateRows[0] : stateRows,
+    });
+  }
 }
 
 function maxPagesForMode(mode, input) {
@@ -364,16 +384,20 @@ async function syncStation(stationId, stationStats, options) {
 async function runConsumptionSync(input = {}) {
   const mode = input.mode === "backfill" || input.full === true ? "backfill" : "incremental";
   const requestedStations = normalizeStations(input.stations || input.stationId || process.env.CONSUMPTION_SYNC_STATIONS);
+  // Resolve the operational scope before checking capacity. When the guard
+  // pauses a scheduled run we must mark each affected station stale; recording
+  // only an "AUTO" run left every station showing an old successful status.
+  let stationIds = await resolveStations(requestedStations, input);
   const quota = await databaseQuotaState(input, mode);
   if (quota.quotaPaused) {
-    await recordQuotaPause(requestedStations, mode, quota);
+    await recordQuotaPause(stationIds, mode, quota);
     return {
       ok: true,
       mode,
       quotaPaused: true,
       reason: quota.reason,
       quota,
-      stationCount: requestedStations.length,
+      stationCount: stationIds.length,
       syncedStations: 0,
       failedStations: 0,
       fetchedRows: 0,
@@ -382,7 +406,6 @@ async function runConsumptionSync(input = {}) {
       failures: [],
     };
   }
-  let stationIds = await resolveStations(requestedStations, input);
   if (!requestedStations.length) {
     const claimed = await supabase.restRequest("/rpc/claim_consumption_sync_station", {
       method: "POST",

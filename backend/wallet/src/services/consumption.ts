@@ -20,7 +20,7 @@
  * `scope_id?: string` signature did whenever the caller left it undefined.
  */
 import { adminClient } from '../db/supabase.js';
-import { listStations, resolveTariffPricing } from './token-engine.js';
+import { listStations } from './token-engine.js';
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year';
 export type ScopeType  = 'meter' | 'station' | 'cumulative';
@@ -80,17 +80,18 @@ export interface ConsumptionRow {
     transaction_count:    number;
     /** Naira minor units actually spent on this scope/period. */
     amount_minor_total:   number;
-    /**
-     * Market value of the energy consumed at the meter's tariff rate
-     * (kwh_total × price-per-kWh), independent of what was actually paid.
-     * Distinct from amount_minor_total, which is real wallet spend — value
-     * and spend diverge on promos, price changes over time, etc.
-     */
+    /** Historical tariff valuation captured when the reading was aggregated. */
     energy_value_minor:   number;
+    /** kWh with a date-effective tariff valuation. */
+    priced_kwh:           number;
+    /** kWh retained without a confirmed historic tariff; never shown as valued. */
+    unpriced_kwh:         number;
     station_id?:          string;
     meter_id?:            string;
     customer_id?:         string | null;
     customer_name?:       string | null;
+    /** Latest source meter-reading date, when requested for a meter view. */
+    last_reading_date?:   string | null;
     last_refreshed_at:    string;
 }
 
@@ -104,6 +105,8 @@ export interface ConsumptionQuery {
     limit?:      number;
     /** Include naira spend per bucket (extra query). Default false. */
     withSpend?:  boolean;
+    /** Include the latest source-reading date for each returned meter. */
+    withLatestReading?: boolean;
 }
 
 interface MeterAggregateRow {
@@ -114,6 +117,9 @@ interface MeterAggregateRow {
     period_type: PeriodType;
     period_start: string;
     kwh_total: number;
+    tariff_value_ngn?: number;
+    priced_kwh?: number;
+    unpriced_kwh?: number;
     reading_count: number;
     last_refreshed_at: string;
 }
@@ -122,7 +128,6 @@ function toConsumptionRow(
     scope: ScopeType,
     scopeId: string,
     row: MeterAggregateRow,
-    pricePerKwh: number,
 ): ConsumptionRow {
     const readingCount = Number(row.reading_count ?? 0);
     const kwhTotal = Number(row.kwh_total ?? 0);
@@ -135,7 +140,12 @@ function toConsumptionRow(
         reading_count: readingCount,
         transaction_count: readingCount,
         amount_minor_total: 0,
-        energy_value_minor: Math.round(kwhTotal * pricePerKwh * 100),
+        // This is an immutable, date-effective valuation computed during the
+        // aggregate refresh. Repricing history with today's tariff would make
+        // the same meter report change retrospectively whenever a tariff does.
+        energy_value_minor: Math.round(Number(row.tariff_value_ngn ?? 0) * 100),
+        priced_kwh: Number(row.priced_kwh ?? 0),
+        unpriced_kwh: Number(row.unpriced_kwh ?? kwhTotal),
         station_id: row.station_id,
         meter_id: row.meter_id,
         customer_id: row.customer_id ?? null,
@@ -144,15 +154,14 @@ function toConsumptionRow(
     };
 }
 
-function groupedRows(scope: ScopeType, rows: MeterAggregateRow[], pricePerKwhByMeter: Map<string, number>): ConsumptionRow[] {
+function groupedRows(scope: ScopeType, rows: MeterAggregateRow[]): ConsumptionRow[] {
     const grouped = new Map<string, ConsumptionRow>();
     for (const row of rows) {
         const scopeId = scope === 'cumulative' ? 'ALL' : row.station_id;
         const key = `${scopeId}:${row.period_type}:${row.period_start}`;
-        const pricePerKwh = pricePerKwhByMeter.get(row.meter_id) ?? resolveTariffPricing('RESIDENTIAL').basePricePerKwh;
         const existing = grouped.get(key);
         if (!existing) {
-            const seed = toConsumptionRow(scope, scopeId, row, pricePerKwh);
+            const seed = toConsumptionRow(scope, scopeId, row);
             // Grouped rows span many meters — per-meter identity is meaningless here.
             delete seed.meter_id;
             delete seed.customer_id;
@@ -164,7 +173,9 @@ function groupedRows(scope: ScopeType, rows: MeterAggregateRow[], pricePerKwhByM
         existing.kwh_total += Number(row.kwh_total ?? 0);
         existing.reading_count += Number(row.reading_count ?? 0);
         existing.transaction_count = existing.reading_count;
-        existing.energy_value_minor += Math.round(Number(row.kwh_total ?? 0) * pricePerKwh * 100);
+        existing.energy_value_minor += Math.round(Number(row.tariff_value_ngn ?? 0) * 100);
+        existing.priced_kwh += Number(row.priced_kwh ?? 0);
+        existing.unpriced_kwh += Number(row.unpriced_kwh ?? row.kwh_total ?? 0);
         if (row.last_refreshed_at > existing.last_refreshed_at) {
             existing.last_refreshed_at = row.last_refreshed_at;
         }
@@ -231,30 +242,6 @@ export async function refreshConsumptionAggregates(stationIds?: string[]): Promi
     };
 }
 
-// ── Tariff enrichment ────────────────────────────────────────────────────────
-
-/**
- * meter_consumption_aggregates has no tariff_id column, so we join against
- * customer_meters (populated from the live meter record at link time — see
- * linkMeter() in customer-purchase.ts) for a best-effort tariff per meter.
- * Meters with no customer_meters row (e.g. not yet linked by any customer)
- * fall back to the same RESIDENTIAL default resolveTariffPricing() itself uses
- * for an unrecognized tariff id.
- */
-async function tariffPricePerKwhByMeter(meterIds: string[]): Promise<Map<string, number>> {
-    const map = new Map<string, number>();
-    if (!meterIds.length) return map;
-    const { data } = await adminClient
-        .from('customer_meters')
-        .select('meter_id, tariff_id')
-        .in('meter_id', meterIds);
-    for (const row of (data ?? []) as { meter_id: string; tariff_id: string | null }[]) {
-        if (!row.tariff_id) continue;
-        map.set(row.meter_id, resolveTariffPricing(row.tariff_id).basePricePerKwh);
-    }
-    return map;
-}
-
 // ── Spend enrichment ─────────────────────────────────────────────────────────
 
 function periodKey(periodType: PeriodType, isoDate: string): string {
@@ -315,6 +302,35 @@ async function attachSpend(
     }
 }
 
+async function attachLatestReadingDates(
+    rows: ConsumptionRow[],
+    authority: ConsumptionAuthority,
+): Promise<void> {
+    const meterIds = [...new Set(rows.map((row) => row.meter_id).filter((id): id is string => Boolean(id)))];
+    if (!meterIds.length) return;
+
+    let query = adminClient
+        .from('daily_meter_deltas')
+        .select('meter_id, reading_date')
+        .in('meter_id', meterIds)
+        .order('reading_date', { ascending: false })
+        .limit(Math.max(meterIds.length * 10, 100));
+    if (authority.kind === 'stations') query = query.in('station_id', authority.stationIds);
+    if (authority.kind === 'meters') query = query.in('meter_id', authority.meterIds);
+
+    const { data, error } = await query;
+    if (error) {
+        // Freshness is supplemental. A stale health signal must not make a
+        // correctly authorised historic report disappear.
+        return;
+    }
+    const latestByMeter = new Map<string, string>();
+    for (const reading of (data ?? []) as Array<{ meter_id: string; reading_date: string }>) {
+        if (!latestByMeter.has(reading.meter_id)) latestByMeter.set(reading.meter_id, reading.reading_date);
+    }
+    for (const row of rows) row.last_reading_date = row.meter_id ? latestByMeter.get(row.meter_id) ?? null : null;
+}
+
 // ── Query pre-aggregated data ─────────────────────────────────────────────────
 
 /**
@@ -328,7 +344,7 @@ export async function queryConsumption(
 
     let query = adminClient
         .from('meter_consumption_aggregates')
-        .select('station_id, meter_id, customer_id, customer_name, period_type, period_start, kwh_total, reading_count, last_refreshed_at')
+        .select('station_id, meter_id, customer_id, customer_name, period_type, period_start, kwh_total, tariff_value_ngn, priced_kwh, unpriced_kwh, reading_count, last_refreshed_at')
         .eq('period_type', opts.period_type)
         .order('period_start', { ascending: false })
         .limit(Math.max(1, Math.min(Number(opts.limit ?? 2000), 5000)));
@@ -357,10 +373,9 @@ export async function queryConsumption(
     }
 
     const aggregateRows = (data ?? []) as MeterAggregateRow[];
-    const pricePerKwhByMeter = await tariffPricePerKwhByMeter([...new Set(aggregateRows.map((row) => row.meter_id))]);
     const rows = opts.scope === 'meter'
-        ? aggregateRows.map((row) => toConsumptionRow('meter', row.meter_id, row, pricePerKwhByMeter.get(row.meter_id) ?? resolveTariffPricing('RESIDENTIAL').basePricePerKwh))
-        : groupedRows(opts.scope, aggregateRows, pricePerKwhByMeter).slice(0, opts.limit ?? 120);
+        ? aggregateRows.map((row) => toConsumptionRow('meter', row.meter_id, row))
+        : groupedRows(opts.scope, aggregateRows).slice(0, opts.limit ?? 120);
 
     if (opts.withSpend) {
         await attachSpend(
@@ -370,6 +385,9 @@ export async function queryConsumption(
             opts.from,
             opts.to,
         );
+    }
+    if (opts.withLatestReading && opts.scope === 'meter') {
+        await attachLatestReadingDates(rows, authority);
     }
     return rows;
 }

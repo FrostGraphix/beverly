@@ -17,6 +17,9 @@ interface Row {
     period_type: string;
     period_start: string;
     kwh_total: number;
+    tariff_value_ngn: number;
+    priced_kwh: number;
+    unpriced_kwh: number;
     reading_count: number;
     last_refreshed_at: string;
 }
@@ -37,6 +40,12 @@ function row(station: string, meter: string, customerId: string, name: string, k
         period_type: 'month',
         period_start: '2026-07-01',
         kwh_total: kwh,
+        // The aggregate's immutable, date-effective valuation. It deliberately
+        // differs from the current residential tariff so this test catches any
+        // attempt to reprice history during an API read.
+        tariff_value_ngn: kwh * 175.5,
+        priced_kwh: kwh,
+        unpriced_kwh: 0,
         reading_count: 30,
         last_refreshed_at: '2026-07-17T00:00:00.000Z',
     };
@@ -45,6 +54,12 @@ function row(station: string, meter: string, customerId: string, name: string, k
 const PURCHASES = [
     { meter_id: 'M-T1', station_id: 'TUNGA', amount_minor: 500_00, created_at: '2026-07-05T10:00:00Z', status: 'delivered' },
     { meter_id: 'M-M1', station_id: 'MUSHA', amount_minor: 900_00, created_at: '2026-07-06T10:00:00Z', status: 'delivered' },
+];
+
+const READING_DATES = [
+    { station_id: 'TUNGA', meter_id: 'M-T1', reading_date: '2026-10-01' },
+    { station_id: 'TUNGA', meter_id: 'M-T1', reading_date: '2026-09-23' },
+    { station_id: 'TUNGA', meter_id: 'M-T2', reading_date: '2026-09-28' },
 ];
 
 /** Minimal PostgREST-shaped builder honouring .in()/.eq() so filters are real. */
@@ -59,7 +74,11 @@ function makeBuilder(table: string) {
         eq: (col: string, val: any) => { filters.push((r) => String(r[col]) === String(val)); return builder; },
         in: (col: string, vals: any[]) => { filters.push((r) => vals.map(String).includes(String(r[col]))); return builder; },
         then: (resolve: any) => {
-            const source = table === 'meter_consumption_aggregates' ? AGGREGATES : PURCHASES;
+            const source = table === 'meter_consumption_aggregates'
+                ? AGGREGATES
+                : table === 'daily_meter_deltas'
+                    ? READING_DATES
+                    : PURCHASES;
             return resolve({ data: source.filter((r) => filters.every((f) => f(r))), error: null });
         },
     };
@@ -146,6 +165,19 @@ describe('consumption authority isolation', () => {
 });
 
 describe('consumption correctness', () => {
+    it('uses the stored historical tariff valuation instead of today\'s tariff', async () => {
+        const rows = await queryConsumption({ ...monthly, scope_id: 'M-T1' }, metersAuthority(['M-T1']));
+        expect(rows[0]!.energy_value_minor).toBe(1_755_000); // ₦17,550.00 from the stored reading valuation
+        expect(rows[0]!.priced_kwh).toBe(100);
+        expect(rows[0]!.unpriced_kwh).toBe(0);
+    });
+
+    it('labels a meter report with its latest source reading, not its refresh time', async () => {
+        const rows = await queryConsumption({ ...monthly, scope_id: 'M-T1', withLatestReading: true }, metersAuthority(['M-T1']));
+        expect(rows[0]!.last_reading_date).toBe('2026-10-01');
+        expect(rows[0]!.last_refreshed_at).toBe('2026-07-17T00:00:00.000Z');
+    });
+
     it('station scope aggregates meters and drops per-meter identity', async () => {
         const rows = await queryConsumption({ scope: 'station', period_type: 'month' }, stationsAuthority(['TUNGA']));
         expect(rows).toHaveLength(1);

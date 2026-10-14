@@ -332,6 +332,10 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.equal(quotaPaused.quotaPaused, true, "backfills must pause at seventy-five percent");
   assert.equal(liveCalls.filter((call) => call.url.endsWith("/api/DailyDataMeter/read")).length, 0);
   assert(writes.some((write) => write.pathname === "/consumption_sync_runs" && write.options.body.status === "quota_paused"), "quota pauses must remain durable");
+  assert(
+    writes.some((write) => write.pathname.includes("/consumption_sync_station_state?on_conflict=station_id") && write.options.body.last_status === "quota_paused"),
+    "quota pauses must update station health so stale reports show the actual blocker"
+  );
 
   console.log(JSON.stringify({
     status: "consumption sync service passed",
