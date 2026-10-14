@@ -7,7 +7,6 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vendorPasswordError } from '@beverly/tokens/password-policy';
-import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { abandonWalletIdempotency, assertClientIdempotencyKey, claimWalletIdempotency, completeWalletIdempotency, hashIdempotency } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
@@ -34,7 +33,7 @@ import {
     getKycPolicy, kycPolicySchema, updateKycPolicy,
     getKycTierSettings, updateKycTierSettings, getKycTierPolicyHistory, kycTierSettingsUpdateSchema,
 } from '../services/kyc-policy.js';
-import { notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement } from '../services/admin-notifications.js';
+import { notifyStationAssignment, notifyStaffAccountChange, notifyAdminAnnouncement } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
@@ -56,8 +55,7 @@ import { CUSTOM_ROLE_RESTRICTED_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PERMISSIO
 import { decideKycReview, getKycReviewDocumentUrl, KycReviewError, listKycReviews } from '../services/kyc-reviews.js';
 import { getKycTierPolicy, KycTierPolicyError, updateKycTierPolicy } from '../services/kyc-tier-policy.js';
 import { replaceStaffPassword, StaffPasswordChangeError } from '../services/staff-password-change.js';
-import { deleteStaff, provisionStaff, StaffProvisioningError } from '../services/staff-provisioning.js';
-import { generateTemporaryPassword } from '../services/temporary-password.js';
+import { provisionStaff, sendStaffPasswordSetup, updateStaff, StaffProvisioningError } from '../services/staff-provisioning.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -450,6 +448,7 @@ const OPEN_ADMIN_ROUTES = new Set([
     'PATCH /me',
     'POST /logout',
     'POST /password-change',
+    'POST /account-setup',
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
     'POST /profile-picture/activate',
@@ -469,13 +468,11 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'DELETE /access/roles/:roleKey': 'wallet.access.manage',
     'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
     'POST /access/users': 'wallet.access.manage',
+    'PATCH /access/users/:userId': 'wallet.access.manage',
     'DELETE /access/users/:userId': 'wallet.access.manage',
-    'PATCH /access/users/:userId/role': 'wallet.access.manage',
-    'PATCH /access/users/:userId/station': 'wallet.access.manage',
     'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
     'POST /access/users/:userId/reset-password': 'wallet.access.manage',
     'POST /access/users/:userId/revoke-sessions': 'wallet.access.manage',
-    'DELETE /access/users/:userId': 'wallet.access.manage',
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
@@ -955,6 +952,24 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    fastify.post('/account-setup', async (req, reply) => {
+        const { password } = z.object({ password: z.string().min(12).max(128) }).parse(req.body);
+        const policyError = vendorPasswordError(password);
+        if (policyError) return reply.code(422).send({ error: 'weak_password', message: policyError });
+        if (!req.actor?.passwordResetRequired) return reply.code(409).send({ error: 'account_already_active', message: 'This account has already been set up.' });
+        const { error: passwordError } = await adminClient.auth.admin.updateUserById(req.actor.userId, { password });
+        if (passwordError) return reply.code(503).send({ error: 'account_setup_failed', message: 'Your password could not be saved. Request a new invitation.' });
+        const changedAt = new Date().toISOString();
+        const { error: profileError } = await adminClient.from('users').update({
+            password_reset_required: false, password_changed_at: changedAt, password_session_id: null, updated_at: changedAt,
+        }).or(`auth_user_id.eq.${req.actor.userId},user_id.eq.${req.actor.userId}`);
+        if (profileError) return reply.code(503).send({ error: 'account_setup_incomplete', message: 'Your password was saved, but activation could not be completed. Contact a Super Admin.' });
+        await adminClient.auth.admin.signOut(req.actor.userId, 'global');
+        await logAction({ actorUserId: req.actor.userId, actorType: 'staff', actorRole: req.actor.role,
+            action: 'access.user.activated', targetType: 'staff_user', targetId: req.actor.userId });
+        return { ok: true };
+    });
+
     fastify.get('/notifications', async (req) => {
         const query = z.object({
             limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -1194,7 +1209,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         };
     });
 
-    fastify.get('/access/staff-status', async () => {
+    fastify.get('/access/staff-status', async (_req, reply) => {
         const [initialStaffResult, authUsers] = await Promise.all([
             adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
             adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 }),
@@ -1369,87 +1384,16 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.delete('/access/users/:userId', async (req, reply) => {
+    fastify.patch('/access/users/:userId', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
         try {
-            return await deleteStaff((req.params as { userId: string }).userId, req.actor!, req.log);
+            return await updateStaff((req.params as { userId: string }).userId, req.body, req.actor!, req.log);
         } catch (error) {
             if (error instanceof StaffProvisioningError) {
                 return reply.code(error.statusCode).send({ error: error.code, message: error.message });
             }
             throw error;
         }
-    });
-
-    fastify.patch('/access/users/:userId/role', async (req, reply) => {
-        if (!requireAccessManager(req, reply)) return undefined;
-        const userId = (req.params as { userId: string }).userId;
-        const schema = z.object({
-            roleKey: z.string().trim().min(2).max(80),
-        });
-        const { roleKey } = schema.parse(req.body);
-        const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', roleKey).maybeSingle();
-        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
-        const { data: authUser } = await adminClient.auth.admin.getUserById(userId);
-        const { error: authErr } = await adminClient.auth.admin.updateUserById(userId, {
-            user_metadata: {
-                ...(authUser.user?.user_metadata ?? {}),
-                role_key: roleKey,
-                role: roleKey,
-            },
-        });
-        if (authErr) return reply.code(400).send({ error: 'auth_role_update_failed', message: authErr.message });
-        const { error } = await adminClient.from('users')
-            .update({ role_key: roleKey, updated_at: new Date().toISOString() })
-            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
-        if (error) return reply.code(400).send({ error: 'role_update_failed', message: error.message });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
-            action: 'access.user.role_update',
-            targetType: 'staff_user',
-            targetId: userId,
-            after: { roleKey },
-        });
-
-        await notifyRoleAssignment(userId, (assignedRole as any).label ?? (assignedRole as any).role_name ?? roleKey);
-
-        return { ok: true, userId, roleKey };
-    });
-
-    fastify.patch('/access/users/:userId/station', async (req, reply) => {
-        if (!requireAccessManager(req, reply)) return undefined;
-        const userId = (req.params as { userId: string }).userId;
-        const stationScope = z.object({
-            stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
-            allStations: z.boolean().default(false),
-        }).refine((value) => value.allStations || value.stationIds.length > 0, {
-            message: 'Choose at least one station or All stations.', path: ['stationIds'],
-        }).parse(req.body);
-        const normalized = stationScope.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(stationScope.stationIds);
-        const primaryStationId = stationScope.allStations ? null : normalized[0];
-        const { data: before } = await adminClient.from('users').select('email, user_name, station_ids').or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
-        const { error } = await adminClient.from('users')
-            .update({ station_id: primaryStationId, station_ids: normalized, updated_at: new Date().toISOString() })
-            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
-        if (error) return reply.code(400).send({ error: 'station_update_failed', message: error.message });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
-            action: 'access.user.station_update',
-            targetType: 'staff_user',
-            targetId: userId,
-            after: { stationIds: normalized, allStations: stationScope.allStations },
-        });
-
-        await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: stationScope.allStations ? 'All stations (including future stations)' : normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.includes(ALL_STATIONS_SCOPE) ? 'All stations' : ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
-        await notifyStaffAccountChange(userId, 'station_update', 'Your station access changed',
-            stationScope.allStations ? 'You can now access all stations.' : `Your assigned stations: ${normalized.join(', ')}.`,
-            `station.assignment.${userId}.${Date.now()}`).catch(() => undefined);
-
-        return { ok: true, userId, stationIds: normalized, allStations: stationScope.allStations };
     });
 
     fastify.patch('/access/users/:userId/suspension', async (req, reply) => {
@@ -1475,36 +1419,12 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/access/users/:userId/reset-password', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
-        const userId = (req.params as { userId: string }).userId;
-        const password = generateTemporaryPassword();
-        const { data: previousState, error: previousStateError } = await adminClient.from('users')
-            .select('password_reset_required, password_changed_at, password_session_id')
-            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
-        if (previousStateError || !previousState) return reply.code(404).send({ error: 'staff_not_found', message: 'Staff account was not found.' });
-        const changedAt = new Date().toISOString();
-        const { error: stateError } = await adminClient.from('users').update({
-            password_reset_required: true,
-            password_changed_at: changedAt,
-            password_session_id: `password-reset:${crypto.randomUUID()}`,
-            updated_at: changedAt,
-        }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
-        if (stateError) return reply.code(503).send({ error: 'password_reset_state_failed', message: 'Password reset state could not be saved.' });
-        const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
-        if (error) {
-            await adminClient.from('users').update({
-                password_reset_required: (previousState as any).password_reset_required,
-                password_changed_at: (previousState as any).password_changed_at,
-                password_session_id: (previousState as any).password_session_id,
-            }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
-            return reply.code(400).send({ error: 'password_reset_failed', message: error.message });
+        try {
+            return await sendStaffPasswordSetup((req.params as { userId: string }).userId, req.actor!, req.log);
+        } catch (error) {
+            if (error instanceof StaffProvisioningError) return reply.code(error.statusCode).send({ error: error.code, message: error.message });
+            throw error;
         }
-        const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
-        if (signOutError) req.log.error({ err: signOutError, userId }, 'Supabase session revocation failed; password boundary remains enforced');
-        await logAction({
-            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
-            action: 'access.user.password_reset', targetType: 'staff_user', targetId: userId,
-        });
-        return { ok: true, userId, temporaryPassword: password };
     });
 
     fastify.post('/access/users/:userId/revoke-sessions', async (req, reply) => {

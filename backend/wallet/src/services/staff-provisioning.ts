@@ -1,13 +1,12 @@
 import { z } from 'zod';
-import { vendorPasswordError } from '@beverly/tokens/password-policy';
+import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import { PERMISSION_CATALOG } from '../routes/admin-access-constants.js';
 import { logAction } from './audit.js';
 import { isCorporateStaffEmail } from './email-validation.js';
-import { notifyStaffInvitation, staffInvitationReadiness } from './admin-notifications.js';
+import { notifyRoleAssignment, notifyStaffInvitation, notifyStationAssignment, notifyStaffAccountChange, staffInvitationReadiness } from './admin-notifications.js';
 import { ALL_STATIONS_SCOPE, normalizeStaffStationIds } from './staff-station-scope.js';
-import { generateTemporaryPassword } from './temporary-password.js';
 
 export const createStaffSchema = z.object({
     email: z.string().trim().email().transform((value) => value.toLowerCase()),
@@ -15,13 +14,21 @@ export const createStaffSchema = z.object({
     roleKey: z.string().trim().min(2).max(80),
     stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
     allStations: z.boolean().default(false),
-    temporaryPassword: z.string().min(12).max(128).optional(),
 }).refine((value) => value.allStations || value.stationIds.length > 0, {
     message: 'Choose at least one station or All stations.',
     path: ['stationIds'],
 });
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
+
+export const updateStaffSchema = z.object({
+    roleKey: z.string().trim().min(2).max(80),
+    stationIds: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
+    allStations: z.boolean().default(false),
+}).refine((value) => value.allStations || value.stationIds.length > 0, {
+    message: 'Choose at least one station or All stations.',
+    path: ['stationIds'],
+});
 
 export class StaffProvisioningError extends Error {
     constructor(public code: string, message: string, public statusCode: number) {
@@ -41,10 +48,6 @@ async function removeIncompleteStaff(userId: string) {
 
 export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor, logger: ProvisioningLogger) {
     const input = createStaffSchema.parse(rawInput);
-    if (input.temporaryPassword) {
-        const policyError = vendorPasswordError(input.temporaryPassword);
-        if (policyError) throw new StaffProvisioningError('weak_temporary_password', policyError, 422);
-    }
     if (!isCorporateStaffEmail(input.email)) {
         throw new StaffProvisioningError('invalid_staff_email_domain', 'Staff accounts must use an @acoblighting.com or @org.acoblighting.com email address.', 400);
     }
@@ -69,11 +72,11 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
         );
     }
 
-    const password = input.temporaryPassword ?? generateTemporaryPassword();
+    const bootstrapPassword = `${crypto.randomBytes(24).toString('base64url')}Aa1!`;
     const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
         email: input.email,
-        password,
-        email_confirm: false,
+        password: bootstrapPassword,
+        email_confirm: true,
         user_metadata: { role_key: input.roleKey, role: input.roleKey, full_name: input.fullName, station_id: primaryStationId, station_ids: stationIds, all_stations: input.allStations },
     });
     if (authError || !authData.user) {
@@ -100,7 +103,7 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
     }
 
     const { data: verificationLink, error: verificationLinkError } = await adminClient.auth.admin.generateLink({
-        type: 'magiclink', email: input.email, options: { redirectTo: env.STAFF_PORTAL_URL },
+        type: 'recovery', email: input.email, options: { redirectTo: new URL('setup-account', env.STAFF_PORTAL_URL).toString() },
     });
     const actionLink = verificationLink?.properties?.action_link;
     if (verificationLinkError || !actionLink) {
@@ -116,9 +119,8 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
     const invitationDelivery = await notifyStaffInvitation({
         email: input.email,
         fullName: input.fullName,
-        temporaryPassword: password,
         roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? input.roleKey,
-        verificationUrl: actionLink,
+        setupUrl: actionLink,
         permissionLabels: PERMISSION_CATALOG.filter((item) => granted.has(item.key)).map((item) => item.label),
         stationScope: input.allStations ? 'All current and future stations' : stationIds.join(', '),
         idempotencyKey: `staff-invite-${userId}`,
@@ -138,32 +140,92 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
         after: { email: input.email, roleKey: input.roleKey, stationIds, allStations: input.allStations, invitationEmailStatus: invitationDelivery.status, invitationEmailMessageId: invitationDelivery.messageId ?? null },
     }).catch((error) => logger.error({ error, userId }, 'Staff was created but its audit event could not be written'));
 
-    return { ok: true as const, userId, temporaryPassword: password, invitationDelivery };
+    return { ok: true as const, userId, invitationDelivery };
 }
 
-export async function deleteStaff(userId: string, actor: ProvisioningActor, logger: ProvisioningLogger) {
-    if (userId === actor.userId) throw new StaffProvisioningError('self_deletion_denied', 'You cannot delete your own account.', 400);
-    const { data: profile, error: readError } = await adminClient.from('users')
-        .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids')
-        .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
-    if (readError) throw new StaffProvisioningError('staff_lookup_failed', 'The staff account could not be verified.', 503);
+export async function updateStaff(userId: string, rawInput: unknown, actor: ProvisioningActor, logger: ProvisioningLogger) {
+    const input = updateStaffSchema.parse(rawInput);
+    const stationIds = input.allStations ? [ALL_STATIONS_SCOPE] : normalizeStaffStationIds(input.stationIds);
+    if (!input.allStations && !stationIds.length) throw new StaffProvisioningError('station_required', 'Choose at least one valid station.', 400);
+    const { data: assignedRole, error: roleError } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', input.roleKey).maybeSingle();
+    if (roleError) throw new StaffProvisioningError('role_lookup_failed', 'The staff role could not be verified. Try again.', 503);
+    if (!assignedRole) throw new StaffProvisioningError('role_not_found', 'Choose an existing role.', 400);
+    const { data: before, error: readError } = await adminClient.from('users')
+        .select('email, user_name, role_key, station_id, station_ids').or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
+    if (readError || !before) throw new StaffProvisioningError('staff_not_found', 'Staff account was not found.', 404);
+    const primaryStationId = input.allStations ? null : stationIds[0];
+    const { data: authUser, error: authReadError } = await adminClient.auth.admin.getUserById(userId);
+    if (authReadError || !authUser.user) throw new StaffProvisioningError('staff_auth_not_found', 'The staff login could not be verified.', 404);
 
-    if (profile) {
-        const { error: profileError } = await adminClient.from('users').delete()
-            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
-        if (profileError) throw new StaffProvisioningError('staff_profile_delete_failed', 'The staff profile could not be deleted. No authentication changes were made.', 503);
-    }
+    const { error: profileError } = await adminClient.from('users').update({
+        role_key: input.roleKey, station_id: primaryStationId, station_ids: stationIds, updated_at: new Date().toISOString(),
+    }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+    if (profileError) throw new StaffProvisioningError('staff_update_failed', 'No changes were saved.', 503);
 
-    const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
-    if (signOutError) logger.error({ signOutError, userId }, 'Staff session revocation failed during permanent deletion');
-    const { error: authError } = await adminClient.auth.admin.deleteUser(userId, true);
-    if (authError && !/not found/i.test(authError.message ?? '')) {
-        logger.error({ authError, userId }, 'Staff auth deletion failed after profile removal');
-        throw new StaffProvisioningError('staff_auth_delete_failed', 'Staff access was disabled, but authentication cleanup requires administrator review.', 503);
+    const { error: authError } = await adminClient.auth.admin.updateUserById(userId, {
+        user_metadata: { ...(authUser.user.user_metadata ?? {}), role_key: input.roleKey, role: input.roleKey, station_id: primaryStationId, station_ids: stationIds, all_stations: input.allStations },
+    });
+    if (authError) {
+        const rollback = await adminClient.from('users').update({
+            role_key: (before as any).role_key, station_id: (before as any).station_id, station_ids: (before as any).station_ids,
+        }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+        if (rollback.error) logger.error({ authError, rollback: rollback.error, userId }, 'Staff update rollback failed');
+        throw new StaffProvisioningError(rollback.error ? 'staff_update_cleanup_required' : 'staff_auth_update_failed', rollback.error ? 'The update failed and requires administrator review.' : 'No changes were saved.', rollback.error ? 500 : 503);
     }
 
     await logAction({ actorUserId: actor.userId, actorType: 'staff', actorRole: actor.role,
-        action: 'access.user.deleted', targetType: 'staff_user', targetId: userId, before: profile ?? { auth_user_id: userId },
-    }).catch((error) => logger.error({ error, userId }, 'Staff was deleted but its audit event could not be written'));
-    return { ok: true as const, userId };
+        action: 'access.user.update', targetType: 'staff_user', targetId: userId,
+        before, after: { roleKey: input.roleKey, stationIds, allStations: input.allStations },
+    }).catch((error) => logger.error({ error, userId }, 'Staff was updated but its audit event could not be written'));
+    if ((before as any).role_key !== input.roleKey) await notifyRoleAssignment(userId, (assignedRole as any).label ?? (assignedRole as any).role_name ?? input.roleKey);
+    if (JSON.stringify((before as any).station_ids ?? []) !== JSON.stringify(stationIds)) {
+        await notifyStationAssignment({ email: (before as any).email, name: (before as any).user_name, stationLabel: input.allStations ? 'All stations (including future stations)' : stationIds.join(', '), previousStationLabel: ((before as any).station_ids ?? []).includes(ALL_STATIONS_SCOPE) ? 'All stations' : ((before as any).station_ids ?? []).join(', ') || null });
+        await notifyStaffAccountChange(userId, 'station_update', 'Your station access changed', input.allStations ? 'You can now access all stations.' : `Your assigned stations: ${stationIds.join(', ')}.`, `station.assignment.${userId}.${Date.now()}`).catch(() => undefined);
+    }
+    return { ok: true as const, userId, roleKey: input.roleKey, stationIds, allStations: input.allStations };
+}
+
+export async function sendStaffPasswordSetup(userId: string, actor: ProvisioningActor, logger: ProvisioningLogger) {
+    const { data: staff, error: staffError } = await adminClient.from('users')
+        .select('email, user_name, role_key, station_ids, password_reset_required, password_changed_at, password_session_id')
+        .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
+    if (staffError || !staff?.email) throw new StaffProvisioningError('staff_not_found', 'Staff account was not found.', 404);
+    const readiness = await staffInvitationReadiness();
+    if (!readiness.ready) throw new StaffProvisioningError('staff_invitation_unavailable', 'Password setup emails are temporarily unavailable.', 503);
+    const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: 'recovery', email: staff.email, options: { redirectTo: new URL('setup-account', env.STAFF_PORTAL_URL).toString() },
+    });
+    const setupUrl = link?.properties?.action_link;
+    if (linkError || !setupUrl) throw new StaffProvisioningError('staff_setup_link_failed', 'The secure password setup link could not be created.', 502);
+    const changedAt = new Date().toISOString();
+    const { error: stateError } = await adminClient.from('users').update({
+        password_reset_required: true, password_changed_at: changedAt, password_session_id: null, updated_at: changedAt,
+    }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+    if (stateError) throw new StaffProvisioningError('password_reset_state_failed', 'Password reset state could not be saved.', 503);
+    const { data: role } = await adminClient.from('roles').select('role_name, label').eq('role_key', staff.role_key).maybeSingle();
+    const permissionRows = staff.role_key === 'super-admin'
+        ? PERMISSION_CATALOG.map((item) => item.key)
+        : ((await adminClient.from('permissions').select('route_hash').eq('role_key', staff.role_key)).data ?? []).map((item: any) => item.route_hash);
+    const granted = new Set(permissionRows);
+    const delivery = await notifyStaffInvitation({
+        email: staff.email, fullName: staff.user_name || staff.email, setupUrl,
+        roleLabel: (role as any)?.label ?? (role as any)?.role_name ?? staff.role_key,
+        permissionLabels: PERMISSION_CATALOG.filter((item) => granted.has(item.key)).map((item) => item.label),
+        stationScope: (staff.station_ids as string[] | null)?.includes(ALL_STATIONS_SCOPE) ? 'All current and future stations' : (staff.station_ids as string[] | null)?.join(', ') || 'Unassigned',
+        idempotencyKey: `staff-password-setup-${userId}-${changedAt}`,
+    });
+    if (delivery.status !== 'sent') {
+        await adminClient.from('users').update({
+            password_reset_required: staff.password_reset_required,
+            password_changed_at: staff.password_changed_at,
+            password_session_id: staff.password_session_id,
+        }).or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+        throw new StaffProvisioningError('staff_setup_delivery_failed', 'The password setup email was not delivered. No access changes were made.', 502);
+    }
+    const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
+    if (signOutError) logger.error({ signOutError, userId }, 'Staff session revocation failed after password setup email');
+    await logAction({ actorUserId: actor.userId, actorType: 'staff', actorRole: actor.role,
+        action: 'access.user.password_setup_sent', targetType: 'staff_user', targetId: userId,
+    }).catch((error) => logger.error({ error, userId }, 'Staff password setup email was sent but its audit event could not be written'));
+    return { ok: true as const, userId, invitationDelivery: delivery };
 }

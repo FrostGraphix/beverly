@@ -1,12 +1,8 @@
 <script setup lang="ts">
 /**
- * StationMultiSelect — live-search dropdown of station IDs from the energy backend.
- *
- * Fetches /api/v1/admin/stations once on mount (server caches for 5 min).
- * Filters as the user types. Selected stations render as removable chips.
- * Includes a graceful degrade banner if the upstream is unreachable.
+ * Checkbox station picker. `*` is the existing all-current-and-future scope.
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { api } from '../lib/api';
 
 interface Station {
@@ -33,39 +29,19 @@ const all = ref<Station[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const query = ref('');
-const open = ref(false);
-const focusIndex = ref(-1);
-const rootEl = ref<HTMLElement | null>(null);
-
-const byId = computed(() => {
-    const m = new Map<string, Station>();
-    for (const s of all.value) m.set(s.stationId.toUpperCase(), s);
-    return m;
-});
-
-const selected = computed<Station[]>(() =>
-    props.modelValue.map((id) => byId.value.get(id.toUpperCase()) ?? {
-        stationId: id,
-        name: id,
-        oemId: null,
-        oemName: null,
-        status: 'active',
-    }),
-);
+const allStations = computed(() => props.modelValue.includes('*'));
 
 const filtered = computed<Station[]>(() => {
     const q = query.value.trim().toLowerCase();
-    const sel = new Set(props.modelValue.map((id) => id.toUpperCase()));
     return all.value
         .filter((s) => s.status === 'active')
-        .filter((s) => !sel.has(s.stationId.toUpperCase()))
         .filter((s) =>
             !q ||
             s.stationId.toLowerCase().includes(q) ||
             s.name.toLowerCase().includes(q) ||
             String(s.oemName ?? '').toLowerCase().includes(q),
         )
-        .slice(0, 50);
+        .slice(0, 100);
 });
 
 async function load(force = false) {
@@ -82,85 +58,38 @@ async function load(force = false) {
     }
 }
 
-onMounted(() => {
-    void load();
-    document.addEventListener('click', onDocClick);
-});
+onMounted(() => void load());
 
-onUnmounted(() => {
-    document.removeEventListener('click', onDocClick);
-});
-
-function onDocClick(e: MouseEvent) {
-    if (!rootEl.value) return;
-    if (!rootEl.value.contains(e.target as Node)) {
-        open.value = false;
-        focusIndex.value = -1;
-    }
-}
-
-function add(s: Station) {
+function toggle(id: string) {
     if (props.disabled) return;
-    const next = [...props.modelValue, s.stationId];
-    emit('update:modelValue', next);
-    query.value = '';
-    focusIndex.value = -1;
+    const selected = props.modelValue.filter((value) => value !== '*');
+    emit('update:modelValue', selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id]);
 }
 
-function remove(id: string) {
+function toggleAll() {
     if (props.disabled) return;
-    emit('update:modelValue', props.modelValue.filter((x) => x !== id));
+    emit('update:modelValue', allStations.value ? [] : ['*']);
 }
-
-function onFocus() { open.value = true; }
-
-function onKey(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        open.value = true;
-        focusIndex.value = Math.min(filtered.value.length - 1, focusIndex.value + 1);
-    } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        focusIndex.value = Math.max(-1, focusIndex.value - 1);
-    } else if (e.key === 'Enter') {
-        if (focusIndex.value >= 0 && filtered.value[focusIndex.value]) {
-            e.preventDefault();
-            add(filtered.value[focusIndex.value]);
-        }
-    } else if (e.key === 'Backspace' && !query.value && props.modelValue.length > 0) {
-        remove(props.modelValue[props.modelValue.length - 1]);
-    } else if (e.key === 'Escape') {
-        open.value = false;
-        focusIndex.value = -1;
-    }
-}
-
-watch(query, () => { focusIndex.value = -1; open.value = true; });
 </script>
 
 <template>
-  <div ref="rootEl" class="msel" :class="{ 'msel--disabled': disabled }">
-    <div class="msel-control" @click="open = true">
-      <span v-for="s in selected" :key="`${s.oemId}:${s.stationId}`" class="chip">
-        <span class="chip-id">{{ s.stationId }}</span>
-        <span v-if="s.name && s.name !== s.stationId" class="chip-name">· {{ s.name }}</span>
-        <span v-if="s.oemName" class="chip-name">· {{ s.oemName }}</span>
-        <button type="button" class="chip-x" aria-label="Remove" @click.stop="remove(s.stationId)">×</button>
-      </span>
+  <div class="msel" :class="{ 'msel--disabled': disabled }">
+    <label class="msel-row msel-all">
+      <input type="checkbox" :checked="allStations" :disabled="disabled" @change="toggleAll" />
+      <span><strong>All Stations</strong><small>Every current and future station</small></span>
+    </label>
+    <div class="msel-control">
       <input
         class="msel-input"
         v-model="query"
-        :placeholder="modelValue.length ? '' : placeholder"
+        :placeholder="placeholder"
         :disabled="disabled"
-        @focus="onFocus"
-        @keydown="onKey"
       />
       <button v-if="!loading" type="button" class="msel-refresh" title="Refresh station list" @click.stop="load(true)" :disabled="disabled">↻</button>
       <span v-else class="msel-loading" aria-label="Loading">…</span>
     </div>
 
-    <Transition name="fade">
-      <div v-if="open && !disabled" class="msel-pop">
+      <div class="msel-pop">
         <div v-if="error" class="msel-banner msel-banner--err">
           {{ error }}
           <button type="button" class="msel-retry" @click.stop="load(true)">Retry</button>
@@ -172,33 +101,34 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
             <span v-else>All stations already selected.</span>
           </li>
         </ul>
-        <ul v-else class="msel-list" role="listbox">
+        <ul v-else class="msel-list">
           <li
             v-for="(s, i) in filtered"
             :key="`${s.oemId}:${s.stationId}`"
             class="msel-row"
-            :class="{ 'msel-row--active': i === focusIndex }"
-            role="option"
-            @mousedown.prevent="add(s)"
-            @mouseenter="focusIndex = i"
           >
-            <span class="msel-id">{{ s.stationId }}</span>
-            <span v-if="s.name && s.name !== s.stationId" class="msel-name">{{ s.name }}</span>
-            <span v-if="s.oemName" class="msel-name">{{ s.oemName }}</span>
+            <label>
+              <input type="checkbox" :checked="modelValue.includes(s.stationId)" :disabled="disabled || allStations" @change="toggle(s.stationId)" />
+              <span class="msel-id">{{ s.stationId }}</span>
+              <span v-if="s.name && s.name !== s.stationId" class="msel-name">{{ s.name }}</span>
+              <span v-if="s.oemName" class="msel-name">{{ s.oemName }}</span>
+            </label>
           </li>
         </ul>
         <div class="msel-foot">
-          {{ selected.length }} selected · {{ all.length }} stations available
+          {{ allStations ? 'All stations selected' : `${modelValue.length} selected` }} · {{ all.length }} stations available
           <span v-if="!loading && !error" class="msel-foot-meta">live</span>
         </div>
       </div>
-    </Transition>
   </div>
 </template>
 
 <style scoped>
 .msel { position: relative; }
 .msel--disabled { opacity: 0.6; pointer-events: none; }
+.msel-all { margin-bottom: 8px; border: 1px solid var(--glass-border); background: var(--surface-2); }
+.msel-all span { display: grid; gap: 2px; }
+.msel-all small { color: var(--text-muted); font-size: var(--t-xs); }
 
 .msel-control {
   display: flex;
@@ -268,10 +198,8 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
 .msel-refresh:hover { color: var(--brand); background: oklch(70% 0.19 145 / 0.08); }
 
 .msel-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  position: static;
+  margin-top: 6px;
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-md);
@@ -332,6 +260,8 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
   cursor: pointer;
   font-size: var(--t-sm);
 }
+.msel-row label { display: flex; align-items: center; gap: var(--s-2); width: 100%; cursor: pointer; }
+.msel-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--brand); flex: 0 0 auto; }
 .msel-row--active { background: var(--surface-2); }
 .msel-row:hover { background: var(--surface-2); }
 .msel-row--empty { cursor: default; }

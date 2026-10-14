@@ -24,18 +24,18 @@ assert.match(staffProvisioning, /const emailReadiness = await staffInvitationRea
 assert.match(staffProvisioning, /staff_invitation_delivery_failed/);
 assert.match(staffProvisioning, /accountRolledBack: !cleanup\.failed/);
 assert.match(staffProvisioning, /invitationEmailStatus: invitationDelivery\.status/);
-assert.match(staffProvisioning, /temporaryPassword: password, invitationDelivery/);
+assert.doesNotMatch(staffProvisioning, /temporaryPassword/);
 assert.match(notifications, /isResendConfigured\(\)/);
 assert.match(notifications, /export async function staffInvitationReadiness/);
 assert.match(notifications, /status: 'not_sent', reason: 'provider_error'/);
-assert.match(roles, /Verification and welcome emails sent to \$\{invitedEmail\}/);
-assert.match(roles, /Creation completes only after Resend confirms both the verification and welcome emails/);
+assert.match(roles, /Invitation sent to \$\{invitedEmail\}/);
+assert.match(roles, /One secure invitation lets the staff member create their password/);
 assert.match(roles, /allStations/);
 assert.match(roles, /All current and future stations/);
-assert.match(staffProvisioning, /email_confirm: false/);
+assert.match(staffProvisioning, /email_confirm: true/);
 assert.match(staffProvisioning, /auth\.admin\.generateLink/);
 assert.match(staffProvisioning, /@acoblighting\.com/);
-assert.match(notifications, /staffEmailVerificationEmail/);
+assert.match(notifications, /tag: 'staff-invitation'/);
 assert.match(notifications, /sendBatch/);
 
 assert.match(adminRoutes, /stationId: rawStationId/);

@@ -56,20 +56,19 @@ describe('admin announcement email', () => {
 });
 
 describe('staff invitation email', () => {
-    it('includes branded HTML, exact sign-in identity, and the configured admin portal link', () => {
+    it('includes branded HTML, exact sign-in identity, and the secure setup link', () => {
         const email = staffInvitationEmail({
             fullName: 'Ada Okonkwo',
             loginEmail: 'ada@acoblighting.com',
-            temporaryPassword: 'Beverly-test-A1!',
             roleLabel: 'Operations Manager',
-            loginUrl: 'https://example.com/wallet-admin/',
+            setupUrl: 'https://example.com/setup-account',
         });
 
         expect(email.html).toContain('src="cid:beverly-logo"');
-        expect(email.html).toContain('https://example.com/wallet-admin/');
-        expect(email.html).toContain('Open Beverly Admin');
+        expect(email.html).toContain('https://example.com/setup-account');
+        expect(email.html).toContain('Set up account');
         expect(email.html).toContain('ada@acoblighting.com');
-        expect(email.text).toContain('Open Beverly Admin: https://example.com/wallet-admin/');
-        expect(email.text).toContain('Beverly-test-A1!');
+        expect(email.text).toContain('https://example.com/setup-account');
+        expect(email.text).not.toContain('Temporary password');
     });
 });

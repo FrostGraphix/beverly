@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import StationMultiSelect from '../components/StationMultiSelect.vue';
 import { api, shortDate } from '../lib/api';
@@ -52,8 +52,8 @@ let loadVersion = 0;
 
 /* invite */
 const inviteOpen = ref(false);
-const inviteStep = ref(1);
-const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], allStations: false, tempPassword: '' });
+const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], allStations: false });
+const staffDrafts = ref<Record<string, { roleKey: string; stationIds: string[] }>>({});
 
 /* custom role editor */
 const roleEditor = ref({ open: false, creating: true, roleKey: '', name: '', description: '', permissions: [] as string[] });
@@ -61,12 +61,6 @@ const roleEditor = ref({ open: false, creating: true, roleKey: '', name: '', des
 /* confirm */
 const confirm = ref<{ title: string; body: string; label: string; danger: boolean; fn: () => Promise<void> } | null>(null);
 const confirmBusy = ref(false);
-
-/* temp-password reveal */
-const tempPw = ref<string | null>(null);
-const tempPwCopied = ref(false);
-const tempCountdown = ref(60);
-let countdown: ReturnType<typeof setInterval> | null = null;
 
 /* toasts */
 const toasts = ref<{ id: number; msg: string; kind: 'ok' | 'err' }[]>([]);
@@ -115,6 +109,7 @@ const permissionGroupsByRole = computed(() => {
     }
     return groups;
 });
+const hasUnsavedStaffChanges = computed(() => staff.value.some((user) => staffDrafts.value[staffKey(user)] && staffDraftChanged(user)));
 /*
  * System roles come from the server payload (GET /access → defaults) rather than
  * a second hardcoded list that can drift from SYSTEM_ROLE_KEYS on the backend.
@@ -177,6 +172,9 @@ function isStaffExpanded(u: StaffRow) {
 }
 function toggleStaffExpanded(u: StaffRow) {
     const key = staffKey(u);
+    if (!staffDrafts.value[key]) {
+        staffDrafts.value[key] = { roleKey: u.role_key, stationIds: u.station_ids?.length ? [...u.station_ids] : u.station_id ? [u.station_id] : [] };
+    }
     expandedStaff.value = isStaffExpanded(u)
         ? expandedStaff.value.filter((k) => k !== key)
         : [...expandedStaff.value, key];
@@ -252,30 +250,6 @@ async function doToggle(item: PermissionCatalogItem) {
         toast(`${selRoleRow.value?.role_name} permissions updated.`);
         await load();
     } catch (e: any) { toast(e?.message ?? 'Could not update permissions', 'err'); }
-    finally { saving.value = false; }
-}
-
-/* ─── Role change ─────────────────────────────────────────────────────── */
-function requestRoleChange(user: StaffRow, next: string) {
-    if (!canManage.value || !user.auth_user_id || next === user.role_key) return;
-    const name = roles.value.find(r => r.role_key === next)?.role_name ?? next;
-    const from = roles.value.find(r => r.role_key === user.role_key)?.role_name ?? user.role_key;
-    confirm.value = {
-        title:  'Change staff role',
-        body:   `Move ${user.user_name || user.email} from ${from} → ${name}?\n\nPermissions update on their next request.`,
-        label:  'Change role',
-        danger: false,
-        fn:     () => doRoleChange(user, next),
-    };
-}
-async function doRoleChange(user: StaffRow, roleKey: string) {
-    saving.value = true;
-    try {
-        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/role`, { roleKey });
-        const name = roles.value.find(r => r.role_key === roleKey)?.role_name ?? roleKey;
-        toast(`${user.user_name || user.email} moved to ${name}.`);
-        await load();
-    } catch (e: any) { toast(e?.message ?? 'Could not update role', 'err'); }
     finally { saving.value = false; }
 }
 
@@ -407,18 +381,17 @@ async function doStaffDeletion(user: StaffRow) {
 function requestPasswordReset(user: StaffRow) {
     if (!canManage.value || !user.auth_user_id || saving.value) return;
     confirm.value = {
-        title: 'Reset staff password',
-        body: `Reset ${user.user_name || user.email}'s password? All current sessions will end.`,
-        label: 'Reset password', danger: true,
+        title: 'Send password setup link',
+        body: `Send ${user.user_name || user.email} a secure link to choose a new password? All current sessions will end after delivery.`,
+        label: 'Send secure link', danger: true,
         fn: () => doPasswordReset(user),
     };
 }
 async function doPasswordReset(user: StaffRow) {
     saving.value = true;
     try {
-        const res = await api.post<{ temporaryPassword: string }>(`/api/v1/admin/access/users/${user.auth_user_id}/reset-password`, {});
-        revealTempPw(res.temporaryPassword);
-        toast('Password reset.');
+        await api.post(`/api/v1/admin/access/users/${user.auth_user_id}/reset-password`, {});
+        toast('Secure password setup link sent.');
     } catch (e: any) { toast(e?.message ?? 'Could not reset password', 'err'); }
     finally { saving.value = false; }
 }
@@ -440,52 +413,40 @@ async function doSessionRevocation(user: StaffRow) {
 function viewAuditTrail(user: StaffRow) {
     router.push({ path: '/audit', query: { actor: user.auth_user_id ?? undefined } });
 }
-function requestStaffDeletion(user: StaffRow) {
-    if (!canManage.value || !user.auth_user_id || user.auth_user_id === auth.user?.id || saving.value) return;
-    confirm.value = {
-        title: 'Delete staff user permanently',
-        body: `Permanently delete ${user.user_name || user.email}? Their profile, login, and active sessions will be removed. This cannot be undone.`,
-        label: 'Delete permanently', danger: true, fn: () => doStaffDeletion(user),
-    };
-}
-async function doStaffDeletion(user: StaffRow) {
-    saving.value = true;
-    try {
-        await api.del(`/api/v1/admin/access/users/${user.auth_user_id}`);
-        staff.value = staff.value.filter((row) => staffKey(row) !== staffKey(user));
-        expandedStaff.value = expandedStaff.value.filter((key) => key !== staffKey(user));
-        toast(`${user.user_name || user.email} deleted permanently.`);
-        await load();
-    } catch (e: any) { toast(e?.message ?? 'Could not delete staff user', 'err'); }
-    finally { saving.value = false; }
+
+function staffDraft(u: StaffRow) {
+    return staffDrafts.value[staffKey(u)] ?? { roleKey: u.role_key, stationIds: u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : [] };
 }
 
+function staffDraftChanged(u: StaffRow) {
+    const current = staffDraft(u);
+    const savedStations = u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : [];
+    return current.roleKey !== u.role_key || JSON.stringify([...current.stationIds].sort()) !== JSON.stringify([...savedStations].sort());
+}
+
+async function saveStaffChanges(u: StaffRow) {
+    if (!canManage.value || !u.auth_user_id || !staffDraftChanged(u) || saving.value) return;
+    const next = staffDraft(u);
+    if (!next.stationIds.length) return toast('Choose at least one station or All Stations.', 'err');
+    saving.value = true;
+    try {
+        await api.patch(`/api/v1/admin/access/users/${u.auth_user_id}`, {
+            roleKey: next.roleKey,
+            stationIds: next.stationIds.includes('*') ? [] : next.stationIds,
+            allStations: next.stationIds.includes('*'),
+        });
+        toast('Staff changes saved.');
+        await load();
+        staffDrafts.value[staffKey(u)] = { roleKey: next.roleKey, stationIds: [...next.stationIds] };
+    } catch (e: any) { toast(e?.message ?? 'Could not save staff changes', 'err'); }
+    finally { saving.value = false; }
+}
 function openInvite() {
-    inviteStep.value = 1;
     inviteOpen.value = true;
 }
 
 function closeInvite() {
     inviteOpen.value = false;
-    inviteStep.value = 1;
-}
-
-function continueInvite() {
-    if (inviteStep.value === 1 && (!draft.value.fullName.trim() || !draft.value.email.trim())) return;
-    if (inviteStep.value === 2 && !draft.value.allStations && !draft.value.stationIds.length) return;
-    inviteStep.value = Math.min(3, inviteStep.value + 1);
-}
-
-async function updateStaffStations(user: StaffRow, stationIds: string[]) {
-    if (!canManage.value || !user.auth_user_id || !stationIds.length) return;
-    saving.value = true;
-    try {
-        const allStations = stationIds.includes('*');
-        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/station`, { stationIds: allStations ? [] : stationIds, allStations });
-        toast(`${user.user_name || user.email} assigned to ${allStations ? 'all current and future stations' : `${stationIds.length} stations`}.`);
-        await load();
-    } catch (e: any) { toast(e?.message ?? 'Could not update station', 'err'); }
-    finally { saving.value = false; }
 }
 
 /* ─── Create staff ────────────────────────────────────────────────────── */
@@ -493,36 +454,19 @@ async function createStaff() {
     if (!canManage.value) return;
     saving.value = true;
     try {
-        const res = await api.post<{
-            temporaryPassword: string;
+        await api.post<{
             invitationDelivery: { status: 'sent' | 'not_sent'; reason?: 'disabled' | 'not_configured' | 'provider_error' };
         }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
             roleKey: draft.value.roleKey, stationIds: draft.value.stationIds, allStations: draft.value.allStations,
-            temporaryPassword: draft.value.tempPassword || undefined,
         });
         const invitedEmail = draft.value.email;
         closeInvite();
-        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], allStations: false, tempPassword: '' };
+        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], allStations: false };
         await load();
-        revealTempPw(res.temporaryPassword);
-        toast(`Staff user created. Verification and welcome emails sent to ${invitedEmail}.`);
+        toast(`Invitation sent to ${invitedEmail}.`);
     } catch (e: any) { toast(e?.message ?? 'Could not create user', 'err'); }
     finally { saving.value = false; }
-}
-
-/* ─── Temp password ───────────────────────────────────────────────────── */
-function revealTempPw(pw: string) {
-    tempPw.value = pw; tempPwCopied.value = false; tempCountdown.value = 60;
-    clearInterval(countdown!);
-    countdown = setInterval(() => { if (--tempCountdown.value <= 0) closeTempPw(); }, 1000);
-}
-function closeTempPw() { clearInterval(countdown!); tempPw.value = null; }
-async function copyTempPw() {
-    if (!tempPw.value) return;
-    await navigator.clipboard.writeText(tempPw.value);
-    tempPwCopied.value = true;
-    setTimeout(() => (tempPwCopied.value = false), 2500);
 }
 
 /* ─── Confirm helper ──────────────────────────────────────────────────── */
@@ -533,8 +477,14 @@ async function runConfirm() {
     finally { confirmBusy.value = false; confirm.value = null; }
 }
 
-onUnmounted(() => { if (countdown) clearInterval(countdown); });
-onMounted(() => { void load(); });
+function warnUnsaved(event: BeforeUnloadEvent) {
+    if (!hasUnsavedStaffChanges.value) return;
+    event.preventDefault();
+    event.returnValue = '';
+}
+onBeforeRouteLeave(() => !hasUnsavedStaffChanges.value || window.confirm('Discard unsaved staff changes?'));
+onUnmounted(() => { window.removeEventListener('beforeunload', warnUnsaved); });
+onMounted(() => { window.addEventListener('beforeunload', warnUnsaved); void load(); });
 </script>
 
 <template>
@@ -572,35 +522,6 @@ onMounted(() => { void load(); });
                 {{ confirmBusy ? 'Working…' : confirm.label }}
               </button>
             </div>
-          </div>
-        </div>
-      </transition>
-    </teleport>
-
-    <!-- ══ TEMP-PASSWORD ════════════════════════════════════════════════ -->
-    <teleport to="body">
-      <transition name="ac-overlay">
-        <div v-if="tempPw" class="ac-overlay" @click.self="closeTempPw">
-          <div class="ac-pwcard">
-            <div class="ac-pwcard-top">
-              <div class="ac-pwcard-lock">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-              </div>
-              <div>
-                <p class="ac-overline">Temporary password</p>
-                <h3>Share via approved secure channel only</h3>
-                <p class="ac-sub">Shown <strong>once</strong> — closes in {{ tempCountdown }}s</p>
-              </div>
-            </div>
-            <div class="ac-pw-reveal">
-              <code>{{ tempPw }}</code>
-              <button :class="['ac-copy-btn', tempPwCopied && 'ac-copy-btn--done']" @click="copyTempPw">
-                <svg v-if="!tempPwCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                {{ tempPwCopied ? 'Copied!' : 'Copy' }}
-              </button>
-            </div>
-            <button class="bw-btn ghost" style="width:100%;justify-content:center" @click="closeTempPw">Dismiss</button>
           </div>
         </div>
       </transition>
@@ -703,12 +624,7 @@ onMounted(() => { void load(); });
             </div>
 
             <form @submit.prevent="createStaff">
-              <ol class="ac-steps" aria-label="Staff setup progress">
-                <li v-for="(label, index) in ['Identity', 'Access', 'Review']" :key="label" :class="{ 'is-active': inviteStep === index + 1, 'is-done': inviteStep > index + 1 }">
-                  <span>{{ index + 1 }}</span>{{ label }}
-                </li>
-              </ol>
-              <div v-if="inviteStep === 1" class="ac-fields">
+              <div class="ac-fields">
                 <div class="ac-field">
                   <label class="bw-label">Full name</label>
                   <input v-model="draft.fullName" class="bw-input" placeholder="Ada Okonkwo" required />
@@ -720,13 +636,13 @@ onMounted(() => { void load(); });
                 </div>
               </div>
 
-              <div v-else-if="inviteStep === 2" class="ac-invite-grid">
+              <div class="ac-invite-grid">
                 <!-- Role picker -->
                 <div class="ac-field ac-field--full">
                   <label class="bw-label">Assign role</label>
                   <div class="ac-role-grid">
                     <button
-                      v-for="r in roles.filter(r => r.role_key !== 'super-admin')"
+                      v-for="r in roles"
                       :key="r.role_key"
                       type="button"
                       :class="['ac-role-pick', `rc-${rc(r.role_key)}`, draft.roleKey === r.role_key && 'is-picked']"
@@ -741,16 +657,16 @@ onMounted(() => { void load(); });
 
                 <div class="ac-field ac-field--full">
                   <label class="bw-label">Assigned stations</label>
-                  <label class="ac-all-stations">
-                    <input v-model="draft.allStations" type="checkbox" @change="draft.allStations && (draft.stationIds = [])" />
-                    <span><strong>All stations</strong><small>Includes every current station and automatically covers future stations.</small></span>
-                  </label>
-                  <StationMultiSelect v-if="!draft.allStations" v-model="draft.stationIds" placeholder="Search stations" />
+                  <StationMultiSelect
+                    :model-value="draft.allStations ? ['*'] : draft.stationIds"
+                    placeholder="Search stations"
+                    @update:model-value="draft.allStations = $event.includes('*'); draft.stationIds = $event.includes('*') ? [] : $event"
+                  />
                   <p class="ac-field-help">{{ draft.allStations ? 'Estate-wide station scope stays current automatically.' : 'This staff member only sees selected stations.' }}</p>
                 </div>
               </div>
 
-              <div v-else class="ac-invite-grid">
+              <div class="ac-invite-grid">
                 <div class="ac-stack-col">
                   <!-- Permission preview for picked role -->
                   <div class="ac-perm-preview">
@@ -765,25 +681,20 @@ onMounted(() => { void load(); });
                     </div>
                   </div>
 
-                  <div class="ac-field ac-field--full">
-                    <label class="bw-label">Temp password <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-faint)">(auto-generated if blank)</span></label>
-                    <input v-model="draft.tempPassword" class="bw-input bw-mono" minlength="12" placeholder="Leave blank to auto-generate" />
-                  </div>
                 </div>
                 <dl class="ac-invite-review">
                   <div><dt>Staff</dt><dd>{{ draft.fullName }}</dd></div>
                   <div><dt>Email</dt><dd>{{ draft.email }}</dd></div>
                   <div><dt>Role</dt><dd>{{ roles.find(r => r.role_key === draft.roleKey)?.role_name }}</dd></div>
                   <div><dt>Stations</dt><dd>{{ draft.allStations ? 'All current and future stations' : draft.stationIds.join(', ') }}</dd></div>
-                  <div class="ac-invite-email"><dt>Email invitation</dt><dd>Creation completes only after Resend confirms both the verification and welcome emails. The welcome message lists the assigned role, permissions, station scope, and Beverly Admin link.</dd></div>
+                  <div class="ac-invite-email"><dt>Email invitation</dt><dd>One secure invitation lets the staff member create their password and activate their account.</dd></div>
                 </dl>
               </div>
 
               <div class="ac-invite-actions">
-                <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
-                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName || !/.+@(acoblighting\.com|org\.acoblighting\.com)$/i.test(draft.email) : (!draft.allStations && !draft.stationIds.length)" @click="continueInvite">Continue</button>
-                <button v-else class="bw-btn primary" :disabled="saving">
-                  {{ saving ? 'Creating…' : 'Create staff user' }}
+                <button type="button" class="bw-btn ghost" @click="closeInvite">Cancel</button>
+                <button class="bw-btn primary" :disabled="saving || !draft.email || !draft.fullName || !/.+@(acoblighting\.com|org\.acoblighting\.com)$/i.test(draft.email) || (!draft.allStations && !draft.stationIds.length)">
+                  {{ saving ? 'Sending…' : 'Send Invite' }}
                 </button>
               </div>
             </form>
@@ -1117,9 +1028,9 @@ onMounted(() => { void load(); });
               <div class="ac-select-wrap">
                 <select
                   class="bw-select"
-                  :value="u.role_key"
+                  :value="staffDraft(u).roleKey"
                   :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
-                  @change="requestRoleChange(u, ($event.target as HTMLSelectElement).value)"
+                  @change="staffDrafts[staffKey(u)].roleKey = ($event.target as HTMLSelectElement).value"
                 >
                   <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
                 </select>
@@ -1129,13 +1040,16 @@ onMounted(() => { void load(); });
             <div v-if="isStaffExpanded(u)" class="ac-staff-role">
               <label class="bw-label" style="margin-bottom:5px">Stations</label>
               <StationMultiSelect
-                :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []"
+                :model-value="staffDraft(u).stationIds"
                 :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
-                @update:model-value="updateStaffStations(u, $event)"
+                @update:model-value="staffDrafts[staffKey(u)].stationIds = $event"
               />
             </div>
 
             <div v-if="isStaffExpanded(u)" class="ac-staff-actions">
+              <button class="bw-btn primary" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">
+                {{ saving ? 'Saving…' : 'Save Changes' }}
+              </button>
               <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
               <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
               <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
@@ -1168,16 +1082,17 @@ onMounted(() => { void load(); });
                     <div class="ac-table-detail-grid">
                       <div class="ac-staff-role">
                         <label class="bw-label">Role</label>
-                        <select class="bw-select" :value="u.role_key" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @change="requestRoleChange(u, ($event.target as HTMLSelectElement).value)">
+                        <select class="bw-select" :value="staffDraft(u).roleKey" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @change="staffDrafts[staffKey(u)].roleKey = ($event.target as HTMLSelectElement).value">
                           <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
                         </select>
                       </div>
                       <div class="ac-staff-role">
                         <label class="bw-label">Stations</label>
-                        <StationMultiSelect :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @update:model-value="updateStaffStations(u, $event)" />
+                        <StationMultiSelect :model-value="staffDraft(u).stationIds" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @update:model-value="staffDrafts[staffKey(u)].stationIds = $event" />
                       </div>
                     </div>
                     <div class="ac-staff-actions">
+                      <button class="bw-btn primary" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || !staffDraftChanged(u) || !staffDraft(u).stationIds.length" @click="saveStaffChanges(u)">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
                       <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
                       <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
                       <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
