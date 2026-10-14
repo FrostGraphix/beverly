@@ -44,7 +44,11 @@ const activeTab   = ref<'matrix' | 'staff'>('matrix');
 const selectedRole = ref('super-admin');
 const staffSearch  = ref('');
 const staffRole    = ref('');
+const staffView    = ref<'cards' | 'table'>('cards');
+const staffStatusLoading = ref(false);
+const staffStatusReady = ref(false);
 const expandedStaff = ref<string[]>([]);
+let loadVersion = 0;
 
 /* invite */
 const inviteOpen = ref(false);
@@ -93,6 +97,23 @@ const staffByRole = computed(() => {
     const m = new Map<string, number>();
     for (const u of staff.value) m.set(u.role_key, (m.get(u.role_key) ?? 0) + 1);
     return m;
+});
+const roleNameByKey = computed(() => new Map(roles.value.map(role => [role.role_key, role.role_name])));
+const permissionCountByRole = computed(() => {
+    const counts = new Map<string, number>();
+    for (const permission of permissions.value) counts.set(permission.role_key, (counts.get(permission.role_key) ?? 0) + 1);
+    return counts;
+});
+const permissionGroupsByRole = computed(() => {
+    const groupByPermission = new Map(catalog.value.map(item => [item.key, item.group]));
+    const groups = new Map<string, Set<string>>();
+    for (const permission of permissions.value) {
+        const group = groupByPermission.get(permission.route_hash);
+        if (!group) continue;
+        if (!groups.has(permission.role_key)) groups.set(permission.role_key, new Set());
+        groups.get(permission.role_key)!.add(group);
+    }
+    return groups;
 });
 /*
  * System roles come from the server payload (GET /access → defaults) rather than
@@ -160,9 +181,22 @@ function toggleStaffExpanded(u: StaffRow) {
         ? expandedStaff.value.filter((k) => k !== key)
         : [...expandedStaff.value, key];
 }
+function roleName(roleKey: string) { return roleNameByKey.value.get(roleKey) ?? roleKey; }
+function permissionCount(roleKey: string) { return permissionCountByRole.value.get(roleKey) ?? 0; }
+function permissionGroups(roleKey: string) { return [...(permissionGroupsByRole.value.get(roleKey) ?? [])]; }
+function stationLabel(user: StaffRow) {
+    if (user.station_ids?.includes('*')) return 'All stations';
+    return (user.station_ids?.length ? user.station_ids : user.station_id ? [user.station_id] : []).join(', ') || 'Unassigned';
+}
+function accountStatus(user: StaffRow) {
+    if (staffStatusLoading.value) return 'Syncing';
+    if (!staffStatusReady.value) return 'Unavailable';
+    return user.suspended ? 'Suspended' : user.confirmed_at ? 'Confirmed' : 'Pending';
+}
 
 /* ─── API ─────────────────────────────────────────────────────────────── */
 async function load() {
+    const version = ++loadVersion;
     loading.value = true;
     try {
         const d = await api.get<AccessResponse>('/api/v1/admin/access');
@@ -173,7 +207,26 @@ async function load() {
         if (d.defaults && Object.keys(d.defaults).length) systemRoleKeys.value = Object.keys(d.defaults);
         if (!roles.value.some(r => r.role_key === selectedRole.value)) selectedRole.value = roles.value[0]?.role_key ?? 'super-admin';
     } catch (e: any) { toast(e?.message ?? 'Failed to load access policy', 'err'); }
-    finally { loading.value = false; }
+    finally {
+        loading.value = false;
+        void loadStaffStatus(version);
+    }
+}
+
+async function loadStaffStatus(version: number) {
+    staffStatusLoading.value = true;
+    staffStatusReady.value = false;
+    try {
+        const data = await api.get<{ staff: StaffRow[] }>('/api/v1/admin/access/staff-status');
+        if (version === loadVersion) {
+            staff.value = data.staff;
+            staffStatusReady.value = true;
+        }
+    } catch {
+        // Base staff data remains usable when activity enrichment is unavailable.
+    } finally {
+        if (version === loadVersion) staffStatusLoading.value = false;
+    }
 }
 
 /* ─── Permission toggle ───────────────────────────────────────────────── */
@@ -958,6 +1011,11 @@ onMounted(() => { void load(); });
             </button>
           </div>
 
+          <div class="ac-view-switch" role="group" aria-label="Staff view">
+            <button :class="{ 'is-active': staffView === 'cards' }" :aria-pressed="staffView === 'cards'" @click="staffView = 'cards'">Cards</button>
+            <button :class="{ 'is-active': staffView === 'table' }" :aria-pressed="staffView === 'table'" @click="staffView = 'table'">Table</button>
+          </div>
+
           <button class="bw-btn primary" :disabled="!canManage" @click="openInvite">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add staff
@@ -981,7 +1039,7 @@ onMounted(() => { void load(); });
         </div>
 
         <!-- Grid -->
-        <div v-else class="ac-staff-grid">
+        <div v-else-if="staffView === 'cards'" class="ac-staff-grid">
           <article v-for="u in filteredStaff" :key="staffKey(u)" :class="['ac-staff-card', `rc-${rc(u.role_key)}`, isStaffExpanded(u) && 'is-expanded']">
             <!-- Card accent line -->
             <div class="ac-card-accent" />
@@ -994,7 +1052,7 @@ onMounted(() => { void load(); });
                 <span>{{ u.email || 'No email' }}</span>
               </div>
               <span :class="['ac-status-pip', u.confirmed_at ? 'pip-ok' : 'pip-wait']" :title="u.confirmed_at ? 'Confirmed' : 'Invitation pending'" />
-                <div class="ac-staff-role-pill">{{ roles.find(r => r.role_key === u.role_key)?.role_name || u.role_key }}</div>
+                <div class="ac-staff-role-pill">{{ roleName(u.role_key) }}</div>
                 <svg :class="['ac-expand-caret', isStaffExpanded(u) && 'is-open']" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M5 7l5 6 5-6" />
                 </svg>
@@ -1009,27 +1067,27 @@ onMounted(() => { void load(); });
               </div>
               <div>
                 <dt>Account</dt>
-                <dd>{{ u.suspended ? 'Suspended' : (u.confirmed_at ? 'Confirmed' : 'Pending invite') }}</dd>
+                <dd>{{ accountStatus(u) }}</dd>
               </div>
               <div>
                 <dt>Permissions</dt>
-                <dd>{{ catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).length }} grants</dd>
+                <dd>{{ permissionCount(u.role_key) }} grants</dd>
               </div>
               <div>
                 <dt>Stations</dt>
-                <dd>{{ u.station_ids?.includes('*') ? 'All current and future stations' : ((u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []).join(', ') || 'Unassigned') }}</dd>
+                <dd>{{ stationLabel(u) }}</dd>
               </div>
             </dl>
 
             <!-- Mini permission badges -->
             <div class="ac-staff-grants">
               <span
-                v-for="g in [...new Set(catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).map(i => i.group))].slice(0, 4)"
+                v-for="g in permissionGroups(u.role_key).slice(0, 4)"
                 :key="g"
                 class="ac-grant-chip"
               >{{ g }}</span>
-              <span v-if="[...new Set(catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).map(i => i.group))].length > 4" class="ac-grant-more">
-                +{{ [...new Set(catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).map(i => i.group))].length - 4 }}
+              <span v-if="permissionGroups(u.role_key).length > 4" class="ac-grant-more">
+                +{{ permissionGroups(u.role_key).length - 4 }}
               </span>
             </div>
             </div>
@@ -1041,7 +1099,7 @@ onMounted(() => { void load(); });
                 <select
                   class="bw-select"
                   :value="u.role_key"
-                  :disabled="saving || !canManage || !u.auth_user_id"
+                  :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
                   @change="requestRoleChange(u, ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
@@ -1053,21 +1111,65 @@ onMounted(() => { void load(); });
               <label class="bw-label" style="margin-bottom:5px">Stations</label>
               <StationMultiSelect
                 :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []"
-                :disabled="saving || !canManage || !u.auth_user_id"
+                :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id"
                 @update:model-value="updateStaffStations(u, $event)"
               />
             </div>
 
             <div v-if="isStaffExpanded(u)" class="ac-staff-actions">
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
-              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
-              <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
+              <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
                 {{ u.suspended ? 'Reactivate user' : 'Suspend user' }}
               </button>
-              <button class="bw-btn danger" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
+              <button class="bw-btn danger" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
             </div>
           </article>
+        </div>
+
+        <!-- Table -->
+        <div v-else class="ac-staff-table-wrap">
+          <table class="ac-staff-table">
+            <thead>
+              <tr><th>Staff member</th><th>Role</th><th>Status</th><th>Stations</th><th>Last active</th><th><span class="sr-only">Details</span></th></tr>
+            </thead>
+            <tbody>
+              <template v-for="u in filteredStaff" :key="staffKey(u)">
+                <tr :class="[`rc-${rc(u.role_key)}`, isStaffExpanded(u) && 'is-expanded']">
+                  <td><div class="ac-table-person"><div :class="['ac-staff-avatar', `rc-${rc(u.role_key)}`]">{{ initials(u.role_key) }}</div><span><strong>{{ u.user_name || '—' }}</strong><small>{{ u.email || 'No email' }}</small></span></div></td>
+                  <td><span class="ac-staff-role-pill">{{ roleName(u.role_key) }}</span></td>
+                  <td><span :class="['ac-table-status', u.suspended ? 'is-danger' : u.confirmed_at ? 'is-ready' : 'is-pending']">{{ accountStatus(u) }}</span></td>
+                  <td class="ac-table-stations">{{ stationLabel(u) }}</td>
+                  <td>{{ relTime(u.last_sign_in_at) }}</td>
+                  <td><button class="bw-btn ghost ac-table-details-btn" :aria-expanded="isStaffExpanded(u)" @click="toggleStaffExpanded(u)">{{ isStaffExpanded(u) ? 'Close' : 'Details' }}</button></td>
+                </tr>
+                <tr v-if="isStaffExpanded(u)" class="ac-table-detail-row">
+                  <td colspan="6">
+                    <div class="ac-table-detail-grid">
+                      <div class="ac-staff-role">
+                        <label class="bw-label">Role</label>
+                        <select class="bw-select" :value="u.role_key" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @change="requestRoleChange(u, ($event.target as HTMLSelectElement).value)">
+                          <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
+                        </select>
+                      </div>
+                      <div class="ac-staff-role">
+                        <label class="bw-label">Stations</label>
+                        <StationMultiSelect :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []" :disabled="saving || !staffStatusReady || !canManage || !u.auth_user_id" @update:model-value="updateStaffStations(u, $event)" />
+                      </div>
+                    </div>
+                    <div class="ac-staff-actions">
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
+                      <button class="bw-btn ghost" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
+                      <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">{{ u.suspended ? 'Reactivate user' : 'Suspend user' }}</button>
+                      <button class="bw-btn danger" :disabled="!canManage || saving || !staffStatusReady || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestStaffDeletion(u)">Delete user</button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -1557,6 +1659,9 @@ onMounted(() => { void load(); });
   -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
 .ac-filters { display: flex; gap: .4rem; flex-wrap: wrap; }
+.ac-view-switch { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.ac-view-switch button { border: 0; border-radius: calc(var(--r-md) - 3px); padding: 5px 10px; background: transparent; color: var(--text-muted); font: 700 var(--t-xs) var(--font-sans); cursor: pointer; }
+.ac-view-switch button.is-active { background: var(--surface-3); color: var(--text); box-shadow: var(--shadow-sm); }
 .ac-filter {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 5px 12px; border-radius: var(--r-full);
@@ -1573,6 +1678,27 @@ onMounted(() => { void load(); });
 .ac-filter.rc-ac.is-active { background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.35); color: #fbbf24; }
 
 .ac-staff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s-3); }
+.ac-staff-table-wrap { overflow-x: auto; border: 1px solid var(--glass-border); border-radius: var(--r-xl); background: var(--glass-bg); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
+.ac-staff-table { width: 100%; min-width: 860px; border-collapse: collapse; }
+.ac-staff-table th { padding: .75rem 1rem; text-align: left; color: var(--text-faint); font-size: var(--t-2xs); text-transform: uppercase; letter-spacing: .08em; background: var(--surface-2); }
+.ac-staff-table td { padding: .85rem 1rem; border-top: 1px solid var(--border); color: var(--text-dim); font-size: var(--t-xs); vertical-align: middle; }
+.ac-staff-table tbody > tr:not(.ac-table-detail-row):hover { background: var(--surface-1); }
+.ac-table-person { display: flex; align-items: center; gap: .7rem; min-width: 220px; }
+.ac-table-person .ac-staff-avatar { width: 34px; height: 34px; border-radius: var(--r-md); }
+.ac-table-person span { min-width: 0; }
+.ac-table-person strong, .ac-table-person small { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-table-person strong { color: var(--text); font-size: var(--t-sm); }
+.ac-table-person small { margin-top: 2px; color: var(--text-muted); }
+.ac-table-status { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.ac-table-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.ac-table-status.is-ready::before { background: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
+.ac-table-status.is-danger { color: var(--danger); }
+.ac-table-status.is-danger::before { background: var(--danger); }
+.ac-table-stations { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-table-details-btn { min-width: 66px; }
+.ac-table-detail-row td { padding: 0; background: var(--surface-1); }
+.ac-table-detail-grid { display: grid; grid-template-columns: minmax(180px, .65fr) minmax(260px, 1.35fr); gap: 1rem; padding: 1rem; }
+.ac-table-detail-grid .bw-label { margin-bottom: 5px; }
 .ac-staff-card {
   background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-xl);
   padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;
@@ -1759,5 +1885,6 @@ onMounted(() => { void load(); });
   .ac-perm-table { min-width: 680px; }
   .ac-staff-meta { grid-template-columns: 1fr 1fr; }
   .ac-staff-bar { flex-direction: column; align-items: stretch; }
+  .ac-view-switch { align-self: flex-start; }
 }
 </style>
