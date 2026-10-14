@@ -24,7 +24,7 @@ describe('staff invitation delivery', () => {
         mocks.isFlagEnabled.mockResolvedValue(true);
         mocks.isResendConfigured.mockReturnValue(true);
         mocks.sendEmail.mockResolvedValue({ messageId: 'email-123' });
-        mocks.sendBatch.mockResolvedValue([{ messageId: 'verify-123' }, { messageId: 'welcome-123' }]);
+        mocks.sendBatch.mockResolvedValue([{ messageId: 'invite-123' }]);
     });
 
     it('blocks account creation preflight when delivery is disabled', async () => {
@@ -36,17 +36,15 @@ describe('staff invitation delivery', () => {
         await expect(notifyStaffInvitation({
             email: 'ada@acoblighting.com',
             fullName: 'Ada Okonkwo',
-            temporaryPassword: 'Beverly-test-A1!',
             roleLabel: 'Operations Manager',
-            verificationUrl: 'https://example.com/verify',
+            setupUrl: 'https://example.com/setup-account',
             permissionLabels: ['Monitor vending activity'],
             stationScope: 'All current and future stations',
             idempotencyKey: 'staff-invite-user-1',
-        })).resolves.toEqual({ status: 'sent', messageId: 'verify-123', messageIds: ['verify-123', 'welcome-123'] });
+        })).resolves.toEqual({ status: 'sent', messageId: 'invite-123', messageIds: ['invite-123'] });
 
         expect(mocks.sendBatch).toHaveBeenCalledWith([
-            expect.objectContaining({ to: 'ada@acoblighting.com', tag: 'staff-verification', html: expect.stringContaining('https://example.com/verify') }),
-            expect.objectContaining({ to: 'ada@acoblighting.com', tag: 'staff-welcome', html: expect.stringContaining('https://example.com/wallet-admin/') }),
+            expect.objectContaining({ to: 'ada@acoblighting.com', tag: 'staff-invitation', html: expect.stringContaining('https://example.com/setup-account') }),
         ], 'staff-invite-user-1');
     });
 
@@ -55,9 +53,8 @@ describe('staff invitation delivery', () => {
         await expect(notifyStaffInvitation({
             email: 'ada@acoblighting.com',
             fullName: 'Ada Okonkwo',
-            temporaryPassword: 'Beverly-test-A1!',
             roleLabel: 'Operations Manager',
-            verificationUrl: 'https://example.com/verify',
+            setupUrl: 'https://example.com/setup-account',
             permissionLabels: [],
             stationScope: 'TUNGA',
             idempotencyKey: 'staff-invite-user-2',

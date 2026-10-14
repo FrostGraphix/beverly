@@ -35,8 +35,8 @@ assert.match(walletAuthPlugin, /const staffRole = \(staffRow as \{ role_key\?: s
 assert.doesNotMatch(walletAuthPlugin, /staffRole\s*=.*rawRole/);
 assert.match(referenceApi, /pathname === "\/api\/v1\/admin\/me"/);
 assert.match(referenceApi, /wallet\.dashboard\.view/);
-assert.match(stationSelect, /onUnmounted/);
-assert.match(stationSelect, /document\.removeEventListener\('click', onDocClick\)/);
+assert.match(stationSelect, /type="checkbox"/);
+assert.match(stationSelect, /All Stations/);
 
 assert.match(
     pkg.scripts['test:security'],

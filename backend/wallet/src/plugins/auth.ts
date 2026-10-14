@@ -268,7 +268,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                 return reply.code(403).send({ error: 'forbidden', message: 'Staff role required.' });
             }
             const routeUrl = req.routeOptions?.url ?? '';
-            if (req.actor.passwordResetRequired && !['/me', '/password-change', '/logout'].includes(routeUrl)) {
+            if (req.actor.passwordResetRequired && !['/me', '/password-change', '/account-setup', '/logout'].includes(routeUrl)) {
                 return reply.code(403).send({
                     error: 'password_reset_required',
                     message: 'Change your temporary password before continuing.',

@@ -4,13 +4,12 @@
  * so admin.ts doesn't re-grow past the module-boundaries line cap for adding
  * one more notification type — each call site here collapses to one line.
  */
-import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { isResendConfigured, sendEmail, sendBatch } from '../adapters/resend.js';
 import { sendWebPush } from './push-notifications.js';
 import {
-    staffInvitationEmail, staffEmailVerificationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
+    staffInvitationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
 } from '../emails/templates.js';
 
 async function findStaffUser(userId: string): Promise<{ email?: string; user_name?: string; auth_user_id?: string } | null> {
@@ -52,9 +51,8 @@ export async function staffInvitationReadiness(): Promise<{
 export async function notifyStaffInvitation(opts: {
     email: string;
     fullName: string;
-    temporaryPassword: string;
     roleLabel: string;
-    verificationUrl: string;
+    setupUrl: string;
     permissionLabels: string[];
     stationScope: string;
     idempotencyKey: string;
@@ -65,16 +63,13 @@ export async function notifyStaffInvitation(opts: {
         const content = staffInvitationEmail({
             fullName: opts.fullName,
             loginEmail: opts.email,
-            temporaryPassword: opts.temporaryPassword,
             roleLabel: opts.roleLabel,
-            loginUrl: env.STAFF_PORTAL_URL,
+            setupUrl: opts.setupUrl,
             permissionLabels: opts.permissionLabels,
             stationScope: opts.stationScope,
         });
-        const verification = staffEmailVerificationEmail({ fullName: opts.fullName, verificationUrl: opts.verificationUrl });
         const results = await sendBatch([
-            { to: opts.email, subject: verification.subject, html: verification.html, text: verification.text, tag: 'staff-verification' },
-            { to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-welcome' },
+            { to: opts.email, subject: content.subject, html: content.html, text: content.text, tag: 'staff-invitation' },
         ], opts.idempotencyKey);
         return { status: 'sent', messageId: results[0]?.messageId, messageIds: results.map((result) => result.messageId) };
     } catch {
