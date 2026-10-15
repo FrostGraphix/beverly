@@ -108,7 +108,7 @@ function customerAuthStatus(code: string): number {
     return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
         : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
         : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
-        : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
+        : code === 'otp_storage_missing' || code === 'otp_send_failed' || code === 'phone_auth_disabled' ? 503
         : code === 'customer_not_found' ? 404
         : code === 'email_in_use' || code === 'phone_in_use' ? 409
         : code === 'account_conversion_failed' ? 503

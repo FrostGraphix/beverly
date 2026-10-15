@@ -21,6 +21,7 @@ function main() {
   assert(service.includes("export interface PhoneSignupInput"), "customer-auth.ts must export PhoneSignupInput");
   assert(service.includes("export interface PhoneLoginInput"), "customer-auth.ts must export PhoneLoginInput");
   assert(service.includes("authProvider: 'phone_password'"), "customer-auth.ts must set phone_password authProvider");
+  assert(service.includes("assertPhonePasswordAuthEnabled"), "phone signup must preflight Supabase phone auth");
 
   // 2. Customer Fastify Routes
   const routes = read("backend/wallet/src/routes/customer.ts");
@@ -28,6 +29,7 @@ function main() {
   assert(routes.includes("fastify.post('/auth/phone/login'"), "customer.ts must register /auth/phone/login");
   assert(routes.includes("signupWithPhone"), "customer.ts must import signupWithPhone");
   assert(routes.includes("loginWithPhone"), "customer.ts must import loginWithPhone");
+  assert(routes.includes("code === 'phone_auth_disabled' ? 503"), "disabled Supabase phone auth must return service unavailable");
 
   // 3. Route Policy
   const routePolicy = read("backend/wallet/src/contracts/route-policy.ts");
@@ -49,6 +51,7 @@ function main() {
   const customerSignup = read("apps/customer/src/views/Signup.vue");
   assert(customerSignup.includes("/api/v1/customer/auth/phone/signup"), "Customer Signup.vue must call /auth/phone/signup");
   assert(customerSignup.includes("submitPhonePassword"), "Customer Signup.vue must include submitPhonePassword");
+  assert(!customerSignup.includes("submitPhoneOtp"), "Customer Signup.vue must expose one phone-password registration pipeline");
 
   // 7. Customer Login View
   const customerLogin = read("apps/customer/src/views/Login.vue");

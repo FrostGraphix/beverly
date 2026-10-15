@@ -122,42 +122,6 @@ async function submitPhonePassword() {
     }
 }
 
-async function submitPhoneOtp() {
-    const validationError = validateDetails();
-    if (validationError) {
-        error.value = validationError;
-        errorCode.value = null;
-        return;
-    }
-    loading.value = true;
-    error.value = null;
-    errorCode.value = null;
-    try {
-        const normalised = normaliseNigerianPhone(phone.value);
-        const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>('/api/v1/customer/auth/signup', {
-            phone: normalised,
-            email: email.value.trim() || undefined,
-            full_name: fullName.value.trim(),
-        });
-        await router.push({
-            name: 'verify',
-            query: {
-                challenge_id: r.challenge_id,
-                phone: normalised,
-                signup: '1',
-                full_name: fullName.value.trim(),
-                email: email.value.trim() || undefined,
-                expires_at: r.expires_at,
-                retry_after_seconds: r.retry_after_seconds,
-            },
-        });
-    } catch (e: any) {
-        handleError(e);
-    } finally {
-        loading.value = false;
-    }
-}
-
 async function submitEmail() {
     const validationError = validatePassword();
     if (validationError) {
@@ -210,6 +174,8 @@ function handleError(e: any) {
                 : 'An account already exists for this phone. Sign in instead.';
         } else if (e.code === 'weak_password') {
             error.value = 'Password must be at least 8 characters.';
+        } else if (e.code === 'phone_auth_disabled') {
+            error.value = 'Phone account registration is temporarily unavailable. Please contact support.';
         } else {
             error.value = e.message ?? 'Something went wrong. Please try again.';
         }
@@ -316,9 +282,6 @@ function handleError(e: any) {
         <button class="bw-btn primary lg auth-btn" type="button" :disabled="loading" @click="continueFromDetails">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Processing…' : 'Continue' }}
-        </button>
-        <button v-if="accountMode === 'phone'" class="bw-btn secondary lg auth-btn" type="button" style="margin-top: 8px;" :disabled="loading" @click="submitPhoneOtp">
-          Send SMS OTP Instead
         </button>
       </template>
 

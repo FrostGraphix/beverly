@@ -228,6 +228,21 @@ function normalizePhone(phone: string): string {
     return normalizeSmsPhone(phone);
 }
 
+async function assertPhonePasswordAuthEnabled(): Promise<void> {
+    const response = await fetch(`${env.SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: env.SUPABASE_ANON_KEY },
+    });
+    const settings = await response.json().catch(() => ({})) as {
+        external?: { phone?: boolean };
+    };
+    if (!response.ok || settings.external?.phone !== true) {
+        throw new AuthError(
+            'Phone account registration is temporarily unavailable. Please contact support.',
+            'phone_auth_disabled',
+        );
+    }
+}
+
 async function ensurePurposeAllowed(
     phone: string,
     purpose: OtpPurpose,
@@ -791,6 +806,7 @@ export async function signupWithPhone(
     const password = normalizePassword(input.password);
     const fullName = input.full_name?.trim();
     if (!fullName || fullName.length < 2) throw new AuthError('Full name is required.', 'full_name_required');
+    await assertPhonePasswordAuthEnabled();
 
     let email: string | null = null;
     if (input.email) {

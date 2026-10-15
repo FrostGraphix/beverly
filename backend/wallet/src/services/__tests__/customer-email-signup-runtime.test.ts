@@ -110,7 +110,13 @@ describe('customer email signup runtime workflow', () => {
         deleteUser.mockResolvedValue({ error: null });
         updateUserById.mockResolvedValue({ data: { user: { id: 'auth-phone' } }, error: null });
         getOrCreateKycManagedWallet.mockResolvedValue({ id: 'wallet-new' });
-        vi.stubGlobal('fetch', vi.fn(async () => {
+        vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+            if (String(input).endsWith('/auth/v1/settings')) {
+                return new Response(JSON.stringify({ external: { phone: true } }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            }
             events.push('password-token');
             return new Response(JSON.stringify({
                 access_token: 'access-token',
@@ -286,5 +292,20 @@ describe('customer email signup runtime workflow', () => {
         });
 
         expect(events.indexOf('password-token')).toBeLessThan(events.indexOf('insert:customers'));
+    });
+
+    it('does not create a phone user while Supabase phone auth is disabled', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ external: { phone: false } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        })));
+        const { signupWithPhone } = await import('../customer-auth.js');
+
+        await expect(signupWithPhone({
+            phone: '+2348060000000',
+            password: 'correct-pass',
+            full_name: 'New Phone Customer',
+        })).rejects.toMatchObject({ code: 'phone_auth_disabled' });
+        expect(createUser).not.toHaveBeenCalled();
     });
 });
