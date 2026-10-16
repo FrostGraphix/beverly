@@ -708,9 +708,16 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── METERS ────────────────────────────────────────────────────────────────
 
-    fastify.get('/meters', { preHandler: fastify.requireCustomer() }, async (req) => {
-        const meters = await listCustomerMeters(req.actor!.customerId!);
-        return { meters };
+    fastify.get('/meters', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        try {
+            const meters = await listCustomerMeters(req.actor!.customerId!);
+            return { meters };
+        } catch (error) {
+            if (error instanceof CustomerPurchaseError) {
+                return reply.code(503).send({ error: error.code, message: 'Your meters could not be loaded. Please try again.' });
+            }
+            throw error;
+        }
     });
 
     fastify.get('/meters/balances', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -791,7 +798,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return { meter };
         } catch (e: any) {
             if (e instanceof CustomerPurchaseError) return reply.code(
-                e.code === 'meter_approval_unavailable' ? 503
+                e.code === 'meter_approval_unavailable' || e.code === 'meter_limit_unavailable' ? 503
                 : e.code === 'station_assignment_required' || e.code === 'cross_station_vend_forbidden' ? 403
                 : 422,
             ).send({ error: e.code, message: e.message });
@@ -805,7 +812,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             await unlinkMeter(req.actor!.customerId!, req.actor!.userId, id);
             return { ok: true };
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'not_found' ? 404 : 422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'not_found' ? 404 : 503).send({ error: e.code, message: e.code === 'not_found' ? e.message : 'Meter removal failed. Please try again.' });
             throw e;
         }
     });
