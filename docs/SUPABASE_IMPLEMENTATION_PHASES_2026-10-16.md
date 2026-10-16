@@ -21,11 +21,30 @@ The final audit in `SUPABASE_FINAL_AUDIT_2026-10-16.md` is the baseline, not a c
 
 - Final phase 1/2 suite: 86 backend test files, 560 tests passed under Node 22.23.3; TypeScript check passed.
 - Full six-component build completed with exit code 0 using explicit Node 22 and Corepack JS entrypoint (avoids Windows Corepack shim selecting Node 24): backend, CRM, admin, vendor, customer and landing. Existing bundle/import warnings remain; no build errors.
-- These unit/service checks do not establish live PostgreSQL concurrency or browser acceptance. CI, deployment and post-release measurements remain pending.
+- Hosted CI at `33bbd290ec90afe29e5bc9c3526ceb3d8e7391a7` passed backend tests, all three frontend typechecks, frontend builds, acceptance checks, and Production Hardening build/contracts. E2E API integrity was skipped, not passed. These checks do not establish live PostgreSQL concurrency or browser acceptance.
+- Draft PR https://github.com/FrostGraphix/beverly/pull/185 targets the current production source branch, preserving seven deployed staff/signup commits absent from main. Vercel preview passed. Production promotion and post-release measurements remain pending.
 
-## Phase 3 — recovery and storage prerequisites (pending)
+## Phase 3 — recovery and storage prerequisites (in progress)
 
-Choose a secure backup destination and isolated restore target. Current API returned no platform backups and PITR disabled; July export is insufficient. Local Docker engine is unavailable. Establish throttled, health-checked backup and restoration before any physical maintenance. Do not upload financial/customer data to an unapproved new destination.
+Current API returned no platform backups and PITR disabled; July export is insufficient. Native PostgreSQL 17.7 tools are available despite Docker being unavailable. The user explicitly authorized export despite additional egress risk after the dashboard showed 6.12/5 GB. No paid upgrade was made.
+
+A single compressed full-database export completed into the existing local `tmp/backups` area, in a newly restricted directory. It used a shared read-only repeatable-read snapshot, one dump process, and successful periodic health probes. Snapshot evidence reports PostgreSQL 17.6 and 419,474,579 database bytes at server timestamp `2026-10-16T16:20:10.425Z`. The local directory timestamp differs; clocks are not assumed synchronized. Archive size: 25,100,152 bytes. SHA-256: `db432398201e346388d68f09d57f20ae3f11791ffcf73787d66f35a1499d5620`. Archive and private credentials remain local, outside this commit.
+
+An isolated password-protected local PostgreSQL instance on 127.0.0.1:55437 successfully restored `daily_meter_readings`, `daily_meter_deltas`, and `meter_consumption_aggregates`, including their selected indexes and unique constraints, in one transaction. Archive SHA-256 matched. Exact restored counts matched the shared production snapshot: 54,806 readings, 54,806 deltas and 92,604 aggregates. Foreign keys, policies, triggers, managed extensions, global roles and external Storage object contents are not covered by these checks. Full-system recovery remains unverified.
+
+| Relation | Production allocation | Restored allocation | Matched rows |
+| --- | ---: | ---: | ---: |
+| daily_meter_readings | 78,561,280 | 19,013,632 | 54,806 |
+| daily_meter_deltas | 39,280,640 | 12,828,672 | 54,806 |
+| meter_consumption_aggregates | 64,094,208 | 17,416,192 | 92,604 |
+
+Allocations are bytes. The fresh-copy difference supports physical reclamation as a promising data-preserving approach, not a guaranteed production saving. Local PostgreSQL differs in patch version and environment; production writes continue. Latest SQL at `2026-10-16T16:29:05.023Z` still measured 419,474,579 database bytes and zero blocked sessions. Statistics reported zero live rows despite exact backup counts, confirming those estimates cannot establish actual row counts or bloat.
+
+Physical reclamation remains gated. Supabase documents that full-table pg_repack needs approximately twice the target table/index size as free disk space: https://supabase.com/docs/guides/database/extensions/pg_repack . Local free disk does not establish remote disk headroom. PostgreSQL documents that table-filtered restores omit dependent objects: https://www.postgresql.org/docs/17/app-pgrestore.html . No table purge or compaction has run.
+
+Authenticated Management API metrics reported `/data` capacity 8,350,298,112 bytes and available 7,604,224,000 bytes; root available 2,438,205,440 bytes. This exceeds twice the largest target allocation at measurement time. Source endpoint: `GET /v1/projects/qpoipyqgrjsjdvfqmxok/analytics/endpoints/metrics`; documentation: https://supabase.com/docs/reference/api/v1-scrape-project-metrics . Disk headroom must be rechecked immediately before maintenance.
+
+The server offers pg_repack 1.5.2 but it is not installed. No pg_repack client was found on PATH; WSL lists only Docker Desktop, whose engine was previously unavailable. The native alternative, VACUUM FULL, preserves rows but takes an exclusive table lock. Maintenance mode/availability tradeoff requires confirmation before proceeding; no lock-taking production rewrite has been attempted. See https://supabase.com/docs/guides/platform/database-size .
 
 Verify current worker identity, ingestion configuration, archive objects/checksums and restoration, quota billing scope and remaining errors. Trace high-volume balance/auth calls before optimizing; never cache debit-authorization balances or weaken revocation checks.
 
