@@ -777,6 +777,14 @@ export async function createReceipt(input: CreateReceiptInput) {
         payload: input.payload,
         print_name: `Beverly_Credit_Token_Receipt_${receiptNumber}_${new Date().toISOString().slice(0, 10)}.pdf`,
     }).select('*').single();
+    if (error?.code === '23505') {
+        // Another caller may have issued this order's immutable receipt first.
+        const { data: winner, error: winnerError } = await adminClient
+            .from('receipts').select('*')
+            .eq('purchase_order_id', input.purchaseOrderId).maybeSingle();
+        if (winnerError) throw new VendingError(winnerError.message, 'receipt_lookup_failed');
+        if (winner) return winner as { id: string; receipt_number: string; payload: Record<string, unknown> };
+    }
     if (error) throw new VendingError(error.message, 'receipt_failed');
     return data as { id: string; receipt_number: string; payload: Record<string, unknown> };
 }

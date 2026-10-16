@@ -297,12 +297,19 @@ export async function removeBankFundingProof(proofFilePath: string): Promise<voi
 }
 
 export async function attachProofUrls(requests: FundingRequest[]): Promise<FundingRequest[]> {
-    return Promise.all(requests.map(async (request) => {
-        if (!request.proof_file_path) return { ...request, proof_view_url: null };
+    const paths = [...new Set(requests.map((request) => request.proof_file_path)
+        .filter((path): path is string => Boolean(path)))];
+    const urls = new Map<string, string>();
+    for (let offset = 0; offset < paths.length; offset += 100) {
         const { data } = await adminClient.storage
             .from(PROOF_BUCKET)
-            .createSignedUrl(request.proof_file_path, 60 * 30);
-        return { ...request, proof_view_url: data?.signedUrl ?? null };
+            .createSignedUrls(paths.slice(offset, offset + 100), 60 * 30);
+        for (const result of data ?? []) {
+            if (!result.error && result.path && result.signedUrl) urls.set(result.path, result.signedUrl);
+        }
+    }
+    return requests.map((request) => ({
+        ...request, proof_view_url: urls.get(request.proof_file_path ?? '') ?? null,
     }));
 }
 
