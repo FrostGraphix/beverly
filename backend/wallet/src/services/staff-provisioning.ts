@@ -46,6 +46,16 @@ async function removeIncompleteStaff(userId: string) {
     return { profileCleanup, authCleanup, failed: Boolean(profileCleanup.error || authCleanup.error) };
 }
 
+const STAFF_EMAIL_IN_USE_MESSAGE = 'A staff account already exists for this email. Edit the existing staff member instead.';
+
+function isUniqueEmailConflict(error: any): boolean {
+    return error?.code === '23505' || error?.constraint === 'users_email_key' || error?.message?.includes('users_email_key');
+}
+
+function isExistingAuthUser(error: any): boolean {
+    return error?.status === 422 || error?.code === 'email_exists' || /already (been )?registered|already exists/i.test(error?.message ?? '');
+}
+
 export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor, logger: ProvisioningLogger) {
     const input = createStaffSchema.parse(rawInput);
     if (!isCorporateStaffEmail(input.email)) {
@@ -60,6 +70,21 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
     const { data: assignedRole, error: roleError } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', input.roleKey).maybeSingle();
     if (roleError) throw new StaffProvisioningError('role_lookup_failed', 'The staff role could not be verified. Try again.', 503);
     if (!assignedRole) throw new StaffProvisioningError('role_not_found', 'Choose an existing role.', 400);
+
+    const { data: existingProfile, error: existingProfileError } = await adminClient.from('users')
+        .select('id, auth_user_id, user_id, user_name, role_key, station_id, station_ids, password_reset_required, password_changed_at, password_session_id, updated_at')
+        .eq('email', input.email).maybeSingle();
+    if (existingProfileError) throw new StaffProvisioningError('staff_lookup_failed', 'The staff account could not be checked. Try again.', 503);
+    if (existingProfile) {
+        const linkedUserId = (existingProfile as any).auth_user_id || (existingProfile as any).user_id;
+        if (linkedUserId) {
+            const { data: linkedAuth, error: linkedAuthError } = await adminClient.auth.admin.getUserById(linkedUserId);
+            if (linkedAuth?.user) throw new StaffProvisioningError('staff_email_in_use', STAFF_EMAIL_IN_USE_MESSAGE, 409);
+            if (linkedAuthError && (linkedAuthError as any).status !== 404) {
+                throw new StaffProvisioningError('staff_lookup_failed', 'The staff login could not be checked. Try again.', 503);
+            }
+        }
+    }
 
     const emailReadiness = await staffInvitationReadiness();
     if (!emailReadiness.ready) {
@@ -80,11 +105,12 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
         user_metadata: { role_key: input.roleKey, role: input.roleKey, full_name: input.fullName, station_id: primaryStationId, station_ids: stationIds, all_stations: input.allStations },
     });
     if (authError || !authData.user) {
-        throw new StaffProvisioningError('user_create_failed', authError?.message ?? 'Could not create staff user.', 400);
+        if (isExistingAuthUser(authError)) throw new StaffProvisioningError('staff_email_in_use', STAFF_EMAIL_IN_USE_MESSAGE, 409);
+        throw new StaffProvisioningError('user_create_failed', 'Could not create the staff login. Try again.', 502);
     }
 
     const userId = authData.user.id;
-    const { error: profileError } = await adminClient.from('users').upsert({
+    const profile = {
         auth_user_id: userId,
         user_id: userId,
         user_name: input.fullName,
@@ -95,19 +121,35 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
         password_reset_required: true,
         password_changed_at: null,
         password_session_id: null,
-    }, { onConflict: 'user_id' });
+    };
+    const profileResult = existingProfile
+        ? await adminClient.from('users').update(profile).eq('id', (existingProfile as any).id)
+        : await adminClient.from('users').upsert(profile, { onConflict: 'user_id' });
+    const profileError = profileResult.error;
     if (profileError) {
         const cleanup = await removeIncompleteStaff(userId);
         if (cleanup.failed) logger.error({ profileError, cleanup, userId }, 'Staff profile creation and rollback failed');
-        throw new StaffProvisioningError(cleanup.failed ? 'staff_creation_cleanup_required' : 'staff_profile_failed', cleanup.failed ? 'Staff creation failed and the incomplete account needs administrator review.' : profileError.message, cleanup.failed ? 500 : 400);
+        throw new StaffProvisioningError(
+            cleanup.failed ? 'staff_creation_cleanup_required' : isUniqueEmailConflict(profileError) ? 'staff_email_in_use' : 'staff_profile_failed',
+            cleanup.failed ? 'Staff creation failed and the incomplete account needs administrator review.' : isUniqueEmailConflict(profileError) ? STAFF_EMAIL_IN_USE_MESSAGE : 'The staff profile could not be saved. Try again.',
+            cleanup.failed ? 500 : isUniqueEmailConflict(profileError) ? 409 : 503,
+        );
     }
+
+    const rollback = async () => {
+        if (!existingProfile) return removeIncompleteStaff(userId);
+        const { id, ...originalProfile } = existingProfile as any;
+        const profileCleanup = await adminClient.from('users').update(originalProfile).eq('id', id);
+        const authCleanup = await adminClient.auth.admin.deleteUser(userId);
+        return { profileCleanup, authCleanup, failed: Boolean(profileCleanup.error || authCleanup.error) };
+    };
 
     const { data: verificationLink, error: verificationLinkError } = await adminClient.auth.admin.generateLink({
         type: 'recovery', email: input.email, options: { redirectTo: new URL('setup-account', env.STAFF_PORTAL_URL).toString() },
     });
     const actionLink = verificationLink?.properties?.action_link;
     if (verificationLinkError || !actionLink) {
-        const cleanup = await removeIncompleteStaff(userId);
+        const cleanup = await rollback();
         if (cleanup.failed) logger.error({ verificationLinkError, cleanup, userId }, 'Staff verification-link creation and rollback failed');
         throw new StaffProvisioningError(cleanup.failed ? 'staff_creation_cleanup_required' : 'staff_verification_link_failed', cleanup.failed ? 'Staff creation failed and the incomplete account needs administrator review.' : 'The email verification link could not be created, so the staff account was not created.', cleanup.failed ? 500 : 502);
     }
@@ -126,7 +168,7 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
         idempotencyKey: `staff-invite-${userId}`,
     });
     if (invitationDelivery.status !== 'sent') {
-        const cleanup = await removeIncompleteStaff(userId);
+        const cleanup = await rollback();
         await logAction({ actorUserId: actor.userId, actorType: 'staff', actorRole: actor.role,
             action: 'access.user.create_failed', targetType: 'staff_user', targetId: userId,
             after: { email: input.email, invitationEmailFailureReason: invitationDelivery.reason ?? 'provider_error', accountRolledBack: !cleanup.failed },

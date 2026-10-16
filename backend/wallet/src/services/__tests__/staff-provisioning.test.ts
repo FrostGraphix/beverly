@@ -16,6 +16,7 @@ const upsertProfile = vi.fn();
 const deleteProfile = vi.fn();
 const updateProfile = vi.fn();
 let profileToRead: any = null;
+let profileByEmail: any = null;
 
 vi.mock('../../config/env.js', () => ({ env: { STAFF_PORTAL_URL: 'https://staff.example.test' } }));
 vi.mock('../audit.js', () => ({ logAction }));
@@ -28,7 +29,10 @@ vi.mock('../../db/supabase.js', () => ({
             if (table === 'permissions') return { select: () => ({ eq: async () => ({ data: [{ route_hash: 'wallet.dashboard.view' }], error: null }) }) };
             if (table === 'users') return {
                 upsert: upsertProfile,
-                select: () => ({ or: () => ({ maybeSingle: async () => ({ data: profileToRead, error: null }) }) }),
+                select: () => ({
+                    eq: () => ({ maybeSingle: async () => ({ data: profileByEmail, error: null }) }),
+                    or: () => ({ maybeSingle: async () => ({ data: profileToRead, error: null }) }),
+                }),
                 update: updateProfile,
                 delete: () => ({ eq: deleteProfile, or: deleteProfile }),
             };
@@ -53,9 +57,46 @@ describe('staff provisioning pipeline', () => {
         signOut.mockResolvedValue({ error: null });
         getUserById.mockResolvedValue({ data: { user: { id: 'staff-1', user_metadata: {} } }, error: null });
         updateUserById.mockResolvedValue({ error: null });
-        updateProfile.mockImplementation(() => ({ or: async () => ({ error: null }) }));
+        updateProfile.mockImplementation(() => ({ or: async () => ({ error: null }), eq: async () => ({ error: null }) }));
         logAction.mockResolvedValue(undefined);
         profileToRead = null;
+        profileByEmail = null;
+    });
+
+    it('completes an orphaned profile instead of inserting a duplicate email', async () => {
+        profileByEmail = { id: 'profile-1', user_id: 'legacy-user', auth_user_id: null, user_name: 'Ada', role_key: 'account', station_id: null, station_ids: ['*'] };
+        getUserById.mockResolvedValueOnce({ data: { user: null }, error: { status: 404 } });
+        const { provisionStaff } = await import('../staff-provisioning.js');
+
+        await expect(provisionStaff({
+            email: 'ada@acoblighting.com', fullName: 'Ada Lovelace', roleKey: 'account', stationIds: [], allStations: true,
+        }, { userId: 'admin-1' }, { error: vi.fn() })).resolves.toMatchObject({ ok: true, userId: 'staff-1' });
+
+        expect(upsertProfile).not.toHaveBeenCalled();
+        expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ auth_user_id: 'staff-1', user_id: 'staff-1', station_ids: ['*'] }));
+        expect(notifyStaffInvitation).toHaveBeenCalledOnce();
+    });
+
+    it('rejects an email already linked to a working staff login before provisioning', async () => {
+        profileByEmail = { id: 'profile-1', user_id: 'staff-1', auth_user_id: 'staff-1' };
+        const { provisionStaff } = await import('../staff-provisioning.js');
+
+        await expect(provisionStaff({
+            email: 'ada@acoblighting.com', fullName: 'Ada Lovelace', roleKey: 'account', stationIds: [], allStations: true,
+        }, { userId: 'admin-1' }, { error: vi.fn() })).rejects.toMatchObject({ code: 'staff_email_in_use', statusCode: 409 });
+
+        expect(staffInvitationReadiness).not.toHaveBeenCalled();
+        expect(createUser).not.toHaveBeenCalled();
+    });
+
+    it('turns a concurrent duplicate email into a safe conflict without leaking database details', async () => {
+        upsertProfile.mockResolvedValueOnce({ error: { code: '23505', constraint: 'users_email_key', message: 'duplicate key value violates unique constraint "users_email_key"' } });
+        const { provisionStaff } = await import('../staff-provisioning.js');
+
+        await expect(provisionStaff({
+            email: 'ada@acoblighting.com', fullName: 'Ada Lovelace', roleKey: 'account', stationIds: [], allStations: true,
+        }, { userId: 'admin-1' }, { error: vi.fn() })).rejects.toMatchObject({ code: 'staff_email_in_use', statusCode: 409, message: 'A staff account already exists for this email. Edit the existing staff member instead.' });
+        expect(deleteUser).toHaveBeenCalledWith('staff-1');
     });
 
     it('normalizes once and completes auth, profile, verification, invitation, and audit', async () => {

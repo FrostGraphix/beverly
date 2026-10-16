@@ -459,7 +459,7 @@ async function createStaff() {
         }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
             roleKey: draft.value.roleKey, stationIds: draft.value.stationIds, allStations: draft.value.allStations,
-        });
+        }, { signal: AbortSignal.timeout(60_000) });
         const invitedEmail = draft.value.email;
         closeInvite();
         draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], allStations: false };

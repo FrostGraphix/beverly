@@ -129,7 +129,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         return unwrapEnvelope<T>(json);
     } catch (error) {
         if (error instanceof ApiError) throw error;
-        if (error instanceof DOMException && error.name === 'AbortError') {
+        if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
             throw new ApiError(0, 'request_timeout', 'The server took too long to respond. Please try again.');
         }
         throw error;
