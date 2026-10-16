@@ -25,6 +25,7 @@ import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
 import { tokenAllowedAfterPasswordChange, tokenPredatesPasswordChange } from '../services/vendor-password-change.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
 import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
+import { isPasswordSetupRoute } from './staff-route-access.js';
 
 export type ActorType = 'staff' | 'vendor_user' | 'customer';
 
@@ -268,7 +269,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                 return reply.code(403).send({ error: 'forbidden', message: 'Staff role required.' });
             }
             const routeUrl = req.routeOptions?.url ?? '';
-            if (req.actor.passwordResetRequired && !['/me', '/password-change', '/account-setup', '/logout'].includes(routeUrl)) {
+            if (req.actor.passwordResetRequired && !isPasswordSetupRoute(routeUrl)) {
                 return reply.code(403).send({
                     error: 'password_reset_required',
                     message: 'Change your temporary password before continuing.',

@@ -48,10 +48,12 @@ function main() {
   assert(routes.includes("code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401"));
 
   assert(recover.includes("/api/v1/customer/auth/recover"));
-  for (const page of [login, signup, verify]) {
+  for (const page of [login, verify]) {
     assert(page.includes("expires_at"));
     assert(page.includes("retry_after_seconds"));
   }
+  assert(signup.includes("/api/v1/customer/auth/phone/signup"));
+  assert(signup.includes("expires_at"));
   assert(verify.includes("challengeId.value = response.challenge_id"));
   assert(verify.includes("response = await api.post('/api/v1/customer/auth/recover'"));
 
