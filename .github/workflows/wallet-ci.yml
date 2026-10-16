@@ -82,7 +82,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck ${{ matrix.app }}
-        run: pnpm --filter @beverly/${{ matrix.app }} exec tsc --noEmit
+        run: pnpm --filter @beverly/${{ matrix.app }}-app --fail-if-no-match exec vue-tsc --noEmit
 
   # ── Frontend builds ───────────────────────────────────────────────────
   frontend-build:
