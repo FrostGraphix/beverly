@@ -18,7 +18,7 @@ const updateProfile = vi.fn();
 let profileToRead: any = null;
 let profileByEmail: any = null;
 
-vi.mock('../../config/env.js', () => ({ env: { STAFF_PORTAL_URL: 'https://staff.example.test' } }));
+vi.mock('../../config/env.js', () => ({ env: { STAFF_PORTAL_URL: 'https://staff.example.test/wallet-admin' } }));
 vi.mock('../audit.js', () => ({ logAction }));
 vi.mock('../admin-notifications.js', () => ({ notifyStaffInvitation, staffInvitationReadiness, notifyRoleAssignment, notifyStationAssignment, notifyStaffAccountChange }));
 vi.mock('../../db/supabase.js', () => ({
@@ -108,7 +108,10 @@ describe('staff provisioning pipeline', () => {
         expect(result).toMatchObject({ ok: true, userId: 'staff-1' });
         expect(result).not.toHaveProperty('temporaryPassword');
         expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'ada@acoblighting.com', email_confirm: true, user_metadata: expect.objectContaining({ full_name: 'Ada Lovelace', station_ids: ['STATION-1'] }) }));
-        expect(generateLink).toHaveBeenCalledWith(expect.objectContaining({ type: 'recovery' }));
+        expect(generateLink).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'recovery',
+            options: { redirectTo: 'https://staff.example.test/wallet-admin/setup-account' },
+        }));
         expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({ email: 'ada@acoblighting.com', user_name: 'Ada Lovelace', station_ids: ['STATION-1'] }), { onConflict: 'user_id' });
         expect(notifyStaffInvitation).toHaveBeenCalledOnce();
         expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ action: 'access.user.create', targetId: 'staff-1' }));
@@ -124,6 +127,17 @@ describe('staff provisioning pipeline', () => {
         expect(deleteProfile).toHaveBeenCalledWith('user_id', 'staff-1');
         expect(deleteUser).toHaveBeenCalledWith('staff-1');
         expect(notifyStaffInvitation).not.toHaveBeenCalled();
+    });
+
+    it('sends password setup reminders to the staff portal route', async () => {
+        profileToRead = { email: 'ada@acoblighting.com', user_name: 'Ada', role_key: 'account', station_ids: ['TUNGA'], password_reset_required: true, password_changed_at: null, password_session_id: null };
+        const { sendStaffPasswordSetup } = await import('../staff-provisioning.js');
+
+        await expect(sendStaffPasswordSetup('staff-1', { userId: 'admin-1' }, { error: vi.fn() })).resolves.toMatchObject({ ok: true });
+        expect(generateLink).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'recovery',
+            options: { redirectTo: 'https://staff.example.test/wallet-admin/setup-account' },
+        }));
     });
 
     it('saves role and station scope through one update pipeline', async () => {

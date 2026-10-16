@@ -56,6 +56,10 @@ function isExistingAuthUser(error: any): boolean {
     return error?.status === 422 || error?.code === 'email_exists' || /already (been )?registered|already exists/i.test(error?.message ?? '');
 }
 
+function staffSetupRedirectUrl(): string {
+    return new URL('setup-account', `${env.STAFF_PORTAL_URL.replace(/\/+$/, '')}/`).toString();
+}
+
 export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor, logger: ProvisioningLogger) {
     const input = createStaffSchema.parse(rawInput);
     if (!isCorporateStaffEmail(input.email)) {
@@ -145,7 +149,7 @@ export async function provisionStaff(rawInput: unknown, actor: ProvisioningActor
     };
 
     const { data: verificationLink, error: verificationLinkError } = await adminClient.auth.admin.generateLink({
-        type: 'recovery', email: input.email, options: { redirectTo: new URL('setup-account', env.STAFF_PORTAL_URL).toString() },
+        type: 'recovery', email: input.email, options: { redirectTo: staffSetupRedirectUrl() },
     });
     const actionLink = verificationLink?.properties?.action_link;
     if (verificationLinkError || !actionLink) {
@@ -235,7 +239,7 @@ export async function sendStaffPasswordSetup(userId: string, actor: Provisioning
     const readiness = await staffInvitationReadiness();
     if (!readiness.ready) throw new StaffProvisioningError('staff_invitation_unavailable', 'Password setup emails are temporarily unavailable.', 503);
     const { data: link, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'recovery', email: staff.email, options: { redirectTo: new URL('setup-account', env.STAFF_PORTAL_URL).toString() },
+        type: 'recovery', email: staff.email, options: { redirectTo: staffSetupRedirectUrl() },
     });
     const setupUrl = link?.properties?.action_link;
     if (linkError || !setupUrl) throw new StaffProvisioningError('staff_setup_link_failed', 'The secure password setup link could not be created.', 502);
