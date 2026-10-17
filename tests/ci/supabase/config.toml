@@ -1,0 +1,32 @@
+project_id = "beverly-api-ci"
+
+[api]
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+major_version = 17
+
+[db.seed]
+enabled = false
+
+[auth]
+site_url = "http://localhost:4000"
+jwt_expiry = 600
+enable_signup = false
+
+[studio]
+enabled = false
+
+[analytics]
+enabled = false
+
+[realtime]
+enabled = false
+
+[storage]
+enabled = false
+
+[edge_runtime]
+enabled = false

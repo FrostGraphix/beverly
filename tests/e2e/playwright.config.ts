@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from 'playwright/test';
 
 export default defineConfig({
     testDir: './',
@@ -15,6 +15,11 @@ export default defineConfig({
     },
 
     projects: [
+        {
+            name: 'api-contracts',
+            testMatch: 'ledger-integrity.spec.ts',
+            use: { trace: 'off', screenshot: 'off', video: 'off' },
+        },
         {
             name: 'customer-chromium',
             use: {
