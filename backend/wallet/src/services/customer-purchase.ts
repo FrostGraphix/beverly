@@ -43,7 +43,7 @@ export class CustomerPurchaseError extends Error {
  * Meters a customer may link, keyed by KYC tier. Monetary limits come from
  * the configurable KYC policy; this separate inventory control is unchanged.
  */
-const METER_CAP_BY_KYC_TIER: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
+const METER_CAP_BY_KYC_TIER: Record<number, number> = { 0: 3, 1: 5, 2: 10 };
 
 function meterCapForTier(kycTier: number): number {
     return METER_CAP_BY_KYC_TIER[kycTier] ?? METER_CAP_BY_KYC_TIER[0];
