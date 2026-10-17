@@ -9,6 +9,8 @@
  * for use in chart libraries, canvas drawing, etc.
  */
 
+export { startVisiblePolling } from './visible-polling.js';
+
 export const brand = {
     50:  'oklch(96% 0.05 145)',
     100: 'oklch(92% 0.10 145)',

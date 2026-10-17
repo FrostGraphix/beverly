@@ -244,8 +244,8 @@ export async function captureHold(input: CaptureInput): Promise<LedgerEntry> {
     });
     if (error) {
         const message = error.message ?? 'Could not capture hold.';
-        if (/hold has expired/i.test(message)) throw new LedgerError(message, 'hold_expired');
-        if (/hold is not active/i.test(message)) throw new LedgerError(message, 'hold_inactive');
+        if (/hold (?:has )?expired/i.test(message)) throw new LedgerError(message, 'hold_expired');
+        if (/hold (?:is )?not active/i.test(message)) throw new LedgerError(message, 'hold_inactive');
         if (/insufficient available balance/i.test(message)) throw new LedgerError(message, 'insufficient_balance');
         throw new LedgerError(message, 'capture_error');
     }

@@ -1,3 +1,5 @@
+export declare function startVisiblePolling(refresh: () => void | Promise<void>, intervalMs: number): () => void;
+
 export declare const brand: {
     50: string;
     100: string;

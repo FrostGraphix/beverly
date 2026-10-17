@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
-import { onNotificationCountChange, publishNotificationCount, toggleTheme } from '@beverly/tokens';
+import { onNotificationCountChange, publishNotificationCount, toggleTheme, startVisiblePolling } from '@beverly/tokens';
 import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import { useI18n } from '@beverly/tokens/i18n.js';
 import { adminPushNotifications } from '../lib/push-notifications';
@@ -23,7 +23,7 @@ const accountMenuWrap = ref<HTMLElement | null>(null);
 const navRef = ref<HTMLElement | null>(null);
 const unreadNotifications = ref(0);
 let stopNotificationCount: (() => void) | null = null;
-let notificationPoll: ReturnType<typeof setInterval> | null = null;
+let stopNotificationPoll: (() => void) | null = null;
 
 async function loadUnreadNotifications() {
     try {
@@ -315,14 +315,13 @@ onMounted(() => {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     void adminPushNotifications.sync().catch(() => undefined);
     stopNotificationCount = onNotificationCountChange((count) => { unreadNotifications.value = count; });
-    void loadUnreadNotifications();
-    notificationPoll = setInterval(() => void loadUnreadNotifications(), 30_000);
+    stopNotificationPoll = startVisiblePolling(loadUnreadNotifications, 30_000);
     scrollToActiveLink();
 });
 onBeforeUnmount(() => {
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     stopNotificationCount?.();
-    if (notificationPoll) clearInterval(notificationPoll);
+    stopNotificationPoll?.();
 });
 </script>
 

@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import {
-    toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
+    toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone, startVisiblePolling,
     getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
 } from '@beverly/tokens';
 import { PORTAL_URLS } from '../lib/portals';
@@ -41,7 +41,7 @@ const navGroups = ref<Record<NavGroup, boolean>>({
 async function persistLocale(locale: string) {
     try { await api.put('/api/v1/preferences/locale', { locale }); } catch { /* local preference remains active */ }
 }
-let bellPoll: ReturnType<typeof setInterval> | null = null;
+let stopBellPoll: (() => void) | null = null;
 
 function scrollToActiveLink() {
     void nextTick(() => {
@@ -175,16 +175,15 @@ onMounted(() => {
     });
     showIosInstall.value = isIosInstallable() && !isStandalone();
     document.addEventListener('pointerdown', handleDocumentPointerDown);
-    void fetchUnread();
+    stopBellPoll = startVisiblePolling(fetchUnread, 60_000);
     void syncDeviceNotifications().catch(() => { /* best-effort */ });
-    bellPoll = setInterval(fetchUnread, 60_000);
     scrollToActiveLink();
 });
 onBeforeUnmount(() => {
     unsubscribeInstallPrompt?.();
     unsubscribeNotificationCount?.();
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
-    if (bellPoll) clearInterval(bellPoll);
+    stopBellPoll?.();
 });
 </script>
 

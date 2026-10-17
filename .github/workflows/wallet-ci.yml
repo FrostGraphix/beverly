@@ -82,7 +82,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck ${{ matrix.app }}
-        run: pnpm --filter @beverly/${{ matrix.app }} exec tsc --noEmit
+        run: pnpm --filter @beverly/${{ matrix.app }}-app --fail-if-no-match exec vue-tsc --noEmit
 
   # ── Frontend builds ───────────────────────────────────────────────────
   frontend-build:
@@ -106,6 +106,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Notification polling regression
+        run: node --test tests/visible-polling.test.mjs
+
       - name: Build all apps
         run: pnpm --filter './apps/*' build
         env:
@@ -125,11 +128,10 @@ jobs:
 
   # ── E2E tests (API layer — no browser needed) ─────────────────────────
   e2e-api:
-    name: E2E API integrity tests
+    name: Isolated API contract tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: [wallet-unit-tests]
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
 
     steps:
       - uses: actions/checkout@v6
@@ -150,31 +152,30 @@ jobs:
       - name: Install test dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright
-        run: pnpm exec playwright install chromium --with-deps
-
-      # The suite talks to a live staging API. Without those secrets it would
-      # run against an empty base URL and fail for a reason that has nothing to
-      # do with the change under test, so it is skipped explicitly instead.
-      - name: Check staging credentials
-        id: e2e-secrets
-        env:
-          API_BASE: ${{ secrets.STAGING_API_BASE }}
-          STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
+      - name: Prepare isolated schema and build real API
         run: |
-          if [ -n "$API_BASE" ] && [ -n "$STAFF_TOKEN" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping E2E API integrity tests — STAGING_API_BASE and/or STAGING_STAFF_TOKEN are not configured."
-          fi
+          cp supabase/migrations/20260520120000_staff_mfa_foundation.sql tests/ci/supabase/migrations/
+          cp supabase/migrations/20260719100000_portal_session_timeouts.sql tests/ci/supabase/migrations/
+          pnpm --filter @beverly/wallet-backend build
 
-      - name: Run API integrity E2E (no browser)
-        if: steps.e2e-secrets.outputs.configured == 'true'
-        run: pnpm exec playwright test tests/e2e/ledger-integrity.spec.ts --config=tests/e2e/playwright.config.ts --project=admin-chromium
+      # This is a separate disposable project, never the linked production stack.
+      # CLI startup output may contain local keys: keep it off logs and artifacts.
+      - name: Start isolated Supabase
+        run: pnpm exec supabase start --workdir tests/ci --exclude studio,imgproxy,edge-runtime,realtime,storage,analytics,vector,meta > "$RUNNER_TEMP/supabase-ci-start.log" 2>&1
         env:
-          API_BASE: ${{ secrets.STAGING_API_BASE }}
-          STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
+          DO_NOT_TRACK: '1'
+
+      - name: Run real authentication and API contracts
+        run: node tools/run-isolated-api-ci.cjs
+
+      - name: Sanitized startup diagnostics
+        if: failure()
+        run: |
+          node -e 'const fs=require("node:fs"); const p=process.env.RUNNER_TEMP+"/supabase-ci-start.log"; if(fs.existsSync(p)){const lines=fs.readFileSync(p,"utf8").split(/\r?\n/).filter(x=>/error|failed|timeout|invalid|unknown/i.test(x)); console.log(lines.slice(-15).join("\n").replace(/:\/\/[^\s/@]+:[^\s/@]+@/g,"://[redacted]@").replace(/[A-Za-z0-9_-]{20,}/g,"[redacted]"));}'
+
+      - name: Remove disposable test stack
+        if: always()
+        run: pnpm exec supabase stop --workdir tests/ci --no-backup
 
   # ── Acceptance criteria checklist ────────────────────────────────────
   acceptance-criteria:

@@ -8,7 +8,7 @@
  * API_BASE: wallet backend URL (default: http://localhost:4000)
  * STAFF_TOKEN: a valid super-admin bearer token
  */
-import { test, expect } from '@playwright/test';
+import { test, expect } from 'playwright/test';
 
 const API_BASE   = process.env.API_BASE   ?? 'http://localhost:4000';
 const STAFF_TOKEN = process.env.STAFF_TOKEN ?? '';
@@ -77,13 +77,16 @@ test.describe('Webhook idempotency (§7.3)', () => {
 
 test.describe('Feature flags (§19.5)', () => {
     test('feature flags endpoint is reachable for staff', async ({ request }) => {
-        if (!STAFF_TOKEN) test.skip();
+        expect(STAFF_TOKEN, 'Isolated CI must supply a fresh staff session').not.toBe('');
         const res = await request.get(`${API_BASE}/api/v1/admin/feature-flags`, {
             headers: staffHeaders(),
         });
         expect(res.ok()).toBe(true);
         const body = await res.json();
         expect(Array.isArray(body.flags)).toBe(true);
+        expect(body.flags).toEqual(expect.arrayContaining([
+            expect.objectContaining({ key: 'ci.synthetic.flag', enabled: false }),
+        ]));
     });
 });
 
