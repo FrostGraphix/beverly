@@ -104,6 +104,9 @@ async function submit() {
           You'll be able to buy tokens for it once it's approved.
         </p>
         <div class="bw-row" style="gap: var(--s-3)">
+          <button class="bw-btn" type="button" style="flex:1; justify-content:center" @click="meterId = ''; nickname = ''; done = false">
+            Add another meter
+          </button>
           <router-link to="/meters" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
             My meters
           </router-link>

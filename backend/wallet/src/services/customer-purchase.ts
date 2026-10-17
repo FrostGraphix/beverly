@@ -831,11 +831,12 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         .maybeSingle();
     const kycTier = Number((customerRow as { kyc_tier?: number } | null)?.kyc_tier ?? 0);
     const meterCap = meterCapForTier(kycTier);
-    const { count } = await adminClient
+    const { count, error: countError } = await adminClient
         .from('customer_meters')
         .select('id', { count: 'exact', head: true })
         .eq('customer_id', customerId)
         .not('status', 'eq', 'rejected');
+    if (countError) throw new CustomerPurchaseError('Meter limit could not be verified. Please try again.', 'meter_limit_unavailable');
     if ((count ?? 0) >= meterCap) {
         throw new CustomerPurchaseError(`Maximum ${meterCap} meters per account at your verification level.`, 'meter_limit');
     }
@@ -888,15 +889,17 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
 }
 
 export async function unlinkMeter(customerId: string, customerUserId: string, meterRowId: string) {
-    const { data: row } = await adminClient
+    const { data: row, error: lookupError } = await adminClient
         .from('customer_meters')
         .select('id, meter_id')
         .eq('id', meterRowId)
         .eq('customer_id', customerId)
         .maybeSingle();
+    if (lookupError) throw new CustomerPurchaseError(lookupError.message, 'meter_unlink_failed');
     if (!row) throw new CustomerPurchaseError('Meter not found.', 'not_found');
 
-    await adminClient.from('customer_meters').delete().eq('id', meterRowId);
+    const { error: deleteError } = await adminClient.from('customer_meters').delete().eq('id', meterRowId).eq('customer_id', customerId);
+    if (deleteError) throw new CustomerPurchaseError(deleteError.message, 'meter_unlink_failed');
 
     await logAction({
         actorUserId: customerUserId,
@@ -909,12 +912,13 @@ export async function unlinkMeter(customerId: string, customerUserId: string, me
 }
 
 export async function listCustomerMeters(customerId: string) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('customer_meters')
         .select('*')
         .eq('customer_id', customerId)
         .not('status', 'eq', 'rejected')
         .order('created_at', { ascending: false });
+    if (error) throw new CustomerPurchaseError(error.message, 'meter_list_unavailable');
     return data ?? [];
 }
 

@@ -53,11 +53,13 @@ function statusBadgeClass(status?: string | null) {
 
 const meters = ref<Meter[]>([]);
 const loading = ref(false);
+const metersError = ref('');
 const balances = ref<Record<string, MeterBalance>>({});
 const balancesLoading = ref(false);
 const balancesError = ref('');
 const confirm = ref<string | null>(null);
 const deleting = ref(false);
+const unlinkError = ref('');
 const history = ref<MeterLinkHistoryEvent[]>([]);
 const historyLoading = ref(false);
 const historyError = ref('');
@@ -89,10 +91,13 @@ function meterTypeLabel(type?: string | null) {
 
 async function loadMeters() {
     loading.value = true;
+    metersError.value = '';
     try {
         const response = await api.get<{ meters: Meter[] }>('/api/v1/customer/meters');
         meters.value = response.meters ?? [];
-    } catch { /* noop */ } finally { loading.value = false; }
+    } catch {
+        metersError.value = 'Your meters could not be loaded. Please try again.';
+    } finally { loading.value = false; }
 }
 
 async function loadMeterBalances() {
@@ -135,12 +140,15 @@ onMounted(() => {
 
 async function unlink(id: string) {
     deleting.value = true;
+    unlinkError.value = '';
     try {
         await api.del(`/api/v1/customer/meters/${id}`);
         meters.value = meters.value.filter((meter) => meter.id !== id);
         confirm.value = null;
         await loadHistory();
-    } catch { /* noop */ } finally { deleting.value = false; }
+    } catch {
+        unlinkError.value = 'Meter removal failed. Please try again.';
+    } finally { deleting.value = false; }
 }
 
 function historyLabel(event: MeterLinkEventType) {
@@ -222,10 +230,11 @@ function formatHistoryDate(value: string) {
     </section>
 
     <p v-if="balancesError" class="bw-alert danger" role="alert">{{ balancesError }}</p>
+    <p v-if="metersError" class="bw-alert danger" role="alert">{{ metersError }} <button type="button" class="bw-btn" @click="loadMeters">Retry</button></p>
 
     <div v-if="loading" class="bw-muted" style="text-align:center; padding: var(--s-8); font-size: var(--t-sm)">Loading...</div>
 
-    <div v-else-if="!meters.length" class="bw-card" style="text-align:center; padding: var(--s-8)">
+    <div v-else-if="!meters.length && !metersError" class="bw-card" style="text-align:center; padding: var(--s-8)">
       <div class="meter-empty-icon" aria-hidden="true">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
           <path d="M13 2 4 14h7l-1 8 10-13h-7l0-7Z" />
@@ -285,6 +294,7 @@ function formatHistoryDate(value: string) {
       <div v-if="confirm === meter.id"
            style="margin-top: var(--s-3); padding: var(--s-3); background: var(--surface-2); border-radius: var(--r-md)">
         <p style="font-size: var(--t-sm); margin:0 0 var(--s-3)">Remove <strong>{{ meter.meter_id }}</strong>?</p>
+        <p v-if="unlinkError" class="bw-alert danger" role="alert">{{ unlinkError }}</p>
         <div class="bw-row" style="gap: var(--s-2)">
           <button class="bw-btn" style="flex:1; justify-content:center; font-size: var(--t-sm)"
                   @click="confirm = null">Cancel</button>
