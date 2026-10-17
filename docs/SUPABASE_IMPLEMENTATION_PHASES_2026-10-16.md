@@ -3,6 +3,12 @@
 Branch: `codex/supabase-safe-remediation`, based on verified production commit `28b0d5f0`.
 The final audit in `SUPABASE_FINAL_AUDIT_2026-10-16.md` is the baseline, not a claim that every historical issue remains current.
 
+## October 17 status update
+
+The October 16 prerequisites below are historical. See `SUPABASE_EXECUTION_2026-10-17.md` for the executed recovery, concurrent index rebuilds, ordinary vacuum and before/after evidence. The five restored table subsets passed their checks; full-system recovery remains unverified. Production allocation reached 340,077,715 bytes and a later read measured 340,176,019 bytes. No application rows were deleted by this task's reclamation operations. Phase 4's point-in-time allocation target is achieved, but catch-up and sustained capacity are not verified.
+
+Shared notification polling now skips hidden/offline tabs, prevents overlapping scheduled requests, resumes on visibility/connectivity changes and cleans up on unmount. Admin, customer and vendor shell typechecks plus behavioral regression tests passed locally. The 5a4d7254 revision was pushed to PR 185; hosted builds and production release still require verification. Financial/security audits and authorization checks were not disabled. No monthly egress or ingestion saving is inferred from a ten-minute request sample.
+
 ## Phase 1 — shared retry correctness (implemented locally)
 
 - `captureHold` recognizes both live PostgreSQL error strings and older variants. No new debit, retry, or database function change.
