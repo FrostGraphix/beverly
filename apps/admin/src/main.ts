@@ -2,7 +2,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './router';
-import { initLocale, initTheme } from '@beverly/tokens';
+import { getDeferredInstallPrompt, initLocale, initTheme } from '@beverly/tokens';
 
 import '@beverly/tokens/tokens.css';
 import '@beverly/tokens/theme.css';
@@ -11,6 +11,7 @@ import './styles/app.css';
 
 initTheme('dark');
 initLocale();
+getDeferredInstallPrompt();
 
 function initQualitySettings() {
     try {

@@ -45,7 +45,8 @@ export async function triggerInstallPrompt() {
     if (!deferredPrompt) return null;
     deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
-    if (choice.outcome === 'accepted') deferredPrompt = null;
+    deferredPrompt = null;
+    listeners.forEach((cb) => cb(null));
     return choice;
 }
 

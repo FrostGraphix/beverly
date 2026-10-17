@@ -47,6 +47,8 @@
     "ai-message.d.ts",
     "PwaUpdateToast.vue",
     "PwaUpdateToast.vue.d.ts",
+    "PwaInstallControl.vue",
+    "PwaInstallControl.vue.d.ts",
     "LanguageSwitcher.vue",
     "LanguageSwitcher.vue.d.ts",
     "i18n.js",
@@ -135,6 +137,10 @@
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",
       "import": "./PwaUpdateToast.vue"
+    },
+    "./PwaInstallControl.vue": {
+      "types": "./PwaInstallControl.vue.d.ts",
+      "import": "./PwaInstallControl.vue"
     },
     "./LanguageSwitcher.vue": {
       "types": "./LanguageSwitcher.vue.d.ts",

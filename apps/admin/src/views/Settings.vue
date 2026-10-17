@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import PwaInstallControl from '@beverly/tokens/PwaInstallControl.vue';
 import { toggleTheme } from '@beverly/tokens';
 
 type Density = 'comfortable' | 'compact';
@@ -106,6 +107,13 @@ watch([density, reduceMotion, stickyTables, autoRefresh], applySettings);
         </div>
 
         <button type="button" class="bw-btn" @click="resetSettings">Reset defaults</button>
+      </section>
+
+      <section class="bw-card settings-card">
+        <p class="bw-label" style="color: var(--brand)">App</p>
+        <h2 class="bw-h2">Install Wallet Admin</h2>
+        <p class="bw-muted">Keep Wallet Admin on your home screen.</p>
+        <PwaInstallControl />
       </section>
 
       <section class="bw-card settings-card">
