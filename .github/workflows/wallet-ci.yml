@@ -106,6 +106,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Notification polling regression
+        run: node --test tests/visible-polling.test.mjs
+
       - name: Build all apps
         run: pnpm --filter './apps/*' build
         env:

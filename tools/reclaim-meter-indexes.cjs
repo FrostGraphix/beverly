@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { Client } = require('pg');
-const tables = ['daily_meter_readings', 'daily_meter_deltas', 'meter_consumption_aggregates', 'wallet_audit_log'];
+const tables = ['daily_meter_readings', 'daily_meter_deltas', 'meter_consumption_aggregates', 'wallet_audit_log', 'audit_logs'];
 function command(table, vacuum = false) {
   assert(tables.includes(table), 'Unexpected maintenance target');
   return vacuum ? `VACUUM (ANALYZE, SKIP_LOCKED, TRUNCATE TRUE, PARALLEL 0) public.${table}` : `REINDEX TABLE CONCURRENTLY public.${table}`;
@@ -19,15 +19,16 @@ if (process.argv.includes('--self-test')) {
 async function main() {
   const table = process.argv.find(arg => arg.startsWith('--table='))?.slice(8);
   const vacuum = process.argv.includes('--vacuum');
-  assert(!(vacuum && table === 'wallet_audit_log'), 'Audit maintenance is index-only');
+  const auditTable = ['wallet_audit_log', 'audit_logs'].includes(table);
+  assert(!(vacuum && auditTable), 'Audit maintenance is index-only');
   const sql = command(table, vacuum);
   const local = process.argv.includes('--local');
   const root = process.env.RECOVERY_DIRECTORY;
   assert(root && path.isAbsolute(root), 'Absolute verified recovery directory required');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-  const walletAudit = table === 'wallet_audit_log';
-  const recovery = JSON.parse(fs.readFileSync(path.join(root, walletAudit ? 'wallet-audit-recovery-verification.json' : 'recovery-verification.json'), 'utf8'));
-  assert.equal(recovery.status, walletAudit ? 'wallet_audit_restore_verified' : 'three_table_restore_verified');
+  const recoveryFile = table === 'audit_logs' ? 'api-audit-recovery-verification.json' : table === 'wallet_audit_log' ? 'wallet-audit-recovery-verification.json' : 'recovery-verification.json';
+  const recovery = JSON.parse(fs.readFileSync(path.join(root, recoveryFile), 'utf8'));
+  assert.equal(recovery.status, table === 'audit_logs' ? 'api_audit_restore_verified' : table === 'wallet_audit_log' ? 'wallet_audit_restore_verified' : 'three_table_restore_verified');
   assert.equal(recovery.archiveSha256, manifest.sha256);
   const archiveHash = crypto.createHash('sha256');
   for await (const chunk of fs.createReadStream(path.join(root, 'database.dump'))) archiveHash.update(chunk);
@@ -53,10 +54,10 @@ async function main() {
   const snapshot = async () => {
     await client.query('begin isolation level repeatable read read only');
     try {
-      const key = walletAudit ? 'id' : table === 'meter_consumption_aggregates' ? 'station_id, meter_id, period_type, period_start' : 'station_id, meter_id, reading_date';
-      if (walletAudit && !auditCutoff) auditCutoff = (await client.query('select max(created_at)::text cutoff from public.wallet_audit_log')).rows[0].cutoff;
+      const key = auditTable ? 'id' : table === 'meter_consumption_aggregates' ? 'station_id, meter_id, period_type, period_start' : 'station_id, meter_id, reading_date';
+      if (auditTable && !auditCutoff) auditCutoff = (await client.query(`select max(created_at)::text cutoff from public.${table}`)).rows[0].cutoff;
       return {
-        data: (await client.query(`select count(*)::text rows, md5(string_agg(md5(to_jsonb(t)::text), '' order by ${key})) digest from public.${table} t${walletAudit ? ' where created_at <= $1::timestamptz' : ''}`, walletAudit ? [auditCutoff] : [])).rows[0],
+        data: (await client.query(`select count(*)::text rows, md5(string_agg(md5(to_jsonb(t)::text), '' order by ${key})) digest from public.${table} t${auditTable ? ' where created_at <= $1::timestamptz' : ''}`, auditTable ? [auditCutoff] : [])).rows[0],
         auditCutoff,
         size: (await client.query('select pg_total_relation_size($1::regclass)::text relation_bytes, pg_indexes_size($1::regclass)::text index_bytes, pg_database_size(current_database())::text database_bytes', [`public.${table}`])).rows[0],
         indexes: (await client.query('select c.relname, i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) definition from pg_index i join pg_class c on c.oid=i.indexrelid where i.indrelid=$1::regclass order by c.relname', [`public.${table}`])).rows,

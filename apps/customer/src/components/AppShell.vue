@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import { useI18n } from '@beverly/tokens/i18n.js';
 import {
-    toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
+    toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone, startVisiblePolling,
     getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
 } from '@beverly/tokens';
 
@@ -29,7 +29,7 @@ const showIosInstall   = ref(false);
 
 // Notification bell
 const unreadCount = ref(0);
-let bellPoll: ReturnType<typeof setInterval> | null = null;
+let stopBellPoll: (() => void) | null = null;
 
 function isTabActive(to: string): boolean {
     const path = route.path;
@@ -75,15 +75,14 @@ onMounted(() => {
     });
     showIosInstall.value = isIosInstallable() && !isStandalone();
     document.addEventListener('pointerdown', handleDocumentPointerDown);
-    void fetchUnread();
-    bellPoll = setInterval(fetchUnread, 60_000); // poll every minute
+    stopBellPoll = startVisiblePolling(fetchUnread, 60_000);
 });
 
 onUnmounted(() => {
     unsubscribeInstallPrompt?.();
     unsubscribeNotificationCount?.();
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
-    if (bellPoll) clearInterval(bellPoll);
+    stopBellPoll?.();
 });
 
 async function promptInstall() {
